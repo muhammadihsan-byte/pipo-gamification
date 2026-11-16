@@ -25,23 +25,34 @@ struct PersonalGoalPlan {
 
 @MainActor
 struct CreateGoalView: View {
-    @State private var title = ""
+    @State private var title: String
     @State private var targetAmount = ""
-    @State private var category: GoalCategory = .gadget
-    @State private var rhythm: SavingRhythm = .monthly
+    @State private var category: GoalCategory
+    @State private var rhythm: SavingRhythm
     @State private var startDate: Date
     @State private var targetDate: Date
     @State private var breakdown = [GoalBreakdownDraft()]
 
     private let onBack: () -> Void
+    private let onCreated: () -> Void
 
-    init(onBack: @escaping () -> Void) {
+    init(
+        onBack: @escaping () -> Void,
+        onCreated: @escaping () -> Void = {},
+        initialTitle: String = "",
+        initialCategory: GoalCategory = .gadget,
+        initialRhythm: SavingRhythm = .monthly
+    ) {
         let start = Calendar.current.startOfDay(for: .now)
         let target = Calendar.current.date(byAdding: .month, value: 2, to: start)
             ?? start.addingTimeInterval(60 * 60 * 24 * 60)
+        _title = State(initialValue: initialTitle)
+        _category = State(initialValue: initialCategory)
+        _rhythm = State(initialValue: initialRhythm)
         _startDate = State(initialValue: start)
         _targetDate = State(initialValue: target)
         self.onBack = onBack
+        self.onCreated = onCreated
     }
 
     var body: some View {
@@ -113,7 +124,7 @@ struct CreateGoalView: View {
                         ReviewPlanView(
                             plan: goalPlan,
                             onBack: onBack,
-                            onCreated: onBack
+                            onCreated: onCreated
                         )
                     } else {
                         EmptyView()

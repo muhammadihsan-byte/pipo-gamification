@@ -47,6 +47,9 @@
 		A71D5C9E6B20433BB8000004 /* WidgetSharedData.swift in Sources */ = {isa = PBXBuildFile; fileRef = A71D5C9E6B20433BB8000013 /* WidgetSharedData.swift */; };
 		A71D5C9E6B20433BB8000005 /* Assets.xcassets in Widget Resources */ = {isa = PBXBuildFile; fileRef = 000000000000000000000114 /* Assets.xcassets */; };
 		A71D5C9E6B20433BB8000006 /* SatuSakuWidgetExtension.appex in Embed App Extensions */ = {isa = PBXBuildFile; fileRef = A71D5C9E6B20433BB8000014 /* SatuSakuWidgetExtension.appex */; settings = {ATTRIBUTES = (CodeSignOnCopy, RemoveHeadersOnCopy, ); }; };
+		D10000000000000000000001 /* OnboardingViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = D10000000000000000000101 /* OnboardingViewModel.swift */; };
+		D10000000000000000000002 /* OnboardingComponents.swift in Sources */ = {isa = PBXBuildFile; fileRef = D10000000000000000000102 /* OnboardingComponents.swift */; };
+		D10000000000000000000003 /* OnboardingContainerView.swift in Sources */ = {isa = PBXBuildFile; fileRef = D10000000000000000000103 /* OnboardingContainerView.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -110,6 +113,9 @@
 		A71D5C9E6B20433BB8000015 /* SatuSaku.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = SatuSaku.entitlements; sourceTree = "<group>"; };
 		A71D5C9E6B20433BB8000016 /* SatuSakuWidget.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = SatuSakuWidget.entitlements; sourceTree = "<group>"; };
 		A71D5C9E6B20433BB8000017 /* Widget Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
+		D10000000000000000000101 /* OnboardingViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OnboardingViewModel.swift; sourceTree = "<group>"; };
+		D10000000000000000000102 /* OnboardingComponents.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OnboardingComponents.swift; sourceTree = "<group>"; };
+		D10000000000000000000103 /* OnboardingContainerView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OnboardingContainerView.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -234,6 +240,7 @@
 				000000000000000000000716 /* MockData */,
 				000000000000000000000717 /* PersonalSaving */,
 				000000000000000000000721 /* Paywall */,
+				D10000000000000000000201 /* Onboarding */,
 			);
 			path = Features;
 			sourceTree = "<group>";
@@ -355,6 +362,16 @@
 				000000000000000000000124 /* PaywallView.swift */,
 			);
 			path = Paywall;
+			sourceTree = "<group>";
+		};
+		D10000000000000000000201 /* Onboarding */ = {
+			isa = PBXGroup;
+			children = (
+				D10000000000000000000101 /* OnboardingViewModel.swift */,
+				D10000000000000000000102 /* OnboardingComponents.swift */,
+				D10000000000000000000103 /* OnboardingContainerView.swift */,
+			);
+			path = Onboarding;
 			sourceTree = "<group>";
 		};
 		000000000000000000000722 /* GroupSaving */ = {
@@ -535,6 +552,9 @@
 				745C700C56FEE76E8F97792D /* SupabaseService.swift in Sources */,
 				A0E9701C8A63461E9AF00102 /* StoreKitManager.swift in Sources */,
 				A71D5C9E6B20433BB8000003 /* WidgetSharedData.swift in Sources */,
+				D10000000000000000000001 /* OnboardingViewModel.swift in Sources */,
+				D10000000000000000000002 /* OnboardingComponents.swift in Sources */,
+				D10000000000000000000003 /* OnboardingContainerView.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

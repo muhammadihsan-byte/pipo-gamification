@@ -11,6 +11,9 @@ struct RootView: View {
     @State private var storeKitManager: StoreKitManager
     @State private var supabaseService: SupabaseService?
     @State private var noticeMessage: String?
+    @AppStorage("hasCompletedOnboarding") private var hasCompletedOnboarding = false
+    @State private var onboardingCompletion: OnboardingCompletion?
+    @State private var isPrefillingOnboardingGoal = false
     @Environment(\.modelContext) private var modelContext
     @Query private var localTransactions: [SavingTransaction]
 
@@ -83,6 +86,11 @@ struct RootView: View {
             if authState == .unauthenticated {
                 navigationManager.popToRoot()
                 clearWidgetSnapshot()
+            } else {
+                navigationManager.popToRoot()
+                if let onboardingCompletion {
+                    routeAfterOnboarding(completion: onboardingCompletion)
+                }
             }
         }
         .onChange(of: authStateManager.userID) { _, userID in
@@ -173,10 +181,29 @@ struct RootView: View {
     private var rootContent: some View {
         switch authStateManager.authState {
         case .unauthenticated:
-            authenticationView
+            if hasCompletedOnboarding {
+                authenticationView
+            } else {
+                onboardingView
+            }
         case .authenticated:
             dashboardView
         }
+    }
+
+    private var onboardingView: some View {
+        OnboardingContainerView(
+            onCompleted: { completion in
+                onboardingCompletion = completion
+                hasCompletedOnboarding = true
+                if authStateManager.authState == .authenticated {
+                    routeAfterOnboarding(completion: completion)
+                }
+            },
+            onSignIn: {
+                hasCompletedOnboarding = true
+            }
+        )
     }
 
     private var authenticationView: some View {
@@ -254,7 +281,6 @@ struct RootView: View {
                         authStateManager: authStateManager
                     )
                 }
-                navigationManager.popToRoot()
             } catch {
                 noticeMessage = error.localizedDescription
             }
@@ -308,11 +334,24 @@ struct RootView: View {
         case .createGoal:
             CreateGoalView(
                 onBack: {
+                    isPrefillingOnboardingGoal = false
+                    onboardingCompletion = nil
                     navigationManager.pop()
                 },
                 onCreated: {
+                    isPrefillingOnboardingGoal = false
+                    onboardingCompletion = nil
                     navigationManager.popToRoot()
-                }
+                },
+                initialTitle: isPrefillingOnboardingGoal
+                    ? (onboardingCompletion?.goalTitle ?? "")
+                    : "",
+                initialCategory: isPrefillingOnboardingGoal
+                    ? (onboardingCompletion?.goalCategory ?? .gadget)
+                    : .gadget,
+                initialRhythm: isPrefillingOnboardingGoal
+                    ? (onboardingCompletion?.rhythm ?? .monthly)
+                    : .monthly
             )
         case .savingRhythm:
             SavingRhythmView(
@@ -356,6 +395,22 @@ struct RootView: View {
                     navigationManager.popToRoot()
                 }
             )
+        case .paywall(let isGroup):
+            PaywallView(isGroup: isGroup)
+        }
+    }
+
+    private func routeAfterOnboarding(completion: OnboardingCompletion) {
+        guard authStateManager.authState == .authenticated else { return }
+        if completion.isPlusSelected {
+            navigationManager.navigate(to: .paywall(isGroup: completion.isGroupSaving))
+            onboardingCompletion = nil
+        } else if completion.goalCategory != nil, completion.goalTitle != nil {
+            isPrefillingOnboardingGoal = true
+            navigationManager.navigate(to: .createGoal)
+        } else {
+            navigationManager.popToRoot()
+            onboardingCompletion = nil
         }
     }
 }

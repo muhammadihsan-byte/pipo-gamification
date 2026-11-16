@@ -8,6 +8,7 @@ enum Route: Hashable, Sendable {
     case savingRhythm
     case reviewGroupSaving
     case milestoneCelebration
+    case paywall(isGroup: Bool)
 }
 
 @MainActor
