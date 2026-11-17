@@ -7,6 +7,10 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
+		D20000000000000000000001 /* PersonalSavingSchedule.swift in Sources */ = {isa = PBXBuildFile; fileRef = D20000000000000000000011 /* PersonalSavingSchedule.swift */; };
+		D20000000000000000000002 /* PersonalPlanComponents.swift in Sources */ = {isa = PBXBuildFile; fileRef = D20000000000000000000012 /* PersonalPlanComponents.swift */; };
+		D20000000000000000000003 /* PersonalPlanMotion in Resources */ = {isa = PBXBuildFile; fileRef = D20000000000000000000013 /* PersonalPlanMotion */; };
+		D20000000000000000000004 /* Lottie in Frameworks */ = {isa = PBXBuildFile; productRef = D20000000000000000000021 /* Lottie */; };
 		000000000000000000000001 /* RootView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 000000000000000000000101 /* RootView.swift */; };
 		000000000000000000000002 /* PipoApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = 000000000000000000000102 /* PipoApp.swift */; };
 		000000000000000000000003 /* NavigationManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = 000000000000000000000103 /* NavigationManager.swift */; };
@@ -70,6 +74,9 @@
 /* End PBXContainerItemProxy section */
 
 /* Begin PBXFileReference section */
+		D20000000000000000000011 /* PersonalSavingSchedule.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PersonalSavingSchedule.swift; sourceTree = "<group>"; };
+		D20000000000000000000012 /* PersonalPlanComponents.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PersonalPlanComponents.swift; sourceTree = "<group>"; };
+		D20000000000000000000013 /* PersonalPlanMotion */ = {isa = PBXFileReference; lastKnownFileType = folder; path = PersonalPlanMotion; sourceTree = "<group>"; };
 		000000000000000000000101 /* RootView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RootView.swift; sourceTree = "<group>"; };
 		000000000000000000000102 /* PipoApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PipoApp.swift; sourceTree = "<group>"; };
 		000000000000000000000103 /* NavigationManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NavigationManager.swift; sourceTree = "<group>"; };
@@ -124,6 +131,7 @@
 			buildActionMask = 2147483647;
 			files = (
 				374F65BF8A10D4071478164D /* RiveRuntime in Frameworks */,
+				D20000000000000000000004 /* Lottie in Frameworks */,
 				60435F130DABB711F96348C0 /* Supabase in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
@@ -327,6 +335,9 @@
 				000000000000000000000110 /* SavingRhythmView.swift */,
 				000000000000000000000125 /* CreateGoalView.swift */,
 				000000000000000000000127 /* ReviewPlanView.swift */,
+				D20000000000000000000011 /* PersonalSavingSchedule.swift */,
+				D20000000000000000000012 /* PersonalPlanComponents.swift */,
+				D20000000000000000000013 /* PersonalPlanMotion */,
 			);
 			path = PersonalSaving;
 			sourceTree = "<group>";
@@ -411,6 +422,7 @@
 			name = Pipo;
 			packageProductDependencies = (
 				B9EB5CF9294E23998F6BCE27 /* RiveRuntime */,
+				D20000000000000000000021 /* Lottie */,
 				30C881C1610D667FE7117C13 /* Supabase */,
 			);
 			productName = Pipo;
@@ -483,6 +495,7 @@
 			);
 			mainGroup = 000000000000000000000701;
 			packageReferences = (
+				D20000000000000000000020 /* XCRemoteSwiftPackageReference "lottie-spm" */,
 				BE4D1CA208A015B3D637DDD9 /* XCRemoteSwiftPackageReference "rive-ios" */,
 				8D5CF53E29B079499EE25015 /* XCRemoteSwiftPackageReference "supabase-swift" */,
 			);
@@ -503,6 +516,7 @@
 			buildActionMask = 2147483647;
 			files = (
 				00000000000000000000000E /* Assets.xcassets in Resources */,
+				D20000000000000000000003 /* PersonalPlanMotion in Resources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -547,6 +561,8 @@
 				000000000000000000000016 /* PaywallView.swift in Sources */,
 				000000000000000000000017 /* CreateGoalView.swift in Sources */,
 				000000000000000000000019 /* ReviewPlanView.swift in Sources */,
+				D20000000000000000000001 /* PersonalSavingSchedule.swift in Sources */,
+				D20000000000000000000002 /* PersonalPlanComponents.swift in Sources */,
 				00000000000000000000001A /* GroupSavingManager.swift in Sources */,
 				7B8C06B79BD2E563C8C18A18 /* PipoMascotView.swift in Sources */,
 				745C700C56FEE76E8F97792D /* SupabaseService.swift in Sources */,
@@ -878,6 +894,14 @@
 /* End XCConfigurationList section */
 
 /* Begin XCRemoteSwiftPackageReference section */
+		D20000000000000000000020 /* XCRemoteSwiftPackageReference "lottie-spm" */ = {
+			isa = XCRemoteSwiftPackageReference;
+			repositoryURL = "https://github.com/airbnb/lottie-spm.git";
+			requirement = {
+				kind = exactVersion;
+				version = 4.6.0;
+			};
+		};
 		8D5CF53E29B079499EE25015 /* XCRemoteSwiftPackageReference "supabase-swift" */ = {
 			isa = XCRemoteSwiftPackageReference;
 			repositoryURL = "https://github.com/supabase/supabase-swift.git";
@@ -897,6 +921,11 @@
 /* End XCRemoteSwiftPackageReference section */
 
 /* Begin XCSwiftPackageProductDependency section */
+		D20000000000000000000021 /* Lottie */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = D20000000000000000000020 /* XCRemoteSwiftPackageReference "lottie-spm" */;
+			productName = Lottie;
+		};
 		30C881C1610D667FE7117C13 /* Supabase */ = {
 			isa = XCSwiftPackageProductDependency;
 			package = 8D5CF53E29B079499EE25015 /* XCRemoteSwiftPackageReference "supabase-swift" */;

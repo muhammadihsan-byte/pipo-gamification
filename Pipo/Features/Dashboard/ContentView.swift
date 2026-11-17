@@ -146,11 +146,19 @@ struct DashboardView: View {
         TicketCard {
             VStack(alignment: .leading, spacing: 12) {
                 HStack {
-                    Text(goal.title)
-                        .font(.headline)
-                        .foregroundStyle(PipoTheme.ink)
+                    if goal.isGroupGoal {
+                        Text(goal.title)
+                            .font(.headline)
+                            .foregroundStyle(PipoTheme.ink)
+                    } else {
+                        Button(goal.title) { navigationManager.navigate(to: .personalGoal(goal.id)) }
+                            .buttonStyle(.plain)
+                            .font(.headline)
+                            .foregroundStyle(PipoTheme.ink)
+                            .accessibilityHint("Opens the saving goal")
+                    }
                     Spacer()
-                    Text(goal.category.rawValue.capitalized)
+                    Text(goal.categoryTitle)
                         .font(.caption.weight(.medium))
                         .foregroundStyle(PipoTheme.green)
                 }

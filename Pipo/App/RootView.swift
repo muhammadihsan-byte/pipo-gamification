@@ -338,10 +338,11 @@ struct RootView: View {
                     onboardingCompletion = nil
                     navigationManager.pop()
                 },
-                onCreated: {
+                onCreated: { goalID in
                     isPrefillingOnboardingGoal = false
                     onboardingCompletion = nil
                     navigationManager.popToRoot()
+                    navigationManager.navigate(to: .personalGoal(goalID))
                 },
                 initialTitle: isPrefillingOnboardingGoal
                     ? (onboardingCompletion?.goalTitle ?? "")
@@ -353,6 +354,10 @@ struct RootView: View {
                     ? (onboardingCompletion?.rhythm ?? .monthly)
                     : .monthly
             )
+        case .personalGoal(let goalID):
+            PersonalGoalDetailView(goalID: goalID, onBack: navigationManager.pop) {
+                navigationManager.requestDeposit(goalID: goalID)
+            }
         case .savingRhythm:
             SavingRhythmView(
                 goalTitle: MockData.savingGoalTitle,

@@ -5,7 +5,8 @@ import SwiftUI
 struct ReviewPlanView: View {
     let plan: PersonalGoalPlan
     let onBack: () -> Void
-    let onCreated: () -> Void
+    let onEdit: (PersonalPlanStep) -> Void
+    let onCreated: (UUID) -> Void
 
     @Environment(\.modelContext) private var modelContext
     @Environment(SubscriptionManager.self) private var subscriptionManager
@@ -13,90 +14,194 @@ struct ReviewPlanView: View {
     @Query private var goals: [PersonalGoal]
     @Query private var profiles: [UserProfile]
 
+    @State private var createdGoalID: UUID?
     @State private var isPaywallPresented = false
     @State private var errorMessage: String?
 
     var body: some View {
-        Form {
-            Section("Goal") {
-                LabeledContent("Name", value: plan.title)
-                LabeledContent("Category", value: plan.category.rawValue.capitalized)
-                LabeledContent(
-                    "Target",
-                    value: plan.targetAmount.formatted(.currency(code: "IDR").precision(.fractionLength(0)))
-                )
-            }
-
-            if !plan.breakdown.isEmpty {
-                Section("Target breakdown") {
-                    ForEach(plan.breakdown) { item in
-                        LabeledContent(
-                            item.title,
-                            value: parsedBreakdownAmount(item.amount)?
-                                .formatted(.currency(code: "IDR").precision(.fractionLength(0))) ?? "—"
-                        )
-                    }
-                }
-            }
-
-            Section("Timeline and rhythm") {
-                LabeledContent("Start", value: plan.startDate.formatted(date: .abbreviated, time: .omitted))
-                LabeledContent("Target date", value: plan.targetDate.formatted(date: .abbreviated, time: .omitted))
-                LabeledContent("Saving rhythm", value: plan.rhythm.rawValue.capitalized)
-                LabeledContent("Duration", value: "\(durationInMonths) months")
-            }
-
-            Section {
-                Button("Confirm and create goal", action: confirmCreation)
-                    .frame(maxWidth: .infinity, alignment: .center)
-            }
+        PersonalPlanPage(step: .review, onBack: onBack) {
+            PersonalPlanIntro(step: .review, title: "Review your saving plan", subtitle: "Check the details for \(plan.title).")
+            goalCard
+            timelineCard
+            rhythmCard
+            Text("This plan is an estimate. Pipo doesn’t move money or set up automatic payments.")
+                .font(.caption)
+                .foregroundStyle(PersonalPlanStyle.muted)
+        } footer: {
+            PersonalPlanActions(back: onBack, title: "Start saving plan", action: confirmCreation)
         }
-        .navigationTitle("Review plan")
-        .navigationBarTitleDisplayMode(.inline)
-        .toolbar {
-            ToolbarItem(placement: .cancellationAction) {
-                Button("Edit", action: onBack)
+        .accessibilityHidden(createdGoalID != nil)
+        .overlay {
+            if let createdGoalID {
+                confirmation(goalID: createdGoalID)
             }
         }
         .onAppear(perform: syncEntitlements)
-        .onChange(of: currentProfile?.purchasedPersonalSlots) { _, _ in
-            syncEntitlements()
-        }
+        .onChange(of: currentProfile?.purchasedPersonalSlots) { _, _ in syncEntitlements() }
         .sheet(isPresented: $isPaywallPresented) {
             PaywallView(isGroup: false)
                 .presentationDetents([.medium, .large])
         }
-        .alert(
-            "Unable to create goal",
-            isPresented: Binding(
-                get: { errorMessage != nil },
-                set: { if !$0 { errorMessage = nil } }
-            )
-        ) {
-            Button("OK", role: .cancel) {
-                errorMessage = nil
-            }
+        .alert("Couldn’t save your plan", isPresented: Binding(
+            get: { errorMessage != nil },
+            set: { if !$0 { errorMessage = nil } }
+        )) {
+            Button("OK", role: .cancel) { errorMessage = nil }
         } message: {
             Text(errorMessage ?? "")
         }
     }
 
-    private var durationInMonths: Int {
-        let calendar = Calendar.current
-        let start = calendar.startOfDay(for: plan.startDate)
-        let target = calendar.startOfDay(for: plan.targetDate)
-        let months = calendar.dateComponents([.month], from: start, to: target).month ?? 0
-        guard
-            let anniversary = calendar.date(byAdding: .month, value: months, to: start),
-            anniversary < target
-        else {
-            return months
+    private var goalCard: some View {
+        VStack(alignment: .leading, spacing: 14) {
+            HStack(spacing: 12) {
+                Image(systemName: plan.category == .gadget ? "ipad" : "target")
+                    .font(.title3.weight(.medium))
+                    .foregroundStyle(PersonalPlanStyle.berry)
+                    .frame(width: 44, height: 44)
+                    .background(PersonalPlanStyle.blush, in: RoundedRectangle(cornerRadius: 14))
+                    .accessibilityHidden(true)
+                VStack(alignment: .leading, spacing: 4) {
+                    Text(plan.title).font(.headline)
+                    Text("\(plan.categoryTitle) · Draft")
+                        .font(.caption)
+                        .foregroundStyle(PersonalPlanStyle.muted)
+                }
+                Spacer(minLength: 8)
+                editButton("goal", step: .goal)
+            }
+
+            Divider()
+            HStack {
+                Text(plan.breakdown.isEmpty ? "Target amount" : "Target breakdown")
+                    .font(.subheadline.bold())
+                Spacer()
+                editButton("target", step: .target)
+            }
+
+            ForEach(plan.breakdown) { item in
+                if let amount = item.rupiah {
+                    summaryRow(item.cleanTitle, value: money(amount))
+                }
+            }
+            if !plan.breakdown.isEmpty { Divider() }
+            HStack {
+                Text("Target total").font(.caption.bold())
+                Spacer(minLength: 12)
+                Text(money(plan.targetAmount))
+                    .font(.headline)
+                    .foregroundStyle(PersonalPlanStyle.berry)
+            }
         }
-        return months + 1
+        .padding(16)
+        .background(.white, in: RoundedRectangle(cornerRadius: 16))
+        .overlay { RoundedRectangle(cornerRadius: 16).strokeBorder(PersonalPlanStyle.blush, lineWidth: 1.5) }
+    }
+
+    private var timelineCard: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            cardHeading("Target date", step: .timeline)
+            Text(dateLabel(plan.targetDate)).font(.subheadline.bold())
+            Text("This is the date you’re aiming for.")
+                .font(.caption)
+                .foregroundStyle(PersonalPlanStyle.muted)
+        }
+        .padding(16)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(PersonalPlanStyle.surface, in: RoundedRectangle(cornerRadius: 16))
+    }
+
+    private var rhythmCard: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            cardHeading("Saving rhythm", step: .rhythm)
+            summaryRow("Frequency", value: PersonalPlanFormatting.rhythmLabel(plan.rhythm, day: plan.preferredSavingDay))
+            if let schedule = plan.schedule {
+                summaryRow("Planned amount", value: money(schedule.amount))
+                summaryRow("First planned save", value: dateLabel(schedule.firstDate))
+                Text(scheduleDetails(schedule))
+                    .font(.caption)
+                    .foregroundStyle(PersonalPlanStyle.muted)
+            } else {
+                Text("Save whenever you can, with no set amount.")
+                    .font(.caption)
+                    .foregroundStyle(PersonalPlanStyle.muted)
+            }
+        }
+        .padding(16)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(PersonalPlanStyle.surface, in: RoundedRectangle(cornerRadius: 16))
+    }
+
+    private func confirmation(goalID: UUID) -> some View {
+        PersonalPlanDialog {
+            PipoMascotView(state: .celebrating)
+                .frame(width: 108, height: 108)
+                .accessibilityHidden(true)
+
+            Text("Your plan is ready!")
+                .font(.title3.bold())
+                .accessibilityAddTraits(.isHeader)
+            Text("Pipo is cheering you on. Take it one save at a time.")
+                .font(.footnote)
+                .foregroundStyle(PersonalPlanStyle.muted)
+
+            VStack(alignment: .leading, spacing: 8) {
+                Label(plan.title, systemImage: "ticket")
+                    .font(.subheadline.bold())
+                Text(money(plan.targetAmount))
+                    .font(.title3.bold())
+                    .foregroundStyle(PersonalPlanStyle.berry)
+                if let schedule = plan.schedule {
+                    Text(money(schedule.amount) + plan.rhythm.unitLabel)
+                    Text("First planned save: \(dateLabel(schedule.firstDate))")
+                } else {
+                    Text("Flexible · save when you can")
+                }
+            }
+            .font(.caption.weight(.medium))
+            .multilineTextAlignment(.leading)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .padding(15)
+            .background(PersonalPlanStyle.blush, in: RoundedRectangle(cornerRadius: 16))
+            .overlay { RoundedRectangle(cornerRadius: 16).strokeBorder(PersonalPlanStyle.pink.opacity(0.35)) }
+
+            Button("Done") { onCreated(goalID) }
+                .buttonStyle(PersonalPlanPrimaryStyle())
+                .accessibilityHint("Opens your new saving goal")
+        }
+    }
+
+    private func cardHeading(_ title: String, step: PersonalPlanStep) -> some View {
+        HStack {
+            Text(title).font(.subheadline.bold())
+            Spacer(minLength: 8)
+            editButton(title.lowercased(), step: step)
+        }
+    }
+
+    private func editButton(_ field: String, step: PersonalPlanStep) -> some View {
+        Button("Edit") { onEdit(step) }
+            .buttonStyle(.plain)
+            .font(.caption.bold())
+            .foregroundStyle(PersonalPlanStyle.berry)
+            .accessibilityLabel("Edit \(field)")
+    }
+
+    private func summaryRow(_ label: String, value: String) -> some View {
+        HStack(alignment: .firstTextBaseline) {
+            Text(label)
+                .foregroundStyle(PersonalPlanStyle.muted)
+            Spacer(minLength: 12)
+            Text(value)
+                .fontWeight(.semibold)
+                .multilineTextAlignment(.trailing)
+        }
+        .font(.caption)
+        .accessibilityElement(children: .combine)
     }
 
     private var activePersonalGoalCount: Int {
-        goals.filter { !$0.isGroupGoal }.count
+        goals.filter { !$0.isGroupGoal && $0.progress < 1 }.count
     }
 
     private var currentProfile: UserProfile? {
@@ -104,10 +209,9 @@ struct ReviewPlanView: View {
     }
 
     private func confirmCreation() {
-        guard subscriptionManager.canCreateGoal(
-            isGroup: false,
-            activeCount: activePersonalGoalCount
-        ) else {
+        guard createdGoalID == nil else { return }
+        let activeCount = activePersonalGoalCount
+        guard subscriptionManager.canCreateGoal(isGroup: false, activeCount: activeCount) else {
             isPaywallPresented = true
             return
         }
@@ -117,59 +221,161 @@ struct ReviewPlanView: View {
         let previousCount = profile.activePersonalGoalsCount
         let previousUserID = profile.userID
         let goal = PersonalGoal(
-            title: plan.title,
-            category: plan.category,
-            targetAmount: plan.targetAmount,
-            startDate: plan.startDate,
-            targetDate: plan.targetDate,
-            rhythm: plan.rhythm
+            title: plan.title, category: plan.category, customCategory: plan.customCategory,
+            targetAmount: plan.targetAmount, startDate: plan.startDate, targetDate: plan.targetDate,
+            rhythm: plan.rhythm, preferredSavingDay: plan.preferredSavingDay
         )
         goal.subItems = plan.breakdown.compactMap { item in
-            guard let amount = parsedBreakdownAmount(item.amount) else { return nil }
-            return SubItem(title: item.title, amount: amount)
+            guard let amount = item.rupiah else { return nil }
+            return SubItem(title: item.cleanTitle, amount: Double(amount))
         }
 
         profile.userID = authStateManager.userID
-        profile.activePersonalGoalsCount = activePersonalGoalCount + 1
+        profile.activePersonalGoalsCount = activeCount + 1
         modelContext.insert(goal)
-        if existingProfile == nil {
-            modelContext.insert(profile)
-        }
+        if existingProfile == nil { modelContext.insert(profile) }
 
         do {
             try modelContext.save()
-            onCreated()
+            createdGoalID = goal.id
         } catch {
             modelContext.delete(goal)
-            profile.userID = previousUserID
-            profile.activePersonalGoalsCount = previousCount
             if existingProfile == nil {
                 modelContext.delete(profile)
+            } else {
+                profile.userID = previousUserID
+                profile.activePersonalGoalsCount = previousCount
             }
-            errorMessage = error.localizedDescription
+            errorMessage = "Your plan wasn’t saved. Please try again."
         }
     }
 
     private func syncEntitlements() {
-        let profile = currentProfile
         subscriptionManager.updateEntitlements(
-            purchasedPersonalSlots: profile?.purchasedPersonalSlots ?? 0,
-            purchasedGroupSlots: profile?.purchasedGroupSlots ?? 0
+            purchasedPersonalSlots: currentProfile?.purchasedPersonalSlots ?? 0,
+            purchasedGroupSlots: currentProfile?.purchasedGroupSlots ?? 0
         )
     }
+}
 
-    private func parsedBreakdownAmount(_ value: String) -> Double? {
-        guard
-            let amount = Double(
-                value
-                    .trimmingCharacters(in: .whitespacesAndNewlines)
-                    .replacingOccurrences(of: ",", with: ".")
-            ),
-            amount.isFinite,
-            amount > 0
-        else {
-            return nil
+struct PersonalPlanDialog<Content: View>: View {
+    @ViewBuilder var content: () -> Content
+
+    var body: some View {
+        GeometryReader { geometry in
+            ScrollView {
+                VStack(spacing: 16, content: content)
+                    .multilineTextAlignment(.center)
+                    .padding(24)
+                    .frame(maxWidth: 342)
+                    .background(.white, in: RoundedRectangle(cornerRadius: 24))
+                    .padding(24)
+                    .frame(maxWidth: .infinity, minHeight: geometry.size.height)
+            }
+            .scrollBounceBehavior(.basedOnSize)
         }
-        return amount
+        .background(.black.opacity(0.52).ignoresSafeArea())
+        .foregroundStyle(PersonalPlanStyle.ink)
+        .accessibilityAddTraits(.isModal)
     }
+}
+
+@MainActor
+struct PersonalGoalDetailView: View {
+    private let onBack: () -> Void
+    private let recordSaving: () -> Void
+
+    @Query private var goals: [PersonalGoal]
+
+    init(goalID: UUID, onBack: @escaping () -> Void, recordSaving: @escaping () -> Void) {
+        _goals = Query(filter: #Predicate<PersonalGoal> { $0.id == goalID })
+        self.onBack = onBack
+        self.recordSaving = recordSaving
+    }
+
+    var body: some View {
+        ScrollView {
+            VStack(alignment: .leading, spacing: 20) {
+                Button(action: onBack) {
+                    Label("Saving goals", systemImage: "chevron.left")
+                        .font(.subheadline.bold())
+                }
+                .foregroundStyle(PipoTheme.ink)
+
+                if let goal = goals.first {
+                    details(for: goal)
+                } else {
+                    ContentUnavailableView("Goal unavailable", systemImage: "target")
+                }
+            }
+            .padding(24)
+            .frame(maxWidth: 520)
+            .frame(maxWidth: .infinity)
+        }
+        .background(.white)
+        .foregroundStyle(PipoTheme.ink)
+        .toolbar(.hidden, for: .navigationBar)
+    }
+
+    private func details(for goal: PersonalGoal) -> some View {
+        VStack(alignment: .leading, spacing: 18) {
+            VStack(alignment: .leading, spacing: 6) {
+                Text(goal.title).font(.largeTitle.bold()).accessibilityAddTraits(.isHeader)
+                Text(goal.categoryTitle).foregroundStyle(PipoTheme.muted)
+            }
+
+            TicketCard {
+                VStack(alignment: .leading, spacing: 12) {
+                    LabeledContent("Saved", value: money(goal.currentAmount))
+                    ProgressView(value: goal.progress)
+                        .tint(PipoTheme.green)
+                        .accessibilityLabel("Saving progress")
+                    LabeledContent("Target", value: money(goal.targetAmount))
+                    LabeledContent("Target date", value: dateLabel(goal.targetDate))
+                    LabeledContent("Saving rhythm", value: PersonalPlanFormatting.rhythmLabel(goal.rhythm, day: goal.preferredSavingDay))
+                }
+                .font(.subheadline)
+            }
+
+            if !goal.subItems.isEmpty {
+                TicketCard {
+                    VStack(alignment: .leading, spacing: 12) {
+                        Text("Target breakdown").font(.headline)
+                        ForEach(goal.subItems) { item in
+                            LabeledContent(item.title, value: money(item.amount))
+                        }
+                    }
+                }
+            }
+
+            Button("Record a saving", action: recordSaving)
+                .buttonStyle(PrimaryActionButtonStyle())
+        }
+    }
+}
+
+func money(_ amount: Int) -> String {
+    PersonalPlanFormatting.rupiah(amount)
+}
+
+func money(_ amount: Double) -> String {
+    if let whole = Int(exactly: amount) { return money(whole) }
+    return amount.formatted(.currency(code: "IDR").locale(Locale(identifier: "id_ID")))
+}
+
+func dateLabel(_ date: Date) -> String {
+    date.formatted(PersonalPlanFormatting.dateStyle)
+}
+
+func scheduleTitle(_ schedule: PersonalSavingSchedule, rhythm: SavingRhythm) -> String {
+    if schedule.count == 1 { return "1 planned contribution" }
+    return "\(schedule.count) \(rhythm.periodLabel)"
+}
+
+func scheduleDetails(_ schedule: PersonalSavingSchedule) -> String {
+    let amount = money(schedule.amount)
+    let timeline = schedule.count == 1
+        ? "Make one planned contribution on \(dateLabel(schedule.firstDate))."
+        : "\(schedule.count) planned contributions from \(dateLabel(schedule.firstDate)) to \(dateLabel(schedule.lastDate))."
+    return "\(timeline) Aim to save \(amount) each time. Your last contribution may be smaller."
 }
