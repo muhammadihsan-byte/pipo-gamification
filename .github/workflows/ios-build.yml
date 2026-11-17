@@ -23,8 +23,15 @@ jobs:
       - name: Build and test for iOS Simulator
         shell: bash
         run: |
+          runtime=com.apple.CoreSimulator.SimRuntime.iOS-18-5
+          if ! xcrun simctl list runtimes -j | jq -e --arg runtime "$runtime" \
+            '.runtimes | any(.identifier == $runtime and .isAvailable)' > /dev/null; then
+            xcodebuild -downloadPlatform iOS -buildVersion 18.5
+          fi
+          simulator_id=$(xcrun simctl create 'Pipo CI iPhone 16' \
+            com.apple.CoreSimulator.SimDeviceType.iPhone-16 "$runtime")
           xcodebuild \
             -scheme Pipo \
-            -destination 'platform=iOS Simulator,name=iPhone 16,OS=18.5' \
+            -destination "platform=iOS Simulator,id=$simulator_id" \
             CODE_SIGNING_REQUIRED=NO \
             build test
