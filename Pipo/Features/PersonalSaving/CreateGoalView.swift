@@ -109,52 +109,76 @@ struct CreateGoalView: View {
         if step == .review, let plan {
             ReviewPlanView(plan: plan, onBack: goBack, onEdit: edit, onCreated: onCreated)
         } else {
-            PersonalPlanPage(step: step, onBack: goBack) {
-                PersonalPlanIntro(step: step, title: stepHeading, subtitle: stepSubtitle)
-                switch step {
-                case .goal: goalFields
-                case .target: targetFields
-                case .timeline: timelineFields
-                case .rhythm: rhythmFields
-                case .review: EmptyView()
-                }
-            } footer: {
-                PersonalPlanActions(
-                    back: step == .goal && !isEditingFromReview ? nil : goBack,
-                    title: isEditingFromReview ? "Back to review" : "Continue",
-                    dimmed: !stepIsValid,
-                    action: advance
-                )
-            }
-            .id(step)
-            .accessibilityHidden(showBreakdownDialog)
-            .onChange(of: focusedGoalField) { previous, current in
-                if previous == .name && current != .name { wasEditingName = true }
-            }
-            .onChange(of: enteredTargetDate) { _, date in
-                if let date, date > startDate { calendarMonth = date }
-            }
-            .overlay {
-                if showBreakdownDialog, let mismatch = breakdownMismatch {
-                    PersonalPlanDialog {
-                        Image(systemName: "exclamationmark.triangle")
-                            .font(.title2)
-                            .foregroundStyle(PersonalPlanStyle.error)
-                            .frame(width: 56, height: 56)
-                            .background(PersonalPlanStyle.warning, in: RoundedRectangle(cornerRadius: 16))
-                            .accessibilityHidden(true)
-                        Text("Breakdown is \(mismatch.direction) your target")
-                            .font(.headline)
-                            .accessibilityAddTraits(.isHeader)
-                        Text("Your items add up to \(money(mismatch.total)), \(money(mismatch.difference)) \(mismatch.direction) your target of \(money(mismatch.target)). Adjust the items or the target so the totals match.")
-                            .font(.footnote)
-                            .foregroundStyle(PersonalPlanStyle.muted)
-                        Button("Adjust breakdown") { showBreakdownDialog = false }
-                            .buttonStyle(PersonalPlanPrimaryStyle())
-                    }
-                }
+            editPage
+        }
+    }
+
+    private var editPage: some View {
+        PersonalPlanPage(step: step, onBack: goBack) {
+            PersonalPlanIntro(step: step, title: stepHeading, subtitle: stepSubtitle)
+            stepFields
+        } footer: {
+            footerActions
+        }
+        .id(step)
+        .accessibilityHidden(showBreakdownDialog)
+        .onChange(of: focusedGoalField) { previous, current in
+            if previous == .name && current != .name { wasEditingName = true }
+        }
+        .onChange(of: enteredTargetDate) { _, date in
+            if let date, date > startDate { calendarMonth = date }
+        }
+        .overlay { breakdownDialog }
+    }
+
+    @ViewBuilder
+    private var stepFields: some View {
+        switch step {
+        case .goal: goalFields
+        case .target: targetFields
+        case .timeline: timelineFields
+        case .rhythm: rhythmFields
+        case .review: EmptyView()
+        }
+    }
+
+    private var footerActions: some View {
+        let back: (() -> Void)? = step == .goal && !isEditingFromReview ? nil : goBack
+        return PersonalPlanActions(
+            back: back,
+            title: isEditingFromReview && plan != nil ? "Back to review" : "Continue",
+            dimmed: !stepIsValid,
+            action: advance
+        )
+    }
+
+    @ViewBuilder
+    private var breakdownDialog: some View {
+        if showBreakdownDialog, let mismatch = breakdownMismatch {
+            let explanation = "Your items total \(money(mismatch.total)), \(money(mismatch.difference)) \(mismatch.direction) your target of \(money(mismatch.target))."
+            PersonalPlanDialog {
+                Image(systemName: "exclamationmark.triangle")
+                    .font(.title2)
+                    .foregroundStyle(PersonalPlanStyle.error)
+                    .frame(width: 56, height: 56)
+                    .background(PersonalPlanStyle.warning, in: RoundedRectangle(cornerRadius: 16))
+                    .accessibilityHidden(true)
+                Text("Breakdown is \(mismatch.direction) your target")
+                    .font(.headline)
+                    .accessibilityAddTraits(.isHeader)
+                Text(explanation + " Adjust the items or the target so the totals match.")
+                    .font(.footnote)
+                    .foregroundStyle(PersonalPlanStyle.muted)
+                Button("Adjust breakdown") { showBreakdownDialog = false }
+                    .buttonStyle(PersonalPlanPrimaryStyle())
             }
         }
+    }
+
+    private func validationMessage(_ message: String) -> some View {
+        Text(message)
+            .font(.caption.weight(.medium))
+            .foregroundStyle(PersonalPlanStyle.error)
     }
 
     private var goalFields: some View {
