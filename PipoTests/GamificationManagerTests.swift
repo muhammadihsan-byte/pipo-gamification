@@ -2,26 +2,25 @@ import XCTest
 @testable import Pipo
 
 final class GamificationManagerTests: XCTestCase {
+    @MainActor
     func testRecordingSavingAwardsXPUpdatesProfileAndGoal() async throws {
-        try await MainActor.run {
-            let manager = GamificationManager()
-            let profile = UserProfile(totalXP: 1_200)
-            let goal = makeGoal()
+        let manager = GamificationManager()
+        let profile = UserProfile(totalXP: 1_200)
+        let goal = makeGoal()
 
-            let transaction = try manager.recordSaving(
-                amount: 250,
-                goal: goal,
-                profile: profile,
-                date: makeDate(day: 1)
-            )
+        let transaction = try manager.recordSaving(
+            amount: 250,
+            goal: goal,
+            profile: profile,
+            date: makeDate(day: 1)
+        )
 
-            XCTAssertEqual(transaction.amount, 250)
-            XCTAssertEqual(transaction.xpEarned, 300)
-            XCTAssertEqual(profile.totalXP, 1_500)
-            XCTAssertEqual(profile.currentLevel, 2)
-            XCTAssertEqual(profile.streakDays, 1)
-            XCTAssertEqual(goal.currentAmount, 250)
-        }
+        XCTAssertEqual(transaction.amount, 250)
+        XCTAssertEqual(transaction.xpEarned, 300)
+        XCTAssertEqual(profile.totalXP, 1_500)
+        XCTAssertEqual(profile.currentLevel, 2)
+        XCTAssertEqual(profile.streakDays, 1)
+        XCTAssertEqual(goal.currentAmount, 250)
     }
 
     func testLevelThresholdsRequireEveryFifteenHundredXP() {
