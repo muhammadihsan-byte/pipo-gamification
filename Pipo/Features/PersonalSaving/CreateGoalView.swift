@@ -537,7 +537,7 @@ struct CreateGoalView: View {
         title: String,
         days: [Int],
         selection: Binding<Int>,
-        label: (Int) -> String
+        label: @escaping (Int) -> String
     ) -> some View {
         VStack(alignment: .leading, spacing: 12) {
             Text(title).font(.subheadline.bold())
