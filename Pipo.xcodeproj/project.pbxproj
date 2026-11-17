@@ -1,0 +1,913 @@
+// !$*UTF8*$!
+{
+	archiveVersion = 1;
+	classes = {
+	};
+	objectVersion = 60;
+	objects = {
+
+/* Begin PBXBuildFile section */
+		000000000000000000000001 /* RootView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 000000000000000000000101 /* RootView.swift */; };
+		000000000000000000000002 /* PipoApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = 000000000000000000000102 /* PipoApp.swift */; };
+		000000000000000000000003 /* NavigationManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = 000000000000000000000103 /* NavigationManager.swift */; };
+		000000000000000000000004 /* PipoTheme.swift in Sources */ = {isa = PBXBuildFile; fileRef = 000000000000000000000104 /* PipoTheme.swift */; };
+		000000000000000000000005 /* AuthView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 000000000000000000000105 /* AuthView.swift */; };
+		000000000000000000000006 /* ContentView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 000000000000000000000106 /* ContentView.swift */; };
+		000000000000000000000007 /* ConsistencyMilestoneView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 000000000000000000000107 /* ConsistencyMilestoneView.swift */; };
+		000000000000000000000008 /* ReviewGroupSavingView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 000000000000000000000108 /* ReviewGroupSavingView.swift */; };
+		000000000000000000000009 /* MockData.swift in Sources */ = {isa = PBXBuildFile; fileRef = 000000000000000000000109 /* MockData.swift */; };
+		00000000000000000000000A /* SavingRhythmView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 000000000000000000000110 /* SavingRhythmView.swift */; };
+		00000000000000000000000B /* PersonalGoal.swift in Sources */ = {isa = PBXBuildFile; fileRef = 000000000000000000000111 /* PersonalGoal.swift */; };
+		00000000000000000000000C /* SavingTransaction.swift in Sources */ = {isa = PBXBuildFile; fileRef = 000000000000000000000112 /* SavingTransaction.swift */; };
+		00000000000000000000000D /* UserProfile.swift in Sources */ = {isa = PBXBuildFile; fileRef = 000000000000000000000113 /* UserProfile.swift */; };
+		00000000000000000000000E /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 000000000000000000000114 /* Assets.xcassets */; };
+		00000000000000000000000F /* PersonalGoalTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 000000000000000000000115 /* PersonalGoalTests.swift */; };
+		000000000000000000000010 /* XCTest.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 000000000000000000000118 /* XCTest.framework */; };
+		000000000000000000000011 /* AuthStateManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = 000000000000000000000119 /* AuthStateManager.swift */; };
+		000000000000000000000012 /* AuthStateManagerTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 000000000000000000000120 /* AuthStateManagerTests.swift */; };
+		000000000000000000000013 /* GamificationManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = 000000000000000000000121 /* GamificationManager.swift */; };
+		000000000000000000000014 /* GamificationManagerTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 000000000000000000000122 /* GamificationManagerTests.swift */; };
+		000000000000000000000015 /* SubscriptionManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = 000000000000000000000123 /* SubscriptionManager.swift */; };
+		000000000000000000000016 /* PaywallView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 000000000000000000000124 /* PaywallView.swift */; };
+		000000000000000000000017 /* CreateGoalView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 000000000000000000000125 /* CreateGoalView.swift */; };
+		000000000000000000000018 /* SubscriptionManagerTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 000000000000000000000126 /* SubscriptionManagerTests.swift */; };
+		000000000000000000000019 /* ReviewPlanView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 000000000000000000000127 /* ReviewPlanView.swift */; };
+		00000000000000000000001A /* GroupSavingManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = 000000000000000000000128 /* GroupSavingManager.swift */; };
+		00000000000000000000001B /* GroupSavingManagerTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 000000000000000000000129 /* GroupSavingManagerTests.swift */; };
+		0BA9C96E17E50FEC4485564A /* SupabaseServiceTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 27631892C68B8BF7E1BFBCD2 /* SupabaseServiceTests.swift */; };
+		374F65BF8A10D4071478164D /* RiveRuntime in Frameworks */ = {isa = PBXBuildFile; productRef = B9EB5CF9294E23998F6BCE27 /* RiveRuntime */; };
+		60435F130DABB711F96348C0 /* Supabase in Frameworks */ = {isa = PBXBuildFile; productRef = 30C881C1610D667FE7117C13 /* Supabase */; };
+		745C700C56FEE76E8F97792D /* SupabaseService.swift in Sources */ = {isa = PBXBuildFile; fileRef = B965CFFB5D820A94B7CAD1B8 /* SupabaseService.swift */; };
+		7B8C06B79BD2E563C8C18A18 /* PipoMascotView.swift in Sources */ = {isa = PBXBuildFile; fileRef = DFCE5267008E3FA2ABC62F71 /* PipoMascotView.swift */; };
+		A0E9701C8A63461E9AF00102 /* StoreKitManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = A0E9701C8A63461E9AF00101 /* StoreKitManager.swift */; };
+		A0E9701C8A63461E9AF00104 /* StoreKitManagerTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = A0E9701C8A63461E9AF00103 /* StoreKitManagerTests.swift */; };
+		A71D5C9E6B20433BB8000001 /* PipoWidget.swift in Sources */ = {isa = PBXBuildFile; fileRef = A71D5C9E6B20433BB8000011 /* PipoWidget.swift */; };
+		A71D5C9E6B20433BB8000002 /* PipoWidgetBundle.swift in Sources */ = {isa = PBXBuildFile; fileRef = A71D5C9E6B20433BB8000012 /* PipoWidgetBundle.swift */; };
+		A71D5C9E6B20433BB8000003 /* WidgetSharedData.swift in Sources */ = {isa = PBXBuildFile; fileRef = A71D5C9E6B20433BB8000013 /* WidgetSharedData.swift */; };
+		A71D5C9E6B20433BB8000004 /* WidgetSharedData.swift in Sources */ = {isa = PBXBuildFile; fileRef = A71D5C9E6B20433BB8000013 /* WidgetSharedData.swift */; };
+		A71D5C9E6B20433BB8000005 /* Assets.xcassets in Widget Resources */ = {isa = PBXBuildFile; fileRef = 000000000000000000000114 /* Assets.xcassets */; };
+		A71D5C9E6B20433BB8000006 /* PipoWidgetExtension.appex in Embed App Extensions */ = {isa = PBXBuildFile; fileRef = A71D5C9E6B20433BB8000014 /* PipoWidgetExtension.appex */; settings = {ATTRIBUTES = (CodeSignOnCopy, RemoveHeadersOnCopy, ); }; };
+		D10000000000000000000001 /* OnboardingViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = D10000000000000000000101 /* OnboardingViewModel.swift */; };
+		D10000000000000000000002 /* OnboardingComponents.swift in Sources */ = {isa = PBXBuildFile; fileRef = D10000000000000000000102 /* OnboardingComponents.swift */; };
+		D10000000000000000000003 /* OnboardingContainerView.swift in Sources */ = {isa = PBXBuildFile; fileRef = D10000000000000000000103 /* OnboardingContainerView.swift */; };
+/* End PBXBuildFile section */
+
+/* Begin PBXContainerItemProxy section */
+		000000000000000000000901 /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = 000000000000000000000801 /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = 000000000000000000000301;
+			remoteInfo = Pipo;
+		};
+		A71D5C9E6B20433BB8000091 /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = 000000000000000000000801 /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = A71D5C9E6B20433BB8000031;
+			remoteInfo = PipoWidgetExtension;
+		};
+/* End PBXContainerItemProxy section */
+
+/* Begin PBXFileReference section */
+		000000000000000000000101 /* RootView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RootView.swift; sourceTree = "<group>"; };
+		000000000000000000000102 /* PipoApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PipoApp.swift; sourceTree = "<group>"; };
+		000000000000000000000103 /* NavigationManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NavigationManager.swift; sourceTree = "<group>"; };
+		000000000000000000000104 /* PipoTheme.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PipoTheme.swift; sourceTree = "<group>"; };
+		000000000000000000000105 /* AuthView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AuthView.swift; sourceTree = "<group>"; };
+		000000000000000000000106 /* ContentView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ContentView.swift; sourceTree = "<group>"; };
+		000000000000000000000107 /* ConsistencyMilestoneView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ConsistencyMilestoneView.swift; sourceTree = "<group>"; };
+		000000000000000000000108 /* ReviewGroupSavingView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ReviewGroupSavingView.swift; sourceTree = "<group>"; };
+		000000000000000000000109 /* MockData.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MockData.swift; sourceTree = "<group>"; };
+		000000000000000000000110 /* SavingRhythmView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SavingRhythmView.swift; sourceTree = "<group>"; };
+		000000000000000000000111 /* PersonalGoal.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PersonalGoal.swift; sourceTree = "<group>"; };
+		000000000000000000000112 /* SavingTransaction.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SavingTransaction.swift; sourceTree = "<group>"; };
+		000000000000000000000113 /* UserProfile.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = UserProfile.swift; sourceTree = "<group>"; };
+		000000000000000000000114 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
+		000000000000000000000115 /* PersonalGoalTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PersonalGoalTests.swift; sourceTree = "<group>"; };
+		000000000000000000000116 /* Pipo.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = Pipo.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		000000000000000000000117 /* PipoTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = PipoTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
+		000000000000000000000118 /* XCTest.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = XCTest.framework; path = System/Library/Frameworks/XCTest.framework; sourceTree = SDKROOT; };
+		000000000000000000000119 /* AuthStateManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AuthStateManager.swift; sourceTree = "<group>"; };
+		000000000000000000000120 /* AuthStateManagerTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AuthStateManagerTests.swift; sourceTree = "<group>"; };
+		000000000000000000000121 /* GamificationManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GamificationManager.swift; sourceTree = "<group>"; };
+		000000000000000000000122 /* GamificationManagerTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GamificationManagerTests.swift; sourceTree = "<group>"; };
+		000000000000000000000123 /* SubscriptionManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SubscriptionManager.swift; sourceTree = "<group>"; };
+		000000000000000000000124 /* PaywallView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PaywallView.swift; sourceTree = "<group>"; };
+		000000000000000000000125 /* CreateGoalView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CreateGoalView.swift; sourceTree = "<group>"; };
+		000000000000000000000126 /* SubscriptionManagerTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SubscriptionManagerTests.swift; sourceTree = "<group>"; };
+		000000000000000000000127 /* ReviewPlanView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ReviewPlanView.swift; sourceTree = "<group>"; };
+		000000000000000000000128 /* GroupSavingManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GroupSavingManager.swift; sourceTree = "<group>"; };
+		000000000000000000000129 /* GroupSavingManagerTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GroupSavingManagerTests.swift; sourceTree = "<group>"; };
+		27631892C68B8BF7E1BFBCD2 /* SupabaseServiceTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = SupabaseServiceTests.swift; sourceTree = "<group>"; };
+		73F534FD87463117278104F2 /* Info.plist */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
+		B965CFFB5D820A94B7CAD1B8 /* SupabaseService.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = SupabaseService.swift; sourceTree = "<group>"; };
+		DFCE5267008E3FA2ABC62F71 /* PipoMascotView.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = PipoMascotView.swift; sourceTree = "<group>"; };
+		A0E9701C8A63461E9AF00101 /* StoreKitManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StoreKitManager.swift; sourceTree = "<group>"; };
+		A0E9701C8A63461E9AF00103 /* StoreKitManagerTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StoreKitManagerTests.swift; sourceTree = "<group>"; };
+		A0E9701C8A63461E9AF00105 /* StoreKit.storekit */ = {isa = PBXFileReference; lastKnownFileType = text; path = StoreKit.storekit; sourceTree = "<group>"; };
+		A71D5C9E6B20433BB8000011 /* PipoWidget.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PipoWidget.swift; sourceTree = "<group>"; };
+		A71D5C9E6B20433BB8000012 /* PipoWidgetBundle.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PipoWidgetBundle.swift; sourceTree = "<group>"; };
+		A71D5C9E6B20433BB8000013 /* WidgetSharedData.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WidgetSharedData.swift; sourceTree = "<group>"; };
+		A71D5C9E6B20433BB8000014 /* PipoWidgetExtension.appex */ = {isa = PBXFileReference; explicitFileType = wrapper.app-extension; includeInIndex = 0; path = PipoWidgetExtension.appex; sourceTree = BUILT_PRODUCTS_DIR; };
+		A71D5C9E6B20433BB8000015 /* Pipo.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = Pipo.entitlements; sourceTree = "<group>"; };
+		A71D5C9E6B20433BB8000016 /* PipoWidget.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = PipoWidget.entitlements; sourceTree = "<group>"; };
+		A71D5C9E6B20433BB8000017 /* Widget Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
+		D10000000000000000000101 /* OnboardingViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OnboardingViewModel.swift; sourceTree = "<group>"; };
+		D10000000000000000000102 /* OnboardingComponents.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OnboardingComponents.swift; sourceTree = "<group>"; };
+		D10000000000000000000103 /* OnboardingContainerView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OnboardingContainerView.swift; sourceTree = "<group>"; };
+/* End PBXFileReference section */
+
+/* Begin PBXFrameworksBuildPhase section */
+		000000000000000000000602 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				374F65BF8A10D4071478164D /* RiveRuntime in Frameworks */,
+				60435F130DABB711F96348C0 /* Supabase in Frameworks */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		000000000000000000000605 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				000000000000000000000010 /* XCTest.framework in Frameworks */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		A71D5C9E6B20433BB8000062 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXFrameworksBuildPhase section */
+
+/* Begin PBXGroup section */
+		000000000000000000000701 = {
+			isa = PBXGroup;
+			children = (
+				000000000000000000000702 /* Pipo */,
+				000000000000000000000713 /* PipoTests */,
+				000000000000000000000703 /* Products */,
+				000000000000000000000704 /* Frameworks */,
+				A0E9701C8A63461E9AF00105 /* StoreKit.storekit */,
+			);
+			sourceTree = "<group>";
+		};
+		000000000000000000000702 /* Pipo */ = {
+			isa = PBXGroup;
+			children = (
+				000000000000000000000705 /* App */,
+				000000000000000000000706 /* Core */,
+				000000000000000000000709 /* Features */,
+				000000000000000000000710 /* Models */,
+				A71D5C9E6B20433BB8000021 /* Widget */,
+				000000000000000000000114 /* Assets.xcassets */,
+				73F534FD87463117278104F2 /* Info.plist */,
+			);
+			path = Pipo;
+			sourceTree = "<group>";
+		};
+		000000000000000000000703 /* Products */ = {
+			isa = PBXGroup;
+			children = (
+				000000000000000000000116 /* Pipo.app */,
+				000000000000000000000117 /* PipoTests.xctest */,
+				A71D5C9E6B20433BB8000014 /* PipoWidgetExtension.appex */,
+			);
+			name = Products;
+			sourceTree = "<group>";
+		};
+		000000000000000000000704 /* Frameworks */ = {
+			isa = PBXGroup;
+			children = (
+				000000000000000000000118 /* XCTest.framework */,
+			);
+			name = Frameworks;
+			sourceTree = "<group>";
+		};
+		000000000000000000000705 /* App */ = {
+			isa = PBXGroup;
+			children = (
+				000000000000000000000101 /* RootView.swift */,
+				000000000000000000000102 /* PipoApp.swift */,
+				A71D5C9E6B20433BB8000015 /* Pipo.entitlements */,
+			);
+			path = App;
+			sourceTree = "<group>";
+		};
+		000000000000000000000706 /* Core */ = {
+			isa = PBXGroup;
+			children = (
+				000000000000000000000707 /* DesignSystem */,
+				000000000000000000000708 /* Navigation */,
+				000000000000000000000718 /* Auth */,
+				000000000000000000000719 /* Gamification */,
+				000000000000000000000720 /* Paywall */,
+				000000000000000000000722 /* GroupSaving */,
+				1AF9E814EA851D9E0E956FB8 /* Network */,
+			);
+			path = Core;
+			sourceTree = "<group>";
+		};
+		000000000000000000000707 /* DesignSystem */ = {
+			isa = PBXGroup;
+			children = (
+				000000000000000000000104 /* PipoTheme.swift */,
+				DFCE5267008E3FA2ABC62F71 /* PipoMascotView.swift */,
+			);
+			path = DesignSystem;
+			sourceTree = "<group>";
+		};
+		000000000000000000000708 /* Navigation */ = {
+			isa = PBXGroup;
+			children = (
+				000000000000000000000103 /* NavigationManager.swift */,
+			);
+			path = Navigation;
+			sourceTree = "<group>";
+		};
+		000000000000000000000709 /* Features */ = {
+			isa = PBXGroup;
+			children = (
+				000000000000000000000711 /* Auth */,
+				000000000000000000000712 /* Dashboard */,
+				000000000000000000000714 /* Gamification */,
+				000000000000000000000715 /* GroupSaving */,
+				000000000000000000000716 /* MockData */,
+				000000000000000000000717 /* PersonalSaving */,
+				000000000000000000000721 /* Paywall */,
+				D10000000000000000000201 /* Onboarding */,
+			);
+			path = Features;
+			sourceTree = "<group>";
+		};
+		000000000000000000000710 /* Models */ = {
+			isa = PBXGroup;
+			children = (
+				000000000000000000000111 /* PersonalGoal.swift */,
+				000000000000000000000112 /* SavingTransaction.swift */,
+				000000000000000000000113 /* UserProfile.swift */,
+			);
+			path = Models;
+			sourceTree = "<group>";
+		};
+		A71D5C9E6B20433BB8000021 /* Widget */ = {
+			isa = PBXGroup;
+			children = (
+				A71D5C9E6B20433BB8000011 /* PipoWidget.swift */,
+				A71D5C9E6B20433BB8000012 /* PipoWidgetBundle.swift */,
+				A71D5C9E6B20433BB8000013 /* WidgetSharedData.swift */,
+				A71D5C9E6B20433BB8000016 /* PipoWidget.entitlements */,
+				A71D5C9E6B20433BB8000017 /* Widget Info.plist */,
+			);
+			path = Widget;
+			sourceTree = "<group>";
+		};
+		000000000000000000000711 /* Auth */ = {
+			isa = PBXGroup;
+			children = (
+				000000000000000000000105 /* AuthView.swift */,
+			);
+			path = Auth;
+			sourceTree = "<group>";
+		};
+		000000000000000000000712 /* Dashboard */ = {
+			isa = PBXGroup;
+			children = (
+				000000000000000000000106 /* ContentView.swift */,
+			);
+			path = Dashboard;
+			sourceTree = "<group>";
+		};
+		000000000000000000000713 /* PipoTests */ = {
+			isa = PBXGroup;
+			children = (
+				000000000000000000000115 /* PersonalGoalTests.swift */,
+				000000000000000000000120 /* AuthStateManagerTests.swift */,
+				000000000000000000000122 /* GamificationManagerTests.swift */,
+				000000000000000000000126 /* SubscriptionManagerTests.swift */,
+				000000000000000000000129 /* GroupSavingManagerTests.swift */,
+				27631892C68B8BF7E1BFBCD2 /* SupabaseServiceTests.swift */,
+				A0E9701C8A63461E9AF00103 /* StoreKitManagerTests.swift */,
+			);
+			path = PipoTests;
+			sourceTree = "<group>";
+		};
+		000000000000000000000714 /* Gamification */ = {
+			isa = PBXGroup;
+			children = (
+				000000000000000000000107 /* ConsistencyMilestoneView.swift */,
+			);
+			path = Gamification;
+			sourceTree = "<group>";
+		};
+		000000000000000000000715 /* GroupSaving */ = {
+			isa = PBXGroup;
+			children = (
+				000000000000000000000108 /* ReviewGroupSavingView.swift */,
+			);
+			path = GroupSaving;
+			sourceTree = "<group>";
+		};
+		000000000000000000000716 /* MockData */ = {
+			isa = PBXGroup;
+			children = (
+				000000000000000000000109 /* MockData.swift */,
+			);
+			path = MockData;
+			sourceTree = "<group>";
+		};
+		000000000000000000000717 /* PersonalSaving */ = {
+			isa = PBXGroup;
+			children = (
+				000000000000000000000110 /* SavingRhythmView.swift */,
+				000000000000000000000125 /* CreateGoalView.swift */,
+				000000000000000000000127 /* ReviewPlanView.swift */,
+			);
+			path = PersonalSaving;
+			sourceTree = "<group>";
+		};
+		000000000000000000000718 /* Auth */ = {
+			isa = PBXGroup;
+			children = (
+				000000000000000000000119 /* AuthStateManager.swift */,
+			);
+			path = Auth;
+			sourceTree = "<group>";
+		};
+		000000000000000000000719 /* Gamification */ = {
+			isa = PBXGroup;
+			children = (
+				000000000000000000000121 /* GamificationManager.swift */,
+			);
+			path = Gamification;
+			sourceTree = "<group>";
+		};
+		000000000000000000000720 /* Paywall */ = {
+			isa = PBXGroup;
+			children = (
+				000000000000000000000123 /* SubscriptionManager.swift */,
+				A0E9701C8A63461E9AF00101 /* StoreKitManager.swift */,
+			);
+			path = Paywall;
+			sourceTree = "<group>";
+		};
+		000000000000000000000721 /* Paywall */ = {
+			isa = PBXGroup;
+			children = (
+				000000000000000000000124 /* PaywallView.swift */,
+			);
+			path = Paywall;
+			sourceTree = "<group>";
+		};
+		D10000000000000000000201 /* Onboarding */ = {
+			isa = PBXGroup;
+			children = (
+				D10000000000000000000101 /* OnboardingViewModel.swift */,
+				D10000000000000000000102 /* OnboardingComponents.swift */,
+				D10000000000000000000103 /* OnboardingContainerView.swift */,
+			);
+			path = Onboarding;
+			sourceTree = "<group>";
+		};
+		000000000000000000000722 /* GroupSaving */ = {
+			isa = PBXGroup;
+			children = (
+				000000000000000000000128 /* GroupSavingManager.swift */,
+			);
+			path = GroupSaving;
+			sourceTree = "<group>";
+		};
+		1AF9E814EA851D9E0E956FB8 /* Network */ = {
+			isa = PBXGroup;
+			children = (
+				B965CFFB5D820A94B7CAD1B8 /* SupabaseService.swift */,
+			);
+			name = Network;
+			path = Network;
+			sourceTree = "<group>";
+		};
+/* End PBXGroup section */
+
+/* Begin PBXNativeTarget section */
+		000000000000000000000301 /* Pipo */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = 000000000000000000000502 /* Build configuration list for PBXNativeTarget "Pipo" */;
+			buildPhases = (
+				000000000000000000000601 /* Sources */,
+				000000000000000000000602 /* Frameworks */,
+				000000000000000000000603 /* Resources */,
+				A71D5C9E6B20433BB8000064 /* Embed App Extensions */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+				A71D5C9E6B20433BB8000092 /* PBXTargetDependency */,
+			);
+			name = Pipo;
+			packageProductDependencies = (
+				B9EB5CF9294E23998F6BCE27 /* RiveRuntime */,
+				30C881C1610D667FE7117C13 /* Supabase */,
+			);
+			productName = Pipo;
+			productReference = 000000000000000000000116 /* Pipo.app */;
+			productType = "com.apple.product-type.application";
+		};
+		000000000000000000000302 /* PipoTests */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = 000000000000000000000503 /* Build configuration list for PBXNativeTarget "PipoTests" */;
+			buildPhases = (
+				000000000000000000000604 /* Sources */,
+				000000000000000000000605 /* Frameworks */,
+				000000000000000000000606 /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+				000000000000000000000902 /* PBXTargetDependency */,
+			);
+			name = PipoTests;
+			productName = PipoTests;
+			productReference = 000000000000000000000117 /* PipoTests.xctest */;
+			productType = "com.apple.product-type.bundle.unit-test";
+		};
+		A71D5C9E6B20433BB8000031 /* PipoWidgetExtension */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = A71D5C9E6B20433BB8000051 /* Build configuration list for PBXNativeTarget "PipoWidgetExtension" */;
+			buildPhases = (
+				A71D5C9E6B20433BB8000061 /* Sources */,
+				A71D5C9E6B20433BB8000062 /* Frameworks */,
+				A71D5C9E6B20433BB8000063 /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			name = PipoWidgetExtension;
+			productName = PipoWidgetExtension;
+			productReference = A71D5C9E6B20433BB8000014 /* PipoWidgetExtension.appex */;
+			productType = "com.apple.product-type.app-extension";
+		};
+/* End PBXNativeTarget section */
+
+/* Begin PBXProject section */
+		000000000000000000000801 /* Project object */ = {
+			isa = PBXProject;
+			attributes = {
+				BuildIndependentTargetsInParallel = 1;
+				LastUpgradeCheck = 1600;
+				TargetAttributes = {
+					000000000000000000000301 = {
+						CreatedOnToolsVersion = 16.0;
+					};
+					000000000000000000000302 = {
+						CreatedOnToolsVersion = 16.0;
+						TestTargetID = 000000000000000000000301;
+					};
+					A71D5C9E6B20433BB8000031 = {
+						CreatedOnToolsVersion = 16.0;
+					};
+				};
+			};
+			buildConfigurationList = 000000000000000000000501 /* Build configuration list for PBXProject "Pipo" */;
+			compatibilityVersion = "Xcode 14.0";
+			developmentRegion = en;
+			hasScannedForEncodings = 0;
+			knownRegions = (
+				en,
+				Base,
+			);
+			mainGroup = 000000000000000000000701;
+			packageReferences = (
+				BE4D1CA208A015B3D637DDD9 /* XCRemoteSwiftPackageReference "rive-ios" */,
+				8D5CF53E29B079499EE25015 /* XCRemoteSwiftPackageReference "supabase-swift" */,
+			);
+			productRefGroup = 000000000000000000000703 /* Products */;
+			projectDirPath = "";
+			projectRoot = "";
+			targets = (
+				000000000000000000000301 /* Pipo */,
+				000000000000000000000302 /* PipoTests */,
+				A71D5C9E6B20433BB8000031 /* PipoWidgetExtension */,
+			);
+		};
+/* End PBXProject section */
+
+/* Begin PBXResourcesBuildPhase section */
+		000000000000000000000603 /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				00000000000000000000000E /* Assets.xcassets in Resources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		000000000000000000000606 /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		A71D5C9E6B20433BB8000063 /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				A71D5C9E6B20433BB8000005 /* Assets.xcassets in Widget Resources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXResourcesBuildPhase section */
+
+/* Begin PBXSourcesBuildPhase section */
+		000000000000000000000601 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				000000000000000000000001 /* RootView.swift in Sources */,
+				000000000000000000000002 /* PipoApp.swift in Sources */,
+				000000000000000000000003 /* NavigationManager.swift in Sources */,
+				000000000000000000000004 /* PipoTheme.swift in Sources */,
+				000000000000000000000005 /* AuthView.swift in Sources */,
+				000000000000000000000006 /* ContentView.swift in Sources */,
+				000000000000000000000007 /* ConsistencyMilestoneView.swift in Sources */,
+				000000000000000000000008 /* ReviewGroupSavingView.swift in Sources */,
+				000000000000000000000009 /* MockData.swift in Sources */,
+				00000000000000000000000A /* SavingRhythmView.swift in Sources */,
+				00000000000000000000000B /* PersonalGoal.swift in Sources */,
+				00000000000000000000000C /* SavingTransaction.swift in Sources */,
+				00000000000000000000000D /* UserProfile.swift in Sources */,
+				000000000000000000000011 /* AuthStateManager.swift in Sources */,
+				000000000000000000000013 /* GamificationManager.swift in Sources */,
+				000000000000000000000015 /* SubscriptionManager.swift in Sources */,
+				000000000000000000000016 /* PaywallView.swift in Sources */,
+				000000000000000000000017 /* CreateGoalView.swift in Sources */,
+				000000000000000000000019 /* ReviewPlanView.swift in Sources */,
+				00000000000000000000001A /* GroupSavingManager.swift in Sources */,
+				7B8C06B79BD2E563C8C18A18 /* PipoMascotView.swift in Sources */,
+				745C700C56FEE76E8F97792D /* SupabaseService.swift in Sources */,
+				A0E9701C8A63461E9AF00102 /* StoreKitManager.swift in Sources */,
+				A71D5C9E6B20433BB8000003 /* WidgetSharedData.swift in Sources */,
+				D10000000000000000000001 /* OnboardingViewModel.swift in Sources */,
+				D10000000000000000000002 /* OnboardingComponents.swift in Sources */,
+				D10000000000000000000003 /* OnboardingContainerView.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		000000000000000000000604 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				00000000000000000000000F /* PersonalGoalTests.swift in Sources */,
+				000000000000000000000012 /* AuthStateManagerTests.swift in Sources */,
+				000000000000000000000014 /* GamificationManagerTests.swift in Sources */,
+				000000000000000000000018 /* SubscriptionManagerTests.swift in Sources */,
+				00000000000000000000001B /* GroupSavingManagerTests.swift in Sources */,
+				0BA9C96E17E50FEC4485564A /* SupabaseServiceTests.swift in Sources */,
+				A0E9701C8A63461E9AF00104 /* StoreKitManagerTests.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		A71D5C9E6B20433BB8000061 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				A71D5C9E6B20433BB8000001 /* PipoWidget.swift in Sources */,
+				A71D5C9E6B20433BB8000002 /* PipoWidgetBundle.swift in Sources */,
+				A71D5C9E6B20433BB8000004 /* WidgetSharedData.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXSourcesBuildPhase section */
+
+/* Begin PBXCopyFilesBuildPhase section */
+		A71D5C9E6B20433BB8000064 /* Embed App Extensions */ = {
+			isa = PBXCopyFilesBuildPhase;
+			buildActionMask = 2147483647;
+			dstPath = "";
+			dstSubfolderSpec = 13;
+			files = (
+				A71D5C9E6B20433BB8000006 /* PipoWidgetExtension.appex in Embed App Extensions */,
+			);
+			name = "Embed App Extensions";
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXCopyFilesBuildPhase section */
+
+/* Begin PBXTargetDependency section */
+		000000000000000000000902 /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = 000000000000000000000301 /* Pipo */;
+			targetProxy = 000000000000000000000901 /* PBXContainerItemProxy */;
+		};
+		A71D5C9E6B20433BB8000092 /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = A71D5C9E6B20433BB8000031 /* PipoWidgetExtension */;
+			targetProxy = A71D5C9E6B20433BB8000091 /* PBXContainerItemProxy */;
+		};
+/* End PBXTargetDependency section */
+
+/* Begin XCBuildConfiguration section */
+		000000000000000000000401 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ALWAYS_SEARCH_USER_PATHS = NO;
+				CLANG_ANALYZER_NONNULL = YES;
+				CLANG_ANALYZER_NUMBER_OBJECT_CONVERSION = YES_AGGRESSIVE;
+				CLANG_CXX_LANGUAGE_STANDARD = "gnu++20";
+				CLANG_ENABLE_MODULES = YES;
+				CLANG_ENABLE_OBJC_ARC = YES;
+				CLANG_WARN_BLOCK_CAPTURE_AUTORELEASING = YES;
+				CLANG_WARN_BOOL_CONVERSION = YES;
+				CLANG_WARN_COMMA = YES;
+				CLANG_WARN_CONSTANT_CONVERSION = YES;
+				CLANG_WARN_DEPRECATED_OBJC_IMPLEMENTATIONS = YES;
+				CLANG_WARN_DIRECT_OBJC_ISA_USAGE = YES_ERROR;
+				CLANG_WARN_DOCUMENTATION_COMMENTS = YES;
+				CLANG_WARN_EMPTY_BODY = YES;
+				CLANG_WARN_ENUM_CONVERSION = YES;
+				CLANG_WARN_INFINITE_RECURSION = YES;
+				CLANG_WARN_INT_CONVERSION = YES;
+				CLANG_WARN_NON_LITERAL_NULL_CONVERSION = YES;
+				CLANG_WARN_OBJC_IMPLICIT_RETAIN_SELF = YES;
+				CLANG_WARN_OBJC_LITERAL_CONVERSION = YES;
+				CLANG_WARN_OBJC_ROOT_CLASS = YES_ERROR;
+				CLANG_WARN_QUOTED_INCLUDE_IN_FRAMEWORK_HEADER = YES;
+				CLANG_WARN_RANGE_LOOP_ANALYSIS = YES;
+				CLANG_WARN_STRICT_PROTOTYPES = YES;
+				CLANG_WARN_SUSPICIOUS_MOVE = YES;
+				CLANG_WARN_UNGUARDED_AVAILABILITY = YES_AGGRESSIVE;
+				CLANG_WARN_UNREACHABLE_CODE = YES;
+				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
+				COPY_PHASE_STRIP = NO;
+				DEBUG_INFORMATION_FORMAT = dwarf;
+				ENABLE_STRICT_OBJC_MSGSEND = YES;
+				ENABLE_TESTABILITY = YES;
+				GCC_C_LANGUAGE_STANDARD = gnu17;
+				GCC_DYNAMIC_NO_PIC = NO;
+				GCC_NO_COMMON_BLOCKS = YES;
+				GCC_OPTIMIZATION_LEVEL = 0;
+				GCC_PREPROCESSOR_DEFINITIONS = (
+					"DEBUG=1",
+					"$(inherited)",
+				);
+				GCC_WARN_64_TO_32_BIT_CONVERSION = YES;
+				GCC_WARN_ABOUT_RETURN_TYPE = YES_ERROR;
+				GCC_WARN_UNDECLARED_SELECTOR = YES;
+				GCC_WARN_UNINITIALIZED_AUTOS = YES_AGGRESSIVE;
+				GCC_WARN_UNUSED_FUNCTION = YES;
+				GCC_WARN_UNUSED_VARIABLE = YES;
+				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
+				MTL_ENABLE_DEBUG_INFO = INCLUDE_SOURCE;
+				MTL_FAST_MATH = YES;
+				ONLY_ACTIVE_ARCH = YES;
+				SDKROOT = iphoneos;
+				SWIFT_ACTIVE_COMPILATION_CONDITIONS = "DEBUG $(inherited)";
+				SWIFT_OPTIMIZATION_LEVEL = "-Onone";
+			};
+			name = Debug;
+		};
+		000000000000000000000402 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ALWAYS_SEARCH_USER_PATHS = NO;
+				CLANG_ANALYZER_NONNULL = YES;
+				CLANG_ANALYZER_NUMBER_OBJECT_CONVERSION = YES_AGGRESSIVE;
+				CLANG_CXX_LANGUAGE_STANDARD = "gnu++20";
+				CLANG_ENABLE_MODULES = YES;
+				CLANG_ENABLE_OBJC_ARC = YES;
+				CLANG_WARN_BLOCK_CAPTURE_AUTORELEASING = YES;
+				CLANG_WARN_BOOL_CONVERSION = YES;
+				CLANG_WARN_COMMA = YES;
+				CLANG_WARN_CONSTANT_CONVERSION = YES;
+				CLANG_WARN_DEPRECATED_OBJC_IMPLEMENTATIONS = YES;
+				CLANG_WARN_DIRECT_OBJC_ISA_USAGE = YES;
+				CLANG_WARN_DOCUMENTATION_COMMENTS = YES;
+				CLANG_WARN_EMPTY_BODY = YES;
+				CLANG_WARN_ENUM_CONVERSION = YES;
+				CLANG_WARN_INFINITE_RECURSION = YES;
+				CLANG_WARN_INT_CONVERSION = YES;
+				CLANG_WARN_NON_LITERAL_NULL_CONVERSION = YES;
+				CLANG_WARN_OBJC_IMPLICIT_RETAIN_SELF = YES;
+				CLANG_WARN_OBJC_LITERAL_CONVERSION = YES;
+				CLANG_WARN_OBJC_ROOT_CLASS = YES_ERROR;
+				CLANG_WARN_QUOTED_INCLUDE_IN_FRAMEWORK_HEADER = YES;
+				CLANG_WARN_RANGE_LOOP_ANALYSIS = YES;
+				CLANG_WARN_STRICT_PROTOTYPES = YES;
+				CLANG_WARN_SUSPICIOUS_MOVE = YES;
+				CLANG_WARN_UNGUARDED_AVAILABILITY = YES_AGGRESSIVE;
+				CLANG_WARN_UNREACHABLE_CODE = YES;
+				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
+				COPY_PHASE_STRIP = NO;
+				DEBUG_INFORMATION_FORMAT = "dwarf-with-dsym";
+				ENABLE_NS_ASSERTIONS = NO;
+				ENABLE_STRICT_OBJC_MSGSEND = YES;
+				GCC_C_LANGUAGE_STANDARD = gnu17;
+				GCC_NO_COMMON_BLOCKS = YES;
+				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
+				MTL_ENABLE_DEBUG_INFO = NO;
+				MTL_FAST_MATH = YES;
+				SDKROOT = iphoneos;
+				SWIFT_COMPILATION_MODE = wholemodule;
+			};
+			name = Release;
+		};
+		000000000000000000000403 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGN_ENTITLEMENTS = Pipo/App/Pipo.entitlements;
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				GENERATE_INFOPLIST_FILE = NO;
+				INFOPLIST_FILE = Pipo/Info.plist;
+				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.pipo.app;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SUPABASE_ANON_KEY = "";
+				SUPABASE_REDIRECT_URL = "pipo://login-callback";
+				SUPABASE_URL = "";
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_VERSION = 6.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+			};
+			name = Debug;
+		};
+		000000000000000000000404 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGN_ENTITLEMENTS = Pipo/App/Pipo.entitlements;
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				GENERATE_INFOPLIST_FILE = NO;
+				INFOPLIST_FILE = Pipo/Info.plist;
+				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.pipo.app;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SUPABASE_ANON_KEY = "";
+				SUPABASE_REDIRECT_URL = "pipo://login-callback";
+				SUPABASE_URL = "";
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_VERSION = 6.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+			};
+			name = Release;
+		};
+		000000000000000000000405 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				BUNDLE_LOADER = "$(TEST_HOST)";
+				CODE_SIGN_STYLE = Automatic;
+				GENERATE_INFOPLIST_FILE = YES;
+				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.pipo.app.tests;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SWIFT_VERSION = 6.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/Pipo.app/Pipo";
+			};
+			name = Debug;
+		};
+		000000000000000000000406 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				BUNDLE_LOADER = "$(TEST_HOST)";
+				CODE_SIGN_STYLE = Automatic;
+				GENERATE_INFOPLIST_FILE = YES;
+				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.pipo.app.tests;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SWIFT_VERSION = 6.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/Pipo.app/Pipo";
+			};
+			name = Release;
+		};
+		A71D5C9E6B20433BB8000041 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				APPLICATION_EXTENSION_API_ONLY = YES;
+				CODE_SIGN_ENTITLEMENTS = Pipo/Widget/PipoWidget.entitlements;
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				GENERATE_INFOPLIST_FILE = NO;
+				INFOPLIST_FILE = Pipo/Widget/Info.plist;
+				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@executable_path/../../Frameworks",
+				);
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.pipo.app.widget;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SKIP_INSTALL = YES;
+				SWIFT_VERSION = 6.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+			};
+			name = Debug;
+		};
+		A71D5C9E6B20433BB8000042 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				APPLICATION_EXTENSION_API_ONLY = YES;
+				CODE_SIGN_ENTITLEMENTS = Pipo/Widget/PipoWidget.entitlements;
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				GENERATE_INFOPLIST_FILE = NO;
+				INFOPLIST_FILE = Pipo/Widget/Info.plist;
+				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@executable_path/../../Frameworks",
+				);
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.pipo.app.widget;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SKIP_INSTALL = YES;
+				SWIFT_VERSION = 6.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+			};
+			name = Release;
+		};
+/* End XCBuildConfiguration section */
+
+/* Begin XCConfigurationList section */
+		000000000000000000000501 /* Build configuration list for PBXProject "Pipo" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				000000000000000000000401 /* Debug */,
+				000000000000000000000402 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		000000000000000000000502 /* Build configuration list for PBXNativeTarget "Pipo" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				000000000000000000000403 /* Debug */,
+				000000000000000000000404 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		000000000000000000000503 /* Build configuration list for PBXNativeTarget "PipoTests" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				000000000000000000000405 /* Debug */,
+				000000000000000000000406 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		A71D5C9E6B20433BB8000051 /* Build configuration list for PBXNativeTarget "PipoWidgetExtension" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				A71D5C9E6B20433BB8000041 /* Debug */,
+				A71D5C9E6B20433BB8000042 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+/* End XCConfigurationList section */
+
+/* Begin XCRemoteSwiftPackageReference section */
+		8D5CF53E29B079499EE25015 /* XCRemoteSwiftPackageReference "supabase-swift" */ = {
+			isa = XCRemoteSwiftPackageReference;
+			repositoryURL = "https://github.com/supabase/supabase-swift.git";
+			requirement = {
+				kind = exactVersion;
+				version = 2.40.0;
+			};
+		};
+		BE4D1CA208A015B3D637DDD9 /* XCRemoteSwiftPackageReference "rive-ios" */ = {
+			isa = XCRemoteSwiftPackageReference;
+			repositoryURL = "https://github.com/rive-app/rive-ios";
+			requirement = {
+				kind = upToNextMajorVersion;
+				minimumVersion = 6.30.1;
+			};
+		};
+/* End XCRemoteSwiftPackageReference section */
+
+/* Begin XCSwiftPackageProductDependency section */
+		30C881C1610D667FE7117C13 /* Supabase */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = 8D5CF53E29B079499EE25015 /* XCRemoteSwiftPackageReference "supabase-swift" */;
+			productName = Supabase;
+		};
+		B9EB5CF9294E23998F6BCE27 /* RiveRuntime */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = BE4D1CA208A015B3D637DDD9 /* XCRemoteSwiftPackageReference "rive-ios" */;
+			productName = RiveRuntime;
+		};
+/* End XCSwiftPackageProductDependency section */
+	};
+	rootObject = 000000000000000000000801 /* Project object */;
+}
