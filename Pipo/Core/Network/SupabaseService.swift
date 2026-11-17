@@ -279,13 +279,17 @@ final class SupabaseService {
             from: transactions,
             authenticatedUserID: userID
         )
+        try await upsertTransactionPayloads(payloads)
+    }
+
+    private nonisolated func upsertTransactionPayloads(_ payloads: [SavingTransactionPayload]) async throws {
         try await client
             .from("saving_transactions")
             .upsert(payloads, onConflict: "id")
             .execute()
     }
 
-    func syncUserProfile(_ profile: UserProfileSlotBalancePayload) async throws {
+    nonisolated func syncUserProfile(_ profile: UserProfileSlotBalancePayload) async throws {
         guard let userID = client.auth.currentUser?.id else {
             throw SupabaseServiceError.notAuthenticated
         }
@@ -299,7 +303,7 @@ final class SupabaseService {
             .execute()
     }
 
-    func fetchUserProfileSlots(userID: UUID) async throws -> UserProfileSlotBalancePayload? {
+    nonisolated func fetchUserProfileSlots(userID: UUID) async throws -> UserProfileSlotBalancePayload? {
         guard client.auth.currentUser?.id == userID else {
             throw SupabaseServiceError.notAuthenticated
         }

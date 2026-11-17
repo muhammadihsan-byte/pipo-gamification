@@ -12,6 +12,7 @@ struct SavingRhythmView: View {
     @State private var preferredDepositDay: Int
 
     private let onBack: () -> Void
+    private let onEditContribution: () -> Void
     private let onContinue: (SavingRhythm, Int, Double) -> Void
 
     private let dayColumns = Array(repeating: GridItem(.flexible(), spacing: 8), count: 7)
@@ -34,6 +35,7 @@ struct SavingRhythmView: View {
         _selectedRhythm = State(initialValue: selectedRhythm)
         _preferredDepositDay = State(initialValue: min(max(preferredDepositDay, 1), 31))
         self.onBack = onBack
+        self.onEditContribution = onEditContribution
         self.onContinue = onContinue
     }
 
