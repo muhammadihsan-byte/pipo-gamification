@@ -143,9 +143,9 @@ struct CreateGoalView: View {
     }
 
     private var footerActions: some View {
-        let back: (() -> Void)? = step == .goal && !isEditingFromReview ? nil : goBack
-        return PersonalPlanActions(
-            back: back,
+        PersonalPlanActions(
+            back: goBack,
+            showsBack: step != .goal || isEditingFromReview,
             title: isEditingFromReview && plan != nil ? "Back to review" : "Continue",
             dimmed: !stepIsValid,
             action: advance

@@ -274,7 +274,7 @@ struct PersonalPlanDialog<Content: View>: View {
             }
             .scrollBounceBehavior(.basedOnSize)
         }
-        .background(.black.opacity(0.52).ignoresSafeArea())
+        .background { Color.black.opacity(0.52).ignoresSafeArea() }
         .foregroundStyle(PersonalPlanStyle.ink)
         .accessibilityAddTraits(.isModal)
     }

@@ -187,14 +187,15 @@ struct PersonalPlanIntro: View {
 }
 
 struct PersonalPlanActions: View {
-    var back: (() -> Void)?
+    var back: () -> Void
+    var showsBack = true
     var title = "Continue"
     var dimmed = false
     var action: () -> Void
 
     var body: some View {
         HStack(spacing: 12) {
-            if let back {
+            if showsBack {
                 Button("Back", action: back)
                     .buttonStyle(.plain)
                     .font(.subheadline.bold())
