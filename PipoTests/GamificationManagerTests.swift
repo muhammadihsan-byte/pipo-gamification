@@ -90,24 +90,23 @@ final class GamificationManagerTests: XCTestCase {
         XCTAssertEqual(streak, 3)
     }
 
+    @MainActor
     func testInvalidDepositDoesNotChangeProfileOrGoal() async {
-        await MainActor.run {
-            let manager = GamificationManager()
-            let profile = UserProfile()
-            let goal = makeGoal()
+        let manager = GamificationManager()
+        let profile = UserProfile()
+        let goal = makeGoal()
 
-            XCTAssertThrowsError(
-                try manager.recordSaving(
-                    amount: 0,
-                    goal: goal,
-                    profile: profile,
-                    date: makeDate(day: 1)
-                )
+        XCTAssertThrowsError(
+            try manager.recordSaving(
+                amount: 0,
+                goal: goal,
+                profile: profile,
+                date: makeDate(day: 1)
             )
-            XCTAssertEqual(profile.totalXP, 0)
-            XCTAssertEqual(profile.streakDays, 0)
-            XCTAssertEqual(goal.currentAmount, 0)
-        }
+        )
+        XCTAssertEqual(profile.totalXP, 0)
+        XCTAssertEqual(profile.streakDays, 0)
+        XCTAssertEqual(goal.currentAmount, 0)
     }
 
     @MainActor
