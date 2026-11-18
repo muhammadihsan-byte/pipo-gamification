@@ -22,7 +22,15 @@ jobs:
         run: |
           set -euo pipefail
           mkdir -p evidence
-          sudo xcode-select -s /Applications/Xcode.app
+          if test -d /Applications/Xcode_16.4.app; then
+            sudo xcode-select -s /Applications/Xcode_16.4.app
+          elif test -d /Applications/Xcode.app/Contents/Developer; then
+            sudo xcode-select -s /Applications/Xcode.app/Contents/Developer
+          else
+            echo "No known Xcode installation found"
+            ls -la /Applications | tee evidence/applications.txt
+            exit 1
+          fi
           xcodebuild -version | tee evidence/xcode.txt
           xcrun simctl list runtimes available | tee evidence/runtimes.txt
           xcrun simctl list devices available -j > evidence/devices.json
