@@ -26,7 +26,6 @@ struct DashboardView: View {
         xpEarned: Int,
         streakDays: Int
     )?
-    @State private var mascotState: PipoMascotState = .idle
 
     init(
         onCreateGoal: @escaping () -> Void,
@@ -104,7 +103,10 @@ struct DashboardView: View {
                     .foregroundStyle(PipoTheme.muted)
             }
             Spacer(minLength: 0)
-            PipoMascotView(state: mascotState)
+            PipoMascotView(
+                companion: .idle,
+                isPresented: !isShowingSaveConfirmation && !navigationManager.isMilestonePresented && saveErrorMessage == nil
+            )
                 .frame(width: 100, height: 100)
         }
         .padding(.top, 12)
@@ -286,7 +288,6 @@ struct DashboardView: View {
             return
         }
 
-        mascotState = .happy
         completedSavingReward = (
             transaction,
             goal,
