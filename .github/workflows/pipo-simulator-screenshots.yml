@@ -147,8 +147,10 @@ jobs:
               fi
               sleep 1
             done
-            xcrun simctl status_bar "$UDID" override --time 9:41
-            xcrun simctl install "$UDID" "$APP_PATH"
+            xcrun simctl status_bar "$UDID" override --time 9:41 2>&1 | tee "$OUT/status-bar.log" || true
+            if ! xcrun simctl install "$UDID" "$APP_PATH" 2>&1 | tee "$OUT/install.log"; then
+              exit 1
+            fi
 
             capture_screen() {
               local ARGUMENT="$1"
