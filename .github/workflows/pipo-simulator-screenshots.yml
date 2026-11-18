@@ -1,13 +1,15 @@
 name: Pipo iOS Simulator Screenshots
 
 on:
-  workflow_dispatch:
+  pull_request:
+    types: [labeled]
 
 permissions:
   contents: read
 
 jobs:
   simulator-screenshots:
+    if: github.event.label.name == 'pipo-preview'
     runs-on: macos-15
     timeout-minutes: 45
 
@@ -162,6 +164,12 @@ jobs:
               fi
 
               sleep 8
+              if ! ps -p "$PID" >/dev/null 2>&1; then
+                echo "App process $PID exited before screenshot capture" | tee "$SCREEN_DIR/process.txt"
+                xcrun simctl spawn "$UDID" log show --last 2m --style compact |
+                  tail -120 > "$SCREEN_DIR/launch-log.txt" || true
+                exit 1
+              fi
               echo "Confirmed launch process: $PID" | tee "$SCREEN_DIR/process.txt"
 
               local PNG="$SCREEN_DIR/${SCREEN_NAME}-${SAFE_NAME}.png"
@@ -171,7 +179,7 @@ jobs:
               sips -g pixelWidth -g pixelHeight "$PNG" | tee "$SCREEN_DIR/resolution.txt"
             }
 
-            capture_screen "" "launch-home"
+            capture_screen "-pipoHomeDemo" "launch-home"
             capture_screen "-pipoButtonDemo" "button-demo"
 
             xcrun simctl terminate "$UDID" "$BUNDLE_ID" 2>/dev/null || true
