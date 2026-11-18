@@ -136,32 +136,17 @@ jobs:
 
             echo "Booting $DEVICE_NAME ($UDID)"
             xcrun simctl boot "$UDID" 2>&1 | tee "$OUT/boot.log" || true
-            python3 - "$UDID" <<'PY'
-            import json
-            import subprocess
-            import sys
-            import time
-
-            udid = sys.argv[1]
-            for _ in range(90):
-                devices = json.loads(subprocess.check_output([
-                    "xcrun", "simctl", "list", "devices", "-j"
-                ]))["devices"]
-                state = None
-                for items in devices.values():
-                    for item in items:
-                        if item["udid"] == udid:
-                            state = item["state"]
-                            break
-                    if state:
-                        break
-                if state == "Booted":
-                    print(f"Simulator {udid} reached Booted state")
-                    break
-                time.sleep(1)
-            else:
-                raise SystemExit(f"Simulator {udid} did not reach Booted state")
-            PY
+            for second in $(seq 1 90); do
+              if xcrun simctl list devices -j | grep -A12 "$UDID" | grep -q '"state" : "Booted"'; then
+                echo "Simulator $UDID reached Booted state"
+                break
+              fi
+              if [ "$second" -eq 90 ]; then
+                echo "Simulator $UDID did not reach Booted state"
+                exit 1
+              fi
+              sleep 1
+            done
             xcrun simctl status_bar "$UDID" override --time 9:41
             xcrun simctl install "$UDID" "$APP_PATH"
 
