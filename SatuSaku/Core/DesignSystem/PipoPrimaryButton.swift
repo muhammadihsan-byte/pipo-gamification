@@ -53,7 +53,6 @@ struct PipoPrimaryButton: View {
         .contentShape(Rectangle())
         .accessibilityLabel(isLoading ? "\(title), loading" : title)
         .accessibilityValue(isLoading ? "Loading" : "")
-        .accessibilityAddTraits(isDisabled ? .isDisabled : [])
         .accessibilityHint(isDisabled ? "This action is unavailable" : "")
     }
 }
