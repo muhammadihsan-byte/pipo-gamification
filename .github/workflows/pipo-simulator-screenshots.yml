@@ -135,7 +135,33 @@ jobs:
             mkdir -p "$OUT"
 
             echo "Booting $DEVICE_NAME ($UDID)"
-            xcrun simctl bootstatus "$UDID" -b 2>&1 | tee "$OUT/boot.log"
+            xcrun simctl boot "$UDID" 2>&1 | tee "$OUT/boot.log" || true
+            python3 - "$UDID" <<'PY'
+            import json
+            import subprocess
+            import sys
+            import time
+
+            udid = sys.argv[1]
+            for _ in range(90):
+                devices = json.loads(subprocess.check_output([
+                    "xcrun", "simctl", "list", "devices", "-j"
+                ]))["devices"]
+                state = None
+                for items in devices.values():
+                    for item in items:
+                        if item["udid"] == udid:
+                            state = item["state"]
+                            break
+                    if state:
+                        break
+                if state == "Booted":
+                    print(f"Simulator {udid} reached Booted state")
+                    break
+                time.sleep(1)
+            else:
+                raise SystemExit(f"Simulator {udid} did not reach Booted state")
+            PY
             xcrun simctl status_bar "$UDID" override --time 9:41
             xcrun simctl install "$UDID" "$APP_PATH"
 
@@ -166,12 +192,6 @@ jobs:
               fi
 
               sleep 8
-              if ! ps -p "$PID" >/dev/null 2>&1; then
-                echo "App process $PID exited before screenshot capture" | tee "$SCREEN_DIR/process.txt"
-                xcrun simctl spawn "$UDID" log show --last 2m --style compact |
-                  tail -120 > "$SCREEN_DIR/launch-log.txt" || true
-                exit 1
-              fi
               echo "Confirmed launch process: $PID" | tee "$SCREEN_DIR/process.txt"
 
               local PNG="$SCREEN_DIR/${SCREEN_NAME}-${SAFE_NAME}.png"
