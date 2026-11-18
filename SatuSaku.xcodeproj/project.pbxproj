@@ -8,6 +8,7 @@
 
 /* Begin PBXBuildFile section */
 		000000000000000000000001 /* RootView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 000000000000000000000101 /* RootView.swift */; };
+		C10000000000000000000001 /* PipoPrimaryButton.swift in Sources */ = {isa = PBXBuildFile; fileRef = C10000000000000000000101 /* PipoPrimaryButton.swift */; };
 		000000000000000000000002 /* SatuSakuApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = 000000000000000000000102 /* SatuSakuApp.swift */; };
 		000000000000000000000003 /* NavigationManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = 000000000000000000000103 /* NavigationManager.swift */; };
 		000000000000000000000004 /* SatuSakuTheme.swift in Sources */ = {isa = PBXBuildFile; fileRef = 000000000000000000000104 /* SatuSakuTheme.swift */; };
@@ -71,6 +72,7 @@
 
 /* Begin PBXFileReference section */
 		000000000000000000000101 /* RootView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RootView.swift; sourceTree = "<group>"; };
+		C10000000000000000000101 /* PipoPrimaryButton.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PipoPrimaryButton.swift; sourceTree = "<group>"; };
 		000000000000000000000102 /* SatuSakuApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SatuSakuApp.swift; sourceTree = "<group>"; };
 		000000000000000000000103 /* NavigationManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NavigationManager.swift; sourceTree = "<group>"; };
 		000000000000000000000104 /* SatuSakuTheme.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SatuSakuTheme.swift; sourceTree = "<group>"; };
@@ -217,6 +219,7 @@
 			isa = PBXGroup;
 			children = (
 				000000000000000000000104 /* SatuSakuTheme.swift */,
+				C10000000000000000000101 /* PipoPrimaryButton.swift */,
 				DFCE5267008E3FA2ABC62F71 /* PipoMascotView.swift */,
 			);
 			path = DesignSystem;
@@ -532,6 +535,7 @@
 				000000000000000000000002 /* SatuSakuApp.swift in Sources */,
 				000000000000000000000003 /* NavigationManager.swift in Sources */,
 				000000000000000000000004 /* SatuSakuTheme.swift in Sources */,
+				C10000000000000000000001 /* PipoPrimaryButton.swift in Sources */,
 				000000000000000000000005 /* AuthView.swift in Sources */,
 				000000000000000000000006 /* ContentView.swift in Sources */,
 				000000000000000000000007 /* ConsistencyMilestoneView.swift in Sources */,
