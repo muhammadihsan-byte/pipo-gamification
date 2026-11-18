@@ -84,6 +84,11 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
+          bundle=/tmp/PipoBuild/Build/Products/Debug-iphonesimulator/Pipo.app
+          ls "$bundle/Frameworks" | tee evidence/frameworks.txt
+          for bin in "$bundle/Pipo" "$bundle/Pipo.debug.dylib"; do
+            if test -f "$bin"; then otool -L "$bin" | grep -E '@rpath|Pipo' >> evidence/frameworks.txt; otool -l "$bin" | grep -A2 LC_RPATH >> evidence/frameworks.txt || true; fi
+          done
           for label in SMALL LARGE; do
             udid="${!label}"
             xcrun simctl bootstatus "$udid" -b
@@ -91,7 +96,7 @@ jobs:
             xcrun simctl install "$udid" /tmp/PipoBuild/Build/Products/Debug-iphonesimulator/Pipo.app
             sleep 4
             xcrun simctl terminate "$udid" com.pipo.app 2>/dev/null || true
-            if ! launch=$(xcrun simctl launch "$udid" com.pipo.app); then
+            if ! launch=$(xcrun simctl launch --stderr=/tmp/Pipo-stderr.log "$udid" com.pipo.app); then
               sleep 5
               launch=$(xcrun simctl launch "$udid" com.pipo.app) || {
                 xcrun simctl spawn "$udid" log show --last 1m --style compact --predicate 'eventMessage CONTAINS[c] "com.pipo.app"' | tail -65
@@ -99,7 +104,19 @@ jobs:
               }
             fi
             pid=$(echo "$launch" | awk '{print $NF}')
-            sleep 9
+            container=$(xcrun simctl get_app_container "$udid" com.pipo.app data)
+            for second in $(seq 1 25); do
+              if grep -q 'web true.*timeline \[' "$container/Documents/preview-log.txt" 2>/dev/null; then break; fi
+              sleep 1
+            done
+            if ! grep -q 'web true.*timeline \[' "$container/Documents/preview-log.txt"; then
+              cat /tmp/Pipo-stderr.log || true
+              cp "$container/Documents/preview-log.txt" evidence/diagnostic.txt || true
+              xcrun simctl spawn "$udid" log show --last 1m --style compact --predicate 'process == "Pipo" OR eventMessage CONTAINS[c] "Library not loaded"' | tail -100 > evidence/launch-log.txt || true
+              find "$HOME/Library/Logs/DiagnosticReports" "$HOME/Library/Developer/CoreSimulator/Devices/$udid/data/Library/Logs" -iname 'Pipo*.ips' -exec cp {} evidence/ \; 2>/dev/null || true
+              exit 1
+            fi
+            sleep 8
             xcrun simctl io "$udid" screenshot "evidence/$label-home.png"
             container=$(xcrun simctl get_app_container "$udid" com.pipo.app data)
             if [ "$label" = SMALL ]; then
@@ -114,10 +131,10 @@ jobs:
               wait "$recorder" || test -s evidence/Home-loop.mp4
               xcrun simctl launch "$udid" com.apple.Preferences > /dev/null
               sleep 4
-              xcrun simctl launch "$udid" com.pipo.app > /dev/null
+              xcrun simctl launch "$udid" com.pipo.app > /dev/null || true
               sleep 3
             fi
-            cp "$container/Documents/preview-log.txt" "evidence/$label-timeline.txt" || true
+            cp "$container/Documents/preview-log.txt" "evidence/$label-timeline.txt"
             xcrun simctl terminate "$udid" com.pipo.app
             xcrun simctl shutdown "$udid"
           done
@@ -130,7 +147,12 @@ jobs:
           xcrun simctl shutdown "$SMALL"
           xcrun simctl bootstatus "$SMALL" -b
           xcrun simctl launch "$SMALL" com.pipo.app
-          sleep 10
+          container=$(xcrun simctl get_app_container "$SMALL" com.pipo.app data)
+          for second in $(seq 1 18); do
+            grep -q 'swiftUIReduce true web false' "$container/Documents/preview-log.txt" 2>/dev/null && break
+            sleep 1
+          done
+          sleep 2
           xcrun simctl io "$SMALL" screenshot evidence/ReduceMotion.png
           container=$(xcrun simctl get_app_container "$SMALL" com.pipo.app data)
           cp "$container/Documents/preview-log.txt" evidence/reduce-motion.txt
