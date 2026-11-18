@@ -1,0 +1,140 @@
+name: Pipo V4 Home preview
+on:
+  push:
+    branches: [preview/pipo-v4-home]
+permissions:
+  contents: read
+jobs:
+  simulator:
+    runs-on: macos-15
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - name: Select two installed simulator sizes
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p evidence
+          if test -d /Applications/Xcode_16.4.app; then sudo xcode-select -s /Applications/Xcode_16.4.app; fi
+          xcodebuild -version | tee evidence/xcode.txt
+          xcrun simctl list devices available -j > /tmp/pipo-devices.json
+          python3 - <<'PY'
+          import json, os
+          groups=json.load(open('/tmp/pipo-devices.json'))['devices']
+          for rt in sorted(groups, reverse=True):
+              phones=[d for d in groups[rt] if d['name'].startswith('iPhone')]
+              big=[d for d in phones if 'Pro Max' in d['name'] or 'Plus' in d['name']]
+              small=[d for d in phones if d not in big]
+              if not small or not big: continue
+              s=min(small,key=lambda d:(0 if 'SE' in d['name'] else 1 if 'mini' in d['name'] else 2 if 'Pro' not in d['name'] else 3, d['name']))
+              b=big[0]
+              with open(os.environ['GITHUB_ENV'],'a') as f:
+                  for label,d in [('SMALL',s),('LARGE',b)]:
+                      print(label+'='+d['udid'],file=f)
+                      print(label+'_NAME='+d['name'],file=f)
+              print(rt,s['name'],b['name'])
+              open('evidence/devices.txt','w').write('\n'.join([rt,s['name'],b['name']]))
+              break
+          else: raise SystemExit('Two installed iPhone sizes unavailable')
+          PY
+      - name: Build and run tests
+        shell: bash
+        run: |
+          set -euo pipefail
+          xcrun simctl boot "$SMALL" || xcrun simctl bootstatus "$SMALL" -b
+          xcodebuild -scheme Pipo -configuration Debug -derivedDataPath /tmp/PipoBuild -destination "platform=iOS Simulator,id=$SMALL" -parallel-testing-enabled NO CODE_SIGNING_ALLOWED=NO build test > /tmp/pipo-build.log 2>&1 || { tail -70 /tmp/pipo-build.log; exit 1; }
+          grep -E 'Executed [0-9]+ tests|BUILD SUCCEEDED|TEST SUCCEEDED' /tmp/pipo-build.log | tail -8 | tee evidence/tests.txt
+      - name: Launch the real authenticated Home in the simulator checkout
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+          p=Path('Pipo/App/PipoApp.swift')
+          s=p.read_text().replace('import SwiftUI','import SwiftUI\nimport WebKit',1)
+          s=s.replace('            RootView()', '            PreviewCaptureRoot()')
+          p.write_text(s+'''
+          @MainActor private struct PreviewCaptureRoot: View {
+              @State private var refresh = false
+              @Environment(\\.accessibilityReduceMotion) private var reduceMotion
+              var body: some View {
+                  RootView(initialAuthState: .authenticated)
+                      .environment(\\.lineLimit, refresh ? 200 : nil)
+                      .task {
+                          var rows: [String] = []
+                          let file = URL.documentsDirectory.appendingPathComponent("preview-log.txt")
+                          for n in 0..<90 {
+                              try? await Task.sleep(for: .seconds(1))
+                              if Task.isCancelled { return }
+                              if n == 5 { refresh = true }
+                              let scenes = UIApplication.shared.connectedScenes.compactMap { $0 as? UIWindowScene }
+                              let windows = scenes.flatMap { $0.windows }
+                              let web = windows.compactMap { findArtwork($0) }.first
+                              let result = try? await web?.evaluateJavaScript("JSON.stringify([mascot.getCurrentTime(),mascot.animationsPaused(),performance.timeOrigin])")
+                              let rect = web.map { $0.convert($0.bounds, to: nil) } ?? .zero
+                              rows.append("sample \\(n) systemReduce \\(UIAccessibility.isReduceMotionEnabled) swiftUIReduce \\(reduceMotion) web \\(web != nil) rect \\(rect) timeline \\(result ?? "none")")
+                              try? rows.joined(separator: "\\n").write(to: file, atomically: true, encoding: .utf8)
+                          }
+                      }
+              }
+              private func findArtwork(_ v: UIView) -> WKWebView? {
+                  if let w = v as? WKWebView { return w }
+                  for c in v.subviews { if let w = findArtwork(c) { return w } }
+                  return nil
+              }
+          }
+          ''')
+          PY
+          xcodebuild -scheme Pipo -configuration Debug -derivedDataPath /tmp/PipoBuild -destination "platform=iOS Simulator,id=$SMALL" CODE_SIGNING_ALLOWED=NO build > /tmp/pipo-capture-build.log 2>&1 || { tail -70 /tmp/pipo-capture-build.log; exit 1; }
+      - name: Capture Home, motion, and resource samples
+        shell: bash
+        run: |
+          set -euo pipefail
+          for label in SMALL LARGE; do
+            udid="${!label}"
+            xcrun simctl bootstatus "$udid" -b
+            xcrun simctl status_bar "$udid" override --time 9:41
+            xcrun simctl install "$udid" /tmp/PipoBuild/Build/Products/Debug-iphonesimulator/Pipo.app
+            pid=$(xcrun simctl launch --terminate-running-process "$udid" com.pipo.app | awk '{print $NF}')
+            sleep 9
+            xcrun simctl io "$udid" screenshot "evidence/$label-home.png"
+            container=$(xcrun simctl get_app_container "$udid" com.pipo.app data)
+            if [ "$label" = SMALL ]; then
+              for sample in 1 2 3; do
+                ps -axo pid,pcpu,rss,comm | awk -v app="$pid" '$1==app || /[W]ebKit.WebContent/ {print}' >> evidence/process-samples.txt
+                sleep 1
+              done
+              xcrun simctl io "$udid" recordVideo --codec=h264 evidence/Home-loop.mp4 > /tmp/pipo-record.log 2>&1 &
+              recorder=$!
+              sleep 11
+              kill -INT "$recorder"
+              wait "$recorder"
+              xcrun simctl launch "$udid" com.apple.Preferences > /dev/null
+              sleep 4
+              xcrun simctl launch "$udid" com.pipo.app > /dev/null
+              sleep 3
+            fi
+            cp "$container/Documents/preview-log.txt" "evidence/$label-timeline.txt"
+            xcrun simctl terminate "$udid" com.pipo.app
+            xcrun simctl shutdown "$udid"
+          done
+      - name: Verify system Reduce Motion
+        shell: bash
+        run: |
+          set -euo pipefail
+          xcrun simctl bootstatus "$SMALL" -b
+          xcrun simctl spawn "$SMALL" defaults write com.apple.Accessibility ReduceMotionEnabled -bool YES
+          xcrun simctl shutdown "$SMALL"
+          xcrun simctl bootstatus "$SMALL" -b
+          xcrun simctl launch "$SMALL" com.pipo.app
+          sleep 10
+          xcrun simctl io "$SMALL" screenshot evidence/ReduceMotion.png
+          container=$(xcrun simctl get_app_container "$SMALL" com.pipo.app data)
+          cp "$container/Documents/preview-log.txt" evidence/reduce-motion.txt
+          grep 'swiftUIReduce true web false' evidence/reduce-motion.txt
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: pipo-home-review
+          path: evidence/
+          retention-days: 3
