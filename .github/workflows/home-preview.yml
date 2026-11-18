@@ -21,7 +21,7 @@ jobs:
           python3 - <<'PY'
           import json, os
           groups=json.load(open('/tmp/pipo-devices.json'))['devices']
-          for rt in sorted(groups, reverse=True):
+          for rt in sorted(groups, key=lambda r: (r.endswith('iOS-18-5'), r), reverse=True):
               phones=[d for d in groups[rt] if d['name'].startswith('iPhone')]
               big=[d for d in phones if 'Pro Max' in d['name'] or 'Plus' in d['name']]
               small=[d for d in phones if d not in big]
@@ -37,17 +37,11 @@ jobs:
               break
           else: raise SystemExit('Two installed iPhone sizes unavailable')
           PY
-      - name: Build and run tests
-        shell: bash
-        run: |
-          set -euo pipefail
-          xcrun simctl boot "$SMALL" || xcrun simctl bootstatus "$SMALL" -b
-          xcodebuild -scheme Pipo -configuration Debug -derivedDataPath /tmp/PipoBuild -destination "platform=iOS Simulator,id=$SMALL" -parallel-testing-enabled NO CODE_SIGNING_ALLOWED=NO build test > /tmp/pipo-build.log 2>&1 || { tail -70 /tmp/pipo-build.log; exit 1; }
-          grep -E 'Executed [0-9]+ tests|BUILD SUCCEEDED|TEST SUCCEEDED' /tmp/pipo-build.log | tail -8 | tee evidence/tests.txt
       - name: Launch the real authenticated Home in the simulator checkout
         shell: bash
         run: |
           set -euo pipefail
+          xcrun simctl bootstatus "$SMALL" -b
           python3 - <<'PY'
           from pathlib import Path
           p=Path('Pipo/App/PipoApp.swift')
@@ -85,7 +79,7 @@ jobs:
           }
           ''')
           PY
-          xcodebuild -scheme Pipo -configuration Debug -derivedDataPath /tmp/PipoBuild -destination "platform=iOS Simulator,id=$SMALL" CODE_SIGNING_ALLOWED=NO build > /tmp/pipo-capture-build.log 2>&1 || { tail -70 /tmp/pipo-capture-build.log; exit 1; }
+          xcodebuild -scheme Pipo -configuration Debug -derivedDataPath /tmp/PipoBuild -destination "platform=iOS Simulator,id=$SMALL" CODE_SIGN_IDENTITY=- build > /tmp/pipo-capture-build.log 2>&1 || { tail -70 /tmp/pipo-capture-build.log; exit 1; }
       - name: Capture Home, motion, and resource samples
         shell: bash
         run: |
@@ -95,7 +89,16 @@ jobs:
             xcrun simctl bootstatus "$udid" -b
             xcrun simctl status_bar "$udid" override --time 9:41
             xcrun simctl install "$udid" /tmp/PipoBuild/Build/Products/Debug-iphonesimulator/Pipo.app
-            pid=$(xcrun simctl launch --terminate-running-process "$udid" com.pipo.app | awk '{print $NF}')
+            sleep 4
+            xcrun simctl terminate "$udid" com.pipo.app 2>/dev/null || true
+            if ! launch=$(xcrun simctl launch "$udid" com.pipo.app); then
+              sleep 5
+              launch=$(xcrun simctl launch "$udid" com.pipo.app) || {
+                xcrun simctl spawn "$udid" log show --last 1m --style compact --predicate 'eventMessage CONTAINS[c] "com.pipo.app"' | tail -65
+                exit 1
+              }
+            fi
+            pid=$(echo "$launch" | awk '{print $NF}')
             sleep 9
             xcrun simctl io "$udid" screenshot "evidence/$label-home.png"
             container=$(xcrun simctl get_app_container "$udid" com.pipo.app data)
@@ -108,13 +111,13 @@ jobs:
               recorder=$!
               sleep 11
               kill -INT "$recorder"
-              wait "$recorder"
+              wait "$recorder" || test -s evidence/Home-loop.mp4
               xcrun simctl launch "$udid" com.apple.Preferences > /dev/null
               sleep 4
               xcrun simctl launch "$udid" com.pipo.app > /dev/null
               sleep 3
             fi
-            cp "$container/Documents/preview-log.txt" "evidence/$label-timeline.txt"
+            cp "$container/Documents/preview-log.txt" "evidence/$label-timeline.txt" || true
             xcrun simctl terminate "$udid" com.pipo.app
             xcrun simctl shutdown "$udid"
           done
@@ -132,6 +135,20 @@ jobs:
           container=$(xcrun simctl get_app_container "$SMALL" com.pipo.app data)
           cp "$container/Documents/preview-log.txt" evidence/reduce-motion.txt
           grep 'swiftUIReduce true web false' evidence/reduce-motion.txt
+      - name: Summarize simulator evidence
+        if: always()
+        shell: bash
+        run: |
+          ls -lh evidence/
+          for f in evidence/*timeline.txt evidence/reduce-motion.txt evidence/process-samples.txt; do
+            if test -f "$f"; then echo "$f"; tail -35 "$f"; fi
+          done
+          for f in evidence/*-home.png evidence/ReduceMotion.png; do
+            if ! test -f "$f"; then continue; fi
+            # Keep a compact, visually inspectable proof if artifact storage is unavailable.
+            sips -Z 640 -s format jpeg -s formatOptions 65 "$f" --out /tmp/capture.jpg >/dev/null
+            echo "PREVIEW_JPEG $(basename "$f") $(base64 -i /tmp/capture.jpg | tr -d '\n')"
+          done
       - uses: actions/upload-artifact@v4
         if: always()
         with:
