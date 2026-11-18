@@ -42,7 +42,6 @@ jobs:
           python3 - <<'PY'
           import json
           import os
-          import re
 
           data = json.load(open("evidence/devices.json"))
           devices = []
@@ -58,49 +57,25 @@ jobs:
                           "udid": item["udid"],
                       })
 
-          def compact_key(device):
-              name = device["name"]
-              return (
-                  0 if "SE" in name else
-                  1 if "mini" in name else
-                  2 if "Plus" in name or "Pro Max" in name else
-                  3,
-                  name,
-              )
-
           if not devices:
               raise SystemExit("No available iPhone simulators found")
 
-          small = min(devices, key=compact_key)
-          large_candidates = [d for d in devices if d["udid"] != small["udid"]]
-          large = None
-          if large_candidates:
-              large = max(large_candidates, key=lambda d: (
-                  1 if "Pro Max" in d["name"] or "Plus" in d["name"] else 0,
-                  d["name"],
-              ))
+          selected = next(
+              (d for d in devices if d["name"] == "iPhone SE (3rd generation)" and "iOS-18-5" in d["runtime"]),
+              devices[0],
+          )
 
           lines = [
-              f"SMALL_UDID={small['udid']}",
-              f"SMALL_NAME={small['name']}",
-              f"SMALL_RUNTIME={small['runtime']}",
+              f"TEST_UDID={selected['udid']}",
+              f"TEST_NAME={selected['name']}",
+              f"TEST_RUNTIME={selected['runtime']}",
           ]
-          if large:
-              lines.extend([
-                  f"LARGE_UDID={large['udid']}",
-                  f"LARGE_NAME={large['name']}",
-                  f"LARGE_RUNTIME={large['runtime']}",
-              ])
 
           with open(os.environ["GITHUB_ENV"], "a") as env:
               env.write("\n".join(lines) + "\n")
 
           with open("evidence/simulators.txt", "w") as report:
-              report.write(f"Small: {small['name']} — {small['runtime']} — {small['udid']}\n")
-              if large:
-                  report.write(f"Large: {large['name']} — {large['runtime']} — {large['udid']}\n")
-              else:
-                  report.write("Large: unavailable — single supported iPhone size selected\n")
+              report.write(f"Test: {selected['name']} — {selected['runtime']} — {selected['udid']}\n")
 
           print("\n".join(lines))
           PY
@@ -129,84 +104,78 @@ jobs:
           set -euo pipefail
           APP_PATH=/tmp/PipoDerivedData/Build/Products/Debug-iphonesimulator/SatuSaku.app
           BUNDLE_ID=$(cat evidence/bundle-id.txt)
+          UDID="$TEST_UDID"
+          DEVICE_NAME="$TEST_NAME"
+          SAFE_NAME=$(printf '%s' "$DEVICE_NAME" | tr ' /' '__')
+          OUT="evidence/test-$SAFE_NAME"
+          mkdir -p "$OUT"
 
-          capture_device() {
-            local LABEL="$1"
-            local UDID="$2"
-            local DEVICE_NAME="$3"
+          echo "Booting $DEVICE_NAME ($UDID)" | tee "$OUT/boot.txt"
+          xcrun simctl boot "$UDID" 2>&1 | tee "$OUT/boot.log" || true
 
-            local SAFE_NAME
-            SAFE_NAME=$(printf '%s' "$DEVICE_NAME" | tr ' /' '__')
-            local SAFE_LABEL
-            SAFE_LABEL=$(printf '%s' "$LABEL" | tr '[:upper:]' '[:lower:]')
-            local OUT="evidence/${SAFE_LABEL}-${SAFE_NAME}"
-            mkdir -p "$OUT"
+          if ! xcrun simctl bootstatus "$UDID" -b 2>&1 | tee "$OUT/bootstatus.log"; then
+            echo "bootstatus failed: xcrun simctl bootstatus $UDID -b"
+            exit 1
+          fi
 
-            echo "Booting $DEVICE_NAME ($UDID)"
-            xcrun simctl boot "$UDID" 2>&1 | tee "$OUT/boot.log" || true
-            for second in $(seq 1 90); do
-              if xcrun simctl list devices -j | grep -A12 "$UDID" | grep -q '"state" : "Booted"'; then
-                echo "Simulator $UDID reached Booted state"
-                break
-              fi
-              if [ "$second" -eq 90 ]; then
-                echo "Simulator $UDID did not reach Booted state"
-                exit 1
-              fi
-              sleep 1
-            done
-            xcrun simctl status_bar "$UDID" override --time 9:41 2>&1 | tee "$OUT/status-bar.log" || true
-            if ! xcrun simctl install "$UDID" "$APP_PATH" 2>&1 | tee "$OUT/install.log"; then
+          if ! xcrun simctl install "$UDID" "$APP_PATH" 2>&1 | tee "$OUT/install.log"; then
+            echo "install failed: xcrun simctl install $UDID $APP_PATH"
+            exit 1
+          fi
+          echo "Install succeeded: $BUNDLE_ID"
+
+          capture_screen() {
+            local ARGUMENT="$1"
+            local SCREEN_NAME="$2"
+            local SCREEN_DIR="$OUT/$SCREEN_NAME"
+            mkdir -p "$SCREEN_DIR"
+
+            xcrun simctl terminate "$UDID" "$BUNDLE_ID" 2>/dev/null || true
+            sleep 1
+
+            local LAUNCH_OUTPUT
+            if [ -n "$ARGUMENT" ]; then
+              LAUNCH_OUTPUT=$(xcrun simctl launch --stdout="$SCREEN_DIR/launch.stdout.log" --stderr="$SCREEN_DIR/launch.stderr.log" "$UDID" "$BUNDLE_ID" "$ARGUMENT" 2>&1)
+            else
+              LAUNCH_OUTPUT=$(xcrun simctl launch --stdout="$SCREEN_DIR/launch.stdout.log" --stderr="$SCREEN_DIR/launch.stderr.log" "$UDID" "$BUNDLE_ID" 2>&1)
+            fi
+            echo "$LAUNCH_OUTPUT" | tee "$SCREEN_DIR/launch.txt"
+
+            local PID
+            PID=$(echo "$LAUNCH_OUTPUT" | awk '{print $NF}')
+            if ! [[ "$PID" =~ ^[0-9]+$ ]]; then
+              echo "launch failed: xcrun simctl launch did not return a numeric PID"
+              xcrun simctl spawn "$UDID" log show --last 2m --style compact |
+                tail -120 > "$SCREEN_DIR/launch-log.txt" || true
               exit 1
             fi
 
-            capture_screen() {
-              local ARGUMENT="$1"
-              local SCREEN_NAME="$2"
-              local SCREEN_DIR="$OUT/$SCREEN_NAME"
-              mkdir -p "$SCREEN_DIR"
+            sleep 8
+            xcrun simctl spawn "$UDID" ps -ax -o pid=,comm= > "$SCREEN_DIR/processes.txt" 2>&1
+            if ! grep -q "SatuSaku" "$SCREEN_DIR/processes.txt"; then
+              echo "process verification failed: SatuSaku is not running"
+              exit 1
+            fi
+            echo "Confirmed app process: $PID" | tee "$SCREEN_DIR/process.txt"
 
-              xcrun simctl terminate "$UDID" "$BUNDLE_ID" 2>/dev/null || true
-              sleep 1
-
-              local LAUNCH_OUTPUT
-              if [ -n "$ARGUMENT" ]; then
-                LAUNCH_OUTPUT=$(xcrun simctl launch --stderr="$SCREEN_DIR/launch.stderr.log" "$UDID" "$BUNDLE_ID" "$ARGUMENT" 2>&1)
-              else
-                LAUNCH_OUTPUT=$(xcrun simctl launch --stderr="$SCREEN_DIR/launch.stderr.log" "$UDID" "$BUNDLE_ID" 2>&1)
-              fi
-              echo "$LAUNCH_OUTPUT" | tee "$SCREEN_DIR/launch.txt"
-
-              local PID
-              PID=$(echo "$LAUNCH_OUTPUT" | awk '{print $NF}')
-              if ! [[ "$PID" =~ ^[0-9]+$ ]]; then
-                echo "Launch did not return a numeric process ID" | tee "$SCREEN_DIR/launch.txt"
-                xcrun simctl spawn "$UDID" log show --last 2m --style compact |
-                  tail -120 > "$SCREEN_DIR/launch-log.txt" || true
-                exit 1
-              fi
-
-              sleep 8
-              echo "Confirmed launch process: $PID" | tee "$SCREEN_DIR/process.txt"
-
-              local PNG="$SCREEN_DIR/${SCREEN_NAME}-${SAFE_NAME}.png"
-              xcrun simctl io "$UDID" screenshot "$PNG"
-              test -s "$PNG"
-              file "$PNG" | tee "$SCREEN_DIR/screenshot.txt"
-              sips -g pixelWidth -g pixelHeight "$PNG" | tee "$SCREEN_DIR/resolution.txt"
-            }
-
-            capture_screen "-pipoHomeDemo" "launch-home"
-            capture_screen "-pipoButtonDemo" "button-demo"
-
-            xcrun simctl terminate "$UDID" "$BUNDLE_ID" 2>/dev/null || true
-            xcrun simctl shutdown "$UDID"
+            local PNG="$SCREEN_DIR/${SCREEN_NAME}-${SAFE_NAME}.png"
+            if ! xcrun simctl io "$UDID" screenshot "$PNG" 2>&1 | tee "$SCREEN_DIR/screenshot-command.log"; then
+              echo "screenshot failed: xcrun simctl io $UDID screenshot $PNG"
+              exit 1
+            fi
+            if [ ! -s "$PNG" ]; then
+              echo "screenshot failed: PNG file is empty or missing"
+              exit 1
+            fi
+            file "$PNG" | tee "$SCREEN_DIR/screenshot.txt"
+            sips -g pixelWidth -g pixelHeight "$PNG" | tee "$SCREEN_DIR/resolution.txt"
           }
 
-          capture_device "small" "$SMALL_UDID" "$SMALL_NAME"
-          if [ -n "${LARGE_UDID:-}" ]; then
-            capture_device "large" "$LARGE_UDID" "$LARGE_NAME"
-          fi
+          capture_screen "-pipoHomeDemo" "launch-home"
+          capture_screen "-pipoButtonDemo" "button-demo"
+
+          xcrun simctl terminate "$UDID" "$BUNDLE_ID" 2>/dev/null || true
+          xcrun simctl shutdown "$UDID"
 
       - name: Summarize simulator evidence
         if: always()
