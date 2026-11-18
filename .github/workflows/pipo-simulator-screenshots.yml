@@ -129,7 +129,9 @@ jobs:
 
             local SAFE_NAME
             SAFE_NAME=$(printf '%s' "$DEVICE_NAME" | tr ' /' '__')
-            local OUT="evidence/${LABEL,,}-${SAFE_NAME}"
+            local SAFE_LABEL
+            SAFE_LABEL=$(printf '%s' "$LABEL" | tr '[:upper:]' '[:lower:]')
+            local OUT="evidence/${SAFE_LABEL}-${SAFE_NAME}"
             mkdir -p "$OUT"
 
             echo "Booting $DEVICE_NAME ($UDID)"
