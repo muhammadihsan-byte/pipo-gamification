@@ -1,5 +1,5 @@
 import Foundation
-import Supabase
+@preconcurrency import Supabase
 
 struct SupabaseConfiguration: Sendable {
     let url: URL
