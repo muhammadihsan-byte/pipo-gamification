@@ -76,6 +76,70 @@ final class PipoUIRecordingTests: XCTestCase {
         XCTAssertTrue(app.buttons["Create a saving goal"].waitForExistence(timeout: 20))
     }
 
+    /// One combined recording covers both onboarding decisions, their V4 tap
+    /// reaction, Back navigation, and the honest handoff to the account screen.
+    /// No real account, payment, or group invitation is created.
+    func testOnboardingPersonalAndGroupPreview() {
+        continueAfterFailure = false
+
+        launchOnboarding()
+        XCTAssertTrue(app.staticTexts["Big plans start small."].waitForExistence(timeout: 25))
+        let pipo = app.buttons["pipo.greet"].firstMatch
+        XCTAssertTrue(pipo.waitForExistence(timeout: 15), "Approved V4 tap target is missing")
+        XCTAssertTrue(pipo.isEnabled, "Pipo must be interactive when visible")
+        pipo.tap()
+
+        tapButton("pipo.onboarding.continue")
+        XCTAssertTrue(app.staticTexts["What would you like to save for?"].waitForExistence(timeout: 10))
+        tapButton("pipo.onboarding.goal.trip")
+        tapButton("pipo.onboarding.continue")
+
+        XCTAssertTrue(app.staticTexts["Going solo, or saving together?"].waitForExistence(timeout: 10))
+        tapButton("pipo.onboarding.back")
+        XCTAssertTrue(app.staticTexts["What would you like to save for?"].waitForExistence(timeout: 10))
+        tapButton("pipo.onboarding.continue")
+        tapButton("pipo.onboarding.mode.personal")
+        tapButton("pipo.onboarding.continue")
+
+        XCTAssertTrue(app.staticTexts["What pace feels right for you?"].waitForExistence(timeout: 10))
+        tapButton("pipo.onboarding.rhythm.weekly")
+        tapButton("pipo.onboarding.continue")
+        XCTAssertTrue(app.staticTexts["Your starting point"].waitForExistence(timeout: 15))
+        XCTAssertTrue(app.staticTexts["Dream Trip"].exists)
+        attachOnboardingScreen("Personal onboarding preview")
+        tapButton("pipo.onboarding.continue")
+        XCTAssertTrue(app.buttons["Sign Up"].waitForExistence(timeout: 20))
+
+        app.terminate()
+        launchOnboarding()
+        XCTAssertTrue(app.staticTexts["Big plans start small."].waitForExistence(timeout: 25))
+        tapButton("pipo.onboarding.continue")
+        tapButton("pipo.onboarding.goal.emergency")
+        tapButton("pipo.onboarding.continue")
+        tapButton("pipo.onboarding.mode.group")
+        tapButton("pipo.onboarding.continue")
+        tapButton("pipo.onboarding.rhythm.flexible")
+        tapButton("pipo.onboarding.continue")
+        XCTAssertTrue(app.staticTexts["Your starting point"].waitForExistence(timeout: 15))
+        XCTAssertTrue(app.staticTexts["Emergency Fund"].exists)
+        XCTAssertTrue(app.staticTexts["A group"].exists)
+        attachOnboardingScreen("Group onboarding preview")
+        tapButton("pipo.onboarding.continue")
+        XCTAssertTrue(app.buttons["Sign Up"].waitForExistence(timeout: 20))
+    }
+
+    private func launchOnboarding() {
+        app.launchArguments = ["-pipo-onboarding-qa"]
+        app.launch()
+    }
+
+    private func attachOnboardingScreen(_ title: String) {
+        let attachment = XCTAttachment(screenshot: app.screenshot())
+        attachment.name = title
+        attachment.lifetime = .keepAlways
+        add(attachment)
+    }
+
     private func launchFromDashboard() {
         continueAfterFailure = false
         app.launchArguments = ["-pipo-visual-qa"]
