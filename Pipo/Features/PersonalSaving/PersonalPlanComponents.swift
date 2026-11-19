@@ -438,18 +438,34 @@ struct SavingDateEditor: View {
                 PersonalPlanCalendar(month: $visibleMonth, selected: entry.date(in: calendar),
                                      minimumDate: start, calendar: calendar, onSelect: select)
                     .frame(minWidth: 332)
-                DatePicker("Calendar", selection: Binding(get: { entry.date(in: calendar) ?? start },
-                                                          set: select),
-                           in: (calendar.date(byAdding: .day, value: 1, to: start) ?? start)...,
+                DatePicker("Calendar", selection: pickerSelection,
+                           in: minimumPickerDate...,
                            displayedComponents: .date)
             }
         }
-        .onChange(of: entry.date(in: calendar)) { _, date in
-            if let date, date > start { visibleMonth = date }
-        }
+        .onChange(of: entry.day) { _, _ in updateVisibleMonth() }
+        .onChange(of: entry.month) { _, _ in updateVisibleMonth() }
+        .onChange(of: entry.year) { _, _ in updateVisibleMonth() }
     }
 
     private func select(_ date: Date) { entry = SavingDateEntry(date, calendar: calendar) }
+
+    private var pickerSelection: Binding<Date> {
+        Binding(
+            get: { entry.date(in: calendar) ?? start },
+            set: select
+        )
+    }
+
+    private var minimumPickerDate: Date {
+        calendar.date(byAdding: .day, value: 1, to: start) ?? start
+    }
+
+    private func updateVisibleMonth() {
+        if let date = entry.date(in: calendar), date > start {
+            visibleMonth = date
+        }
+    }
 
     private func field(_ title: String, _ text: Binding<String>) -> some View {
         VStack(alignment: .leading, spacing: 6) {
