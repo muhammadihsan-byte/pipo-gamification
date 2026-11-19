@@ -105,7 +105,7 @@ final class PipoUIRecordingTests: XCTestCase {
         tapButton("pipo.onboarding.rhythm.weekly")
         tapButton("pipo.onboarding.continue")
         XCTAssertTrue(app.staticTexts["Your starting point"].waitForExistence(timeout: 15))
-        XCTAssertTrue(app.staticTexts["Dream Trip"].exists)
+        assertAccessibleTextContains("Dream Trip")
         attachOnboardingScreen("Personal onboarding preview")
         tapButton("pipo.onboarding.continue")
         XCTAssertTrue(app.buttons["Sign Up"].waitForExistence(timeout: 20))
@@ -121,8 +121,8 @@ final class PipoUIRecordingTests: XCTestCase {
         tapButton("pipo.onboarding.rhythm.flexible")
         tapButton("pipo.onboarding.continue")
         XCTAssertTrue(app.staticTexts["Your starting point"].waitForExistence(timeout: 15))
-        XCTAssertTrue(app.staticTexts["Emergency Fund"].exists)
-        XCTAssertTrue(app.staticTexts["A group"].exists)
+        assertAccessibleTextContains("Emergency Fund")
+        assertAccessibleTextContains("A group")
         attachOnboardingScreen("Group onboarding preview")
         tapButton("pipo.onboarding.continue")
         XCTAssertTrue(app.buttons["Sign Up"].waitForExistence(timeout: 20))
@@ -131,6 +131,13 @@ final class PipoUIRecordingTests: XCTestCase {
     private func launchOnboarding() {
         app.launchArguments = ["-pipo-onboarding-qa"]
         app.launch()
+    }
+
+    private func assertAccessibleTextContains(_ value: String) {
+        let text = app.descendants(matching: .any)
+            .matching(NSPredicate(format: "label CONTAINS %@", value))
+            .firstMatch
+        XCTAssertTrue(text.waitForExistence(timeout: 8), "Missing onboarding summary: \(value)")
     }
 
     private func attachOnboardingScreen(_ title: String) {
