@@ -218,7 +218,6 @@ struct SpeechBubbleView: View {
                 .stroke(PipoTheme.border, lineWidth: 1)
         }
         .fixedSize(horizontal: false, vertical: true)
-        .accessibilityIdentifier("pipo.onboarding.speech")
     }
 }
 
