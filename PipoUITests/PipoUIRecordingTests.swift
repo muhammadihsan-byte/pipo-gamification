@@ -94,7 +94,7 @@ final class PipoUIRecordingTests: XCTestCase {
 
         tapButton("pipo.onboarding.continue")
         XCTAssertTrue(app.staticTexts["What should I call you?"].waitForExistence(timeout: 12))
-        XCTAssertLessThan(abs(app.buttons["pipo.greet"].firstMatch.frame.height - referenceMascotHeight), 2)
+        assertMascotSettlesToSize(referenceMascotHeight)
         attachOnboardingScreen("02 - Consistent V4 size and nickname bubble")
         typeText("pipo.onboarding.nickname", value: "Alex")
         let done = app.keyboards.buttons["Done"].firstMatch
@@ -109,11 +109,11 @@ final class PipoUIRecordingTests: XCTestCase {
         // The contextual reply is a visual transition inside the conversation
         // bubble. Review its retained screenshot; the accessibility tree may
         // aggregate the bubble contents into one element on iOS.
-        XCTAssertLessThan(abs(app.buttons["pipo.greet"].firstMatch.frame.height - referenceMascotHeight), 2)
+        assertMascotSettlesToSize(referenceMascotHeight)
         attachOnboardingScreen("03 - Mascot response inside connected bubble")
         tapButton("pipo.onboarding.continue")
         XCTAssertTrue(app.staticTexts["Want Pipo on your Home Screen?"].waitForExistence(timeout: 12))
-        XCTAssertLessThan(abs(app.buttons["pipo.greet"].firstMatch.frame.height - referenceMascotHeight), 2)
+        assertMascotSettlesToSize(referenceMascotHeight)
         attachOnboardingScreen("04 - Consistent V4 size on widget page")
 
         tapButton("pipo.onboarding.continue")
@@ -153,6 +153,30 @@ final class PipoUIRecordingTests: XCTestCase {
     private func launchOnboarding() {
         app.launchArguments = ["-pipo-onboarding-qa"]
         app.launch()
+    }
+
+    /// View-level Pipo reactions intentionally lift and scale for a moment.
+    /// Compare the settled resting state rather than a spring's intermediate frame.
+    private func assertMascotSettlesToSize(
+        _ expectedHeight: CGFloat,
+        file: StaticString = #filePath,
+        line: UInt = #line
+    ) {
+        let mascot = app.buttons["pipo.greet"].firstMatch
+        XCTAssertTrue(mascot.waitForExistence(timeout: 8), file: file, line: line)
+        let deadline = Date().addingTimeInterval(4)
+        var difference = abs(mascot.frame.height - expectedHeight)
+        while difference >= 2 && Date() < deadline {
+            RunLoop.current.run(until: Date().addingTimeInterval(0.15))
+            difference = abs(mascot.frame.height - expectedHeight)
+        }
+        XCTAssertLessThan(
+            difference,
+            2,
+            "Pipo must return to the same resting height on each step",
+            file: file,
+            line: line
+        )
     }
 
     private func attachOnboardingScreen(_ title: String) {
