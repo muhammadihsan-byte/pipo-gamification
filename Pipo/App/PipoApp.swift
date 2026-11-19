@@ -33,7 +33,8 @@ struct PipoApp: App {
     var body: some Scene {
         WindowGroup {
             #if DEBUG
-            if ProcessInfo.processInfo.arguments.contains("-pipo-visual-qa") {
+            if ProcessInfo.processInfo.arguments.contains("-pipo-visual-qa")
+                || ProcessInfo.processInfo.arguments.contains("-pipo-onboarding-qa") {
                 RootView(initialAuthState: .authenticated)
             } else {
                 RootView()
