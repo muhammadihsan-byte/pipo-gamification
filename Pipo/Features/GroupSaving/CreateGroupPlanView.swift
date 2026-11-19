@@ -413,9 +413,8 @@ private struct PlanPhotoPicker: View {
             PlanPhotoPreview(data: data)
             let photoLabel = data == nil ? title : "Change photo"
             PhotosPicker(selection: $selection, matching: .images) {
-                Label(photoLabel, systemImage: "photo.badge.plus")
+                PlanPhotoPickerLabel(photoLabel)
             }
-            .personalPlanField()
             if data != nil {
                 Button { selection = nil; data = nil } label: { Text("Remove photo").frame(minHeight: 44) }
             }
@@ -446,5 +445,17 @@ private struct PlanPhotoPicker: View {
                                         kCGImageSourceCreateThumbnailWithTransform: true]
         guard let image = CGImageSourceCreateThumbnailAtIndex(source, 0, options as CFDictionary) else { return nil }
         return UIImage(cgImage: image).jpegData(compressionQuality: 0.82)
+    }
+}
+
+private struct PlanPhotoPickerLabel: View {
+    let title: String
+
+    nonisolated init(_ title: String) {
+        self.title = title
+    }
+
+    var body: some View {
+        Label(title, systemImage: "photo.badge.plus").personalPlanField()
     }
 }
