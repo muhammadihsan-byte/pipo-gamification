@@ -106,7 +106,12 @@ final class PipoUIRecordingTests: XCTestCase {
         XCTAssertTrue(app.staticTexts["What should I call you?"].waitForExistence(timeout: 12))
         tapButton("pipo.onboarding.continue")
         tapButton("pipo.onboarding.motivation.excitingGoal")
-        XCTAssertTrue(app.staticTexts["Ooh, we've got plans. I like that."].waitForExistence(timeout: 12))
+        // The visible response is announced to VoiceOver as "Pipo says: ...".
+        // Query the accessibility label, not just the rendered text contents.
+        let pipoReply = app.staticTexts.matching(
+            NSPredicate(format: "label CONTAINS %@", "we've got plans")
+        ).firstMatch
+        XCTAssertTrue(pipoReply.waitForExistence(timeout: 12))
         XCTAssertLessThan(abs(app.buttons["pipo.greet"].firstMatch.frame.height - referenceMascotHeight), 2)
         attachOnboardingScreen("03 - Mascot response inside connected bubble")
         tapButton("pipo.onboarding.continue")
