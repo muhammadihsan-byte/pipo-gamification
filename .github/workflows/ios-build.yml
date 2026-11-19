@@ -183,6 +183,9 @@ jobs:
           (github.event_name == 'workflow_dispatch' && inputs.validation_mode == 'visual-qa') ||
           (github.event_name == 'pull_request' && github.head_ref == 'feat/pipo-ui-video-qa')
         shell: bash
+        env:
+          # Restrict setup-branch retries to Group; manual Visual QA still captures both.
+          PIPO_VISUAL_QA_PR_RETRY: ${{ github.event_name == 'pull_request' && github.head_ref == 'feat/pipo-ui-video-qa' }}
         run: |
           set -euo pipefail
           mkdir -p validation
