@@ -8,8 +8,8 @@ import XCTest
 final class SavingTimelineSnapshotTests: XCTestCase {
     func testPersonalAndGroupTimelineAtRegularAndNarrowWidths() {
         for isGroup in [false, true] {
-            for width in [390.0, 320.0] {
-                let height = width == 390.0 ? 852.0 : 760.0
+            for width in [CGFloat(390), CGFloat(320)] {
+                let height: CGFloat = width == 390 ? 852 : 760
                 let view = SavingTimelineSnapshotFixture(isGroup: isGroup)
                     .frame(width: width, height: height)
                 let renderer = ImageRenderer(content: view)
