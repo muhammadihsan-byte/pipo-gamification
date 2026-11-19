@@ -104,7 +104,12 @@ PY
   sleep 2
 }
 
-run_journey "Personal" "testPersonalSavingJourney"
+# The setup PR's repair check replays only the Group journey: Personal already
+# passed and produced a verified MP4 on run #44601339609. Manual Visual QA runs
+# (after workflow adoption) always record both journeys.
+if test "${PIPO_VISUAL_QA_PR_RETRY:-false}" != "true"; then
+  run_journey "Personal" "testPersonalSavingJourney"
+fi
 run_journey "Group" "testGroupSavingJourney"
 
 shasum -a 256 validation/videos/*.mp4 >validation/videos/SHA256SUMS 2>/dev/null || true
@@ -112,4 +117,4 @@ if test "$failures" -ne 0; then
   echo "Visual QA encountered $failures failure(s). Review both MP4s and logs." >&2
   exit 1
 fi
-echo "Both Pipo Saving journeys passed; two finalized MP4s are available."
+echo "Requested Pipo Saving journeys passed; finalized MP4 artifacts are available."
