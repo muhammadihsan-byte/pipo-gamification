@@ -19,6 +19,7 @@ on:
         options:
           - build-only
           - build-and-test
+          - visual-qa
   push:
     tags:
       - "v*-rc*"
@@ -76,7 +77,7 @@ jobs:
           echo "Using project $XCODE_PROJECT with scheme $XCODE_SCHEME"
 
       - name: Select a compatible installed iOS simulator
-        if: github.event_name != 'workflow_dispatch' || inputs.validation_mode == 'build-and-test'
+        if: github.event_name != 'workflow_dispatch' || inputs.validation_mode != 'build-only'
         shell: bash
         run: |
           set -euo pipefail
@@ -159,7 +160,10 @@ jobs:
             build 2>&1 | tee validation/xcodebuild.log
 
       - name: Build and test for iOS Simulator
-        if: github.event_name != 'workflow_dispatch' || inputs.validation_mode == 'build-and-test'
+        if: >-
+          (github.event_name == 'workflow_dispatch' && inputs.validation_mode == 'build-and-test') ||
+          (github.event_name == 'push') ||
+          (github.event_name == 'pull_request' && github.head_ref != 'feat/pipo-ui-video-qa')
         shell: bash
         run: |
           set -euo pipefail
@@ -169,9 +173,23 @@ jobs:
             -destination "id=$SIMULATOR_UDID" \
             -derivedDataPath "$RUNNER_TEMP/PipoDerivedData" \
             -resultBundlePath "$RUNNER_TEMP/PipoTestResults.xcresult" \
+            -skip-testing:PipoUITests \
             CODE_SIGNING_ALLOWED=NO \
             CODE_SIGNING_REQUIRED=NO \
             build test 2>&1 | tee validation/xcodebuild.log
+
+      - name: Record native Saving journeys
+        if: >-
+          (github.event_name == 'workflow_dispatch' && inputs.validation_mode == 'visual-qa') ||
+          (github.event_name == 'pull_request' && github.head_ref == 'feat/pipo-ui-video-qa')
+        shell: bash
+        env:
+          # Restrict setup-branch retries to Group; manual Visual QA still captures both.
+          PIPO_VISUAL_QA_PR_RETRY: ${{ github.event_name == 'pull_request' && github.head_ref == 'feat/pipo-ui-video-qa' }}
+        run: |
+          set -euo pipefail
+          mkdir -p validation
+          bash scripts/record-ios-saving-journeys.sh 2>&1 | tee validation/visual-qa.log
 
       - name: Export visual QA attachments
         if: always()

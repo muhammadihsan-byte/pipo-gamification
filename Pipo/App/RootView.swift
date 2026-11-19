@@ -57,10 +57,16 @@ struct RootView: View {
         .environment(storeKitManager)
         .tint(PipoTheme.green)
         .task {
+            #if DEBUG
+            if ProcessInfo.processInfo.arguments.contains("-pipo-visual-qa") { return }
+            #endif
             guard let supabaseService else { return }
             await supabaseService.observeAuthStateChanges(using: authStateManager)
         }
         .task {
+            #if DEBUG
+            if ProcessInfo.processInfo.arguments.contains("-pipo-visual-qa") { return }
+            #endif
             if authStateManager.userID == nil {
                 clearWidgetSnapshot()
             }

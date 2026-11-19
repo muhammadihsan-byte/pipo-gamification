@@ -11,9 +11,14 @@ struct PipoApp: App {
             SavingTransaction.self,
             UserProfile.self
         ])
+        #if DEBUG
+        let qaInMemory = ProcessInfo.processInfo.arguments.contains("-pipo-visual-qa")
+        #else
+        let qaInMemory = false
+        #endif
         let configuration = ModelConfiguration(
             schema: schema,
-            isStoredInMemoryOnly: false
+            isStoredInMemoryOnly: qaInMemory
         )
 
         do {
@@ -25,7 +30,15 @@ struct PipoApp: App {
 
     var body: some Scene {
         WindowGroup {
+            #if DEBUG
+            if ProcessInfo.processInfo.arguments.contains("-pipo-visual-qa") {
+                RootView(initialAuthState: .authenticated)
+            } else {
+                RootView()
+            }
+            #else
             RootView()
+            #endif
         }
         .modelContainer(modelContainer)
     }

@@ -48,6 +48,20 @@
                ReferencedContainer = "container:Pipo.xcodeproj">
             </BuildableReference>
          </BuildActionEntry>
+         <BuildActionEntry
+            buildForTesting = "YES"
+            buildForRunning = "NO"
+            buildForProfiling = "NO"
+            buildForArchiving = "NO"
+            buildForAnalyzing = "NO">
+            <BuildableReference
+               BuildableIdentifier = "primary"
+               BlueprintIdentifier = "A17C00000000000000000005"
+               BuildableName = "PipoUITests.xctest"
+               BlueprintName = "PipoUITests"
+               ReferencedContainer = "container:Pipo.xcodeproj">
+            </BuildableReference>
+         </BuildActionEntry>
       </BuildActionEntries>
    </BuildAction>
    <TestAction
@@ -65,6 +79,17 @@
                BlueprintIdentifier = "000000000000000000000302"
                BuildableName = "PipoTests.xctest"
                BlueprintName = "PipoTests"
+               ReferencedContainer = "container:Pipo.xcodeproj">
+            </BuildableReference>
+         </TestableReference>
+         <TestableReference
+            skipped = "NO"
+            parallelizable = "NO">
+            <BuildableReference
+               BuildableIdentifier = "primary"
+               BlueprintIdentifier = "A17C00000000000000000005"
+               BuildableName = "PipoUITests.xctest"
+               BlueprintName = "PipoUITests"
                ReferencedContainer = "container:Pipo.xcodeproj">
             </BuildableReference>
          </TestableReference>
