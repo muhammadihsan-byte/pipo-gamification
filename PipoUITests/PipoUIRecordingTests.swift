@@ -40,12 +40,15 @@ final class PipoUIRecordingTests: XCTestCase {
 
         XCTAssertTrue(app.staticTexts["What are you saving for?"].waitForExistence(timeout: 20))
         typeText("Goal name", value: "Pipo QA Group Trip")
-        // The category field is below the keyboard on compact iPhones.
-        // Scroll the actual form first, letting the interactive keyboard dismiss.
+        // Close the keyboard, then expand the real category selector.
+        // On compact iPhones the choices initially sit below the visible scroll area.
+        let keyboardReturn = app.keyboards.buttons["return"].firstMatch
+        if keyboardReturn.exists { keyboardReturn.tap() }
         let form = app.scrollViews.firstMatch
         if form.exists { form.swipeUp() }
         tapButton("Goal category")
-        tapButton("Travel")
+        if form.exists { form.swipeUp() }
+        tapButton("pipo.qa.group.category.Travel")
         tapButton("Continue")
 
         XCTAssertTrue(app.staticTexts["How much do we need together?"].waitForExistence(timeout: 15))
