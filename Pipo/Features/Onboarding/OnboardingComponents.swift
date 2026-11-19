@@ -56,6 +56,49 @@ struct OnboardingPipoView: View {
     }
 }
 
+/// Duolingo-inspired progress structure, styled exclusively with Pipo tokens.
+@MainActor
+struct OnboardingProgressHeader: View {
+    let step: OnboardingStep
+    let onBack: () -> Void
+
+    var body: some View {
+        HStack(spacing: 14) {
+            Button(action: onBack) {
+                Image(systemName: "chevron.left")
+                    .font(.headline.weight(.semibold))
+                    .foregroundStyle(PipoTheme.ink)
+                    .frame(width: 44, height: 44)
+            }
+            .buttonStyle(.plain)
+            .disabled(step == .welcome)
+            .opacity(step == .welcome ? 0 : 1)
+            .accessibilityIdentifier("pipo.onboarding.back")
+
+            GeometryReader { geometry in
+                ZStack(alignment: .leading) {
+                    Capsule()
+                        .fill(PipoTheme.border)
+                    Capsule()
+                        .fill(PipoTheme.pink)
+                        .frame(width: geometry.size.width * step.progress)
+                }
+            }
+            .frame(height: 8)
+
+            Text("\(step.number) / 4")
+                .font(.caption.weight(.semibold))
+                .monospacedDigit()
+                .foregroundStyle(PipoTheme.muted)
+                .frame(width: 44, alignment: .trailing)
+        }
+        .padding(.horizontal, 18)
+        .padding(.top, 8)
+        .accessibilityElement(children: .contain)
+        .accessibilityLabel("Onboarding step \(step.number) of 4")
+    }
+}
+
 @MainActor
 struct OnboardingHeaderView: View {
     let progress: Double
