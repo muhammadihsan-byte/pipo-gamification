@@ -14,6 +14,9 @@ struct OnboardingContainerView: View {
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @FocusState private var nicknameFocused: Bool
 
+    // Same 126pt V4 hero size as the approved optional-widget screen.
+    private let mascotHeight: CGFloat = 126
+
     let onCompleted: (OnboardingPersonalization) -> Void
 
     var body: some View {
@@ -74,9 +77,7 @@ struct OnboardingContainerView: View {
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .accessibilityAddTraits(.isHeader)
 
-            mascot(height: 195)
-
-            SpeechBubbleView(text: "Hey! I'm Pipo. Want to make saving a little more fun?")
+            companionDialogue("Hey! I'm Pipo. Want to make saving a little more fun?")
 
             Text("Tap Pipo to wave hello.")
                 .font(.subheadline)
@@ -93,10 +94,7 @@ struct OnboardingContainerView: View {
 
     private var nicknameContent: some View {
         VStack(alignment: .leading, spacing: 16) {
-            mascot(height: 164)
-
-            SpeechBubbleView(text: "What should I call you?")
-                .accessibilityAddTraits(.isHeader)
+            companionDialogue("What should I call you?", reply: mascotReply)
 
             Text("YOUR NAME")
                 .font(.caption.weight(.bold))
@@ -129,21 +127,12 @@ struct OnboardingContainerView: View {
                 .font(.footnote)
                 .foregroundStyle(PipoTheme.muted)
 
-            if let mascotReply {
-                Text(mascotReply)
-                    .font(.subheadline.weight(.semibold))
-                    .foregroundStyle(PipoTheme.deepPink)
-                    .accessibilityLabel("Pipo says: \(mascotReply)")
-            }
         }
     }
 
     private var motivationContent: some View {
         VStack(spacing: 14) {
-            mascot(height: 150)
-
-            SpeechBubbleView(text: "What brings you to Pipo?")
-                .accessibilityAddTraits(.isHeader)
+            companionDialogue("What brings you to Pipo?", reply: mascotReply)
 
             ForEach(OnboardingMotivation.allCases) { motivation in
                 Button {
@@ -167,21 +156,12 @@ struct OnboardingContainerView: View {
                 .accessibilityAddTraits(viewModel.motivation == motivation ? [.isSelected] : [])
             }
 
-            if let mascotReply {
-                Text(mascotReply)
-                    .font(.footnote.weight(.semibold))
-                    .foregroundStyle(PipoTheme.deepPink)
-                    .frame(maxWidth: .infinity, alignment: .leading)
-            }
         }
     }
 
     private var widgetContent: some View {
         VStack(spacing: 17) {
-            mascot(height: 126)
-
-            SpeechBubbleView(text: "Want Pipo on your Home Screen?")
-                .accessibilityAddTraits(.isHeader)
+            companionDialogue("Want Pipo on your Home Screen?")
 
             Text("See your saving progress without opening the app.")
                 .font(.subheadline)
@@ -306,13 +286,20 @@ struct OnboardingContainerView: View {
         }
     }
 
-    private func mascot(height: CGFloat) -> some View {
-        OnboardingPipoView(
-            height: height,
-            reaction: mascotReaction,
-            reactionID: mascotReactionID
-        )
-        .accessibilityHint("Double tap Pipo to make him wave.")
+    /// Keeps Pipo at the same actual size and places the connected speech
+    /// bubble immediately beneath him on every onboarding step.
+    private func companionDialogue(_ prompt: String, reply: String? = nil) -> some View {
+        VStack(spacing: 6) {
+            OnboardingPipoView(
+                height: mascotHeight,
+                reaction: mascotReaction,
+                reactionID: mascotReactionID
+            )
+            .accessibilityHint("Double tap Pipo to make him wave.")
+
+            SpeechBubbleView(text: prompt, response: reply)
+        }
+        .frame(maxWidth: .infinity)
     }
 
     private var footer: some View {
