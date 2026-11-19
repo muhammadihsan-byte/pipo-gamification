@@ -62,6 +62,7 @@ struct SavingInlineCalendar: View {
                     .padding(.horizontal, 4)
                 }
                 .accessibilityHint("Swipe horizontally to reach other weekdays on smaller screens")
+                .accessibilityIdentifier("pipo.qa.calendar.horizontal")
                 .onAppear { scrollToSelectedWeekday(using: proxy) }
                 .onChange(of: selection) { _, _ in scrollToSelectedWeekday(using: proxy) }
             }
@@ -142,6 +143,7 @@ struct SavingInlineCalendar: View {
         .buttonStyle(.plain)
         .disabled(unavailable)
         .accessibilityLabel(cell.date.formatted(date: .complete, time: .omitted))
+        .accessibilityIdentifier("pipo.qa.calendar.day.\(cell.day)")
         .accessibilityAddTraits(selected ? .isSelected : [])
     }
 }
