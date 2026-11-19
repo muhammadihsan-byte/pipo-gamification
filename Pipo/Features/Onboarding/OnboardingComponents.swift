@@ -59,13 +59,12 @@ struct OnboardingPipoView: View {
 @MainActor
 struct OnboardingHeaderView: View {
     let progress: Double
-    var reaction: OnboardingPipoReaction = .acknowledge
-    var reactionID = 0
 
     var body: some View {
         HStack(spacing: 12) {
-            OnboardingPipoView(height: 64, reaction: reaction, reactionID: reactionID)
-                .frame(width: 64, height: 64)
+            // A small static V4 companion avoids running two animated web views.
+            PipoMascotView(companion: .reassurance)
+                .frame(width: 58, height: 62)
             VStack(alignment: .leading, spacing: 8) {
                 HStack {
                     Text("PIPO")
@@ -179,9 +178,14 @@ struct SelectableOptionCard: View {
 
     var body: some View {
         HStack(spacing: 14) {
-            Text(symbol)
-                .font(.system(size: 28))
+            Image(systemName: symbol)
+                .font(.system(size: 22, weight: .semibold))
+                .foregroundStyle(selected ? PipoTheme.deepPink : PipoTheme.green)
                 .frame(width: 42, height: 42)
+                .background(
+                    selected ? PipoTheme.palePink : PipoTheme.mint.opacity(0.6),
+                    in: RoundedRectangle(cornerRadius: 12)
+                )
                 .accessibilityHidden(true)
 
             VStack(alignment: .leading, spacing: 4) {
@@ -245,7 +249,7 @@ struct SelectableOptionCard: View {
     VStack(spacing: 20) {
         OnboardingHeaderView(progress: 0.6)
         SpeechBubbleView(text: "What are you saving for first?")
-        SelectableOptionCard(symbol: "✈️", title: "Dream Trip", selected: true)
+        SelectableOptionCard(symbol: "airplane", title: "Dream Trip", selected: true)
         Button("CONTINUE") {}
             .buttonStyle(TactileButtonStyle())
     }
