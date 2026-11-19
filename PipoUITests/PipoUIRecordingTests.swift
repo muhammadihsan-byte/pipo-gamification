@@ -76,68 +76,72 @@ final class PipoUIRecordingTests: XCTestCase {
         XCTAssertTrue(app.buttons["Create a saving goal"].waitForExistence(timeout: 20))
     }
 
-    /// One combined recording covers both onboarding decisions, their V4 tap
-    /// reaction, Back navigation, and the honest handoff to the account screen.
-    /// No real account, payment, or group invitation is created.
-    func testOnboardingPersonalAndGroupPreview() {
+    /// Post-login onboarding: V4 wave, nickname, motivation, optional
+    /// widget walkthrough and returning-user account-scoped behavior.
+    /// Uses a fixed Debug-only account and never signs in to a real backend.
+    func testPostLoginPersonalizationAndWidgetPreview() {
         continueAfterFailure = false
 
         launchOnboarding()
-        XCTAssertTrue(app.staticTexts["Big plans start small."].waitForExistence(timeout: 25))
+        XCTAssertTrue(app.staticTexts["Little steps. Big dreams."].waitForExistence(timeout: 30))
         let pipo = app.buttons["pipo.greet"].firstMatch
-        XCTAssertTrue(pipo.waitForExistence(timeout: 15), "Approved V4 tap target is missing")
-        XCTAssertTrue(pipo.isEnabled, "Pipo must be interactive when visible")
+        XCTAssertTrue(pipo.waitForExistence(timeout: 15), "V4 wave interaction is unavailable")
+        XCTAssertTrue(pipo.isEnabled)
         pipo.tap()
 
         tapButton("pipo.onboarding.continue")
-        XCTAssertTrue(app.staticTexts["What would you like to save for?"].waitForExistence(timeout: 10))
-        tapButton("pipo.onboarding.goal.trip")
+        XCTAssertTrue(app.staticTexts["What should I call you?"].waitForExistence(timeout: 12))
+        typeText("pipo.onboarding.nickname", value: "Alex")
+        let done = app.keyboards.buttons["Done"].firstMatch
+        if done.exists { done.tap() }
         tapButton("pipo.onboarding.continue")
 
-        XCTAssertTrue(app.staticTexts["Going solo, or saving together?"].waitForExistence(timeout: 10))
+        XCTAssertTrue(app.staticTexts["What brings you to Pipo?"].waitForExistence(timeout: 12))
         tapButton("pipo.onboarding.back")
-        XCTAssertTrue(app.staticTexts["What would you like to save for?"].waitForExistence(timeout: 10))
+        XCTAssertTrue(app.staticTexts["What should I call you?"].waitForExistence(timeout: 12))
         tapButton("pipo.onboarding.continue")
-        tapButton("pipo.onboarding.mode.personal")
+        tapButton("pipo.onboarding.motivation.excitingGoal")
         tapButton("pipo.onboarding.continue")
+        XCTAssertTrue(app.staticTexts["Want Pipo on your Home Screen?"].waitForExistence(timeout: 12))
+        attachOnboardingScreen("Pipo widget opt-in screen")
 
-        XCTAssertTrue(app.staticTexts["What pace feels right for you?"].waitForExistence(timeout: 10))
-        tapButton("pipo.onboarding.rhythm.weekly")
         tapButton("pipo.onboarding.continue")
-        XCTAssertTrue(app.staticTexts["Your starting point"].waitForExistence(timeout: 15))
-        assertAccessibleTextContains("Dream Trip")
-        attachOnboardingScreen("Personal onboarding preview")
-        tapButton("pipo.onboarding.continue")
-        XCTAssertTrue(app.buttons["Sign Up"].waitForExistence(timeout: 20))
+        XCTAssertTrue(app.staticTexts["Add Pipo to your Home Screen"].waitForExistence(timeout: 12))
+        attachOnboardingScreen("Optional widget setup instructions")
+        tapButton("pipo.onboarding.widget.done")
 
+        XCTAssertTrue(app.staticTexts["Hey, Alex!"].waitForExistence(timeout: 25),
+                      "Home must use saved onboarding nickname")
+        XCTAssertTrue(app.buttons["Create a saving goal"].waitForExistence(timeout: 15))
+        attachOnboardingScreen("Personalized Pipo Home")
+
+        // Relaunch as the SAME authenticated user without the forced-first-run
+        // flag. Account-specific completion should bypass onboarding entirely.
+        app.terminate()
+        app.launchArguments = ["-pipo-onboarding-qa-returning"]
+        app.launch()
+        XCTAssertTrue(app.staticTexts["Hey, Alex!"].waitForExistence(timeout: 25))
+        XCTAssertFalse(app.staticTexts["Little steps. Big dreams."].exists,
+                       "A returning account must not repeat onboarding")
+
+        // Also cover both optional Skip actions in the same controlled run.
         app.terminate()
         launchOnboarding()
-        XCTAssertTrue(app.staticTexts["Big plans start small."].waitForExistence(timeout: 25))
         tapButton("pipo.onboarding.continue")
-        tapButton("pipo.onboarding.goal.emergency")
-        tapButton("pipo.onboarding.continue")
-        tapButton("pipo.onboarding.mode.group")
-        tapButton("pipo.onboarding.continue")
-        tapButton("pipo.onboarding.rhythm.flexible")
-        tapButton("pipo.onboarding.continue")
-        XCTAssertTrue(app.staticTexts["Your starting point"].waitForExistence(timeout: 15))
-        assertAccessibleTextContains("Emergency Fund")
-        assertAccessibleTextContains("A group")
-        attachOnboardingScreen("Group onboarding preview")
-        tapButton("pipo.onboarding.continue")
-        XCTAssertTrue(app.buttons["Sign Up"].waitForExistence(timeout: 20))
+        tapButton("pipo.onboarding.skip")
+        XCTAssertTrue(app.staticTexts["What brings you to Pipo?"].waitForExistence(timeout: 12))
+        tapButton("pipo.onboarding.skip")
+        XCTAssertTrue(app.staticTexts["Want Pipo on your Home Screen?"].waitForExistence(timeout: 12))
+        tapButton("pipo.onboarding.widget.skip")
+        XCTAssertTrue(app.buttons["Create a saving goal"].waitForExistence(timeout: 25))
+        XCTAssertTrue(app.staticTexts["Pipo"].waitForExistence(timeout: 12),
+                      "Skipped personalization should leave the default Home greeting")
+        attachOnboardingScreen("Skipped options lead directly to Home")
     }
 
     private func launchOnboarding() {
         app.launchArguments = ["-pipo-onboarding-qa"]
         app.launch()
-    }
-
-    private func assertAccessibleTextContains(_ value: String) {
-        let text = app.descendants(matching: .any)
-            .matching(NSPredicate(format: "label CONTAINS %@", value))
-            .firstMatch
-        XCTAssertTrue(text.waitForExistence(timeout: 8), "Missing onboarding summary: \(value)")
     }
 
     private func attachOnboardingScreen(_ title: String) {
