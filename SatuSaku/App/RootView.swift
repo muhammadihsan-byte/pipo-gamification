@@ -50,7 +50,6 @@ struct RootView: View {
                     destination(for: route)
                 }
         }
-        .toolbar(.hidden, for: .navigationBar)
         .environment(navigationManager)
         .environment(authStateManager)
         .environment(subscriptionManager)
@@ -164,7 +163,7 @@ struct RootView: View {
             )
         }
         .alert(
-            "Satu Saku",
+            "Pipo",
             isPresented: Binding(
                 get: { noticeMessage != nil },
                 set: { if !$0 { noticeMessage = nil } }
@@ -205,6 +204,7 @@ struct RootView: View {
                 hasCompletedOnboarding = true
             }
         )
+        .toolbar(.hidden, for: .navigationBar)
     }
 
     private var authenticationView: some View {
@@ -221,6 +221,7 @@ struct RootView: View {
                 noticeMessage = "Password reset is not configured yet."
             }
         )
+        .toolbar(.hidden, for: .navigationBar)
     }
 
     private var dashboardView: some View {
