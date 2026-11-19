@@ -45,7 +45,7 @@ struct OnboardingContainerView: View {
         }
         .sheet(isPresented: $showingWidgetGuide) {
             widgetGuide
-                .presentationDetents([.medium, .large])
+                .presentationDetents([.large])
                 .presentationDragIndicator(.visible)
         }
     }
