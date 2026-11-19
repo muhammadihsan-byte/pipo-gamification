@@ -43,8 +43,20 @@ struct RootView: View {
         _navigationManager = State(
             initialValue: NavigationManager(initialRoute: initialRoute)
         )
+        // A fixed test-only user lets remote QA prove per-account personalization
+        // without using credentials, network calls or a real customer account.
+        #if DEBUG
+        let onboardingQAUserID = ProcessInfo.processInfo.arguments.contains("-pipo-onboarding-qa")
+            ? UUID(uuidString: "99999999-9999-4999-8999-999999999999")
+            : nil
+        #else
+        let onboardingQAUserID: UUID? = nil
+        #endif
         _authStateManager = State(
-            initialValue: AuthStateManager(initialState: initialAuthState)
+            initialValue: AuthStateManager(
+                initialState: initialAuthState,
+                userID: onboardingQAUserID
+            )
         )
         _subscriptionManager = State(initialValue: SubscriptionManager())
         do {
@@ -218,6 +230,9 @@ struct RootView: View {
     private var onboardingView: some View {
         OnboardingContainerView { personalization in
             if isOnboardingQA {
+                if let userID = authStateManager.userID {
+                    _ = OnboardingProfileStore.save(personalization, for: userID)
+                }
                 hasFinishedOnboardingQA = true
                 return
             }
