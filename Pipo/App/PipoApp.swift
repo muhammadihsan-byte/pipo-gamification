@@ -12,7 +12,9 @@ struct PipoApp: App {
             UserProfile.self
         ])
         #if DEBUG
-        let qaInMemory = ProcessInfo.processInfo.arguments.contains("-pipo-visual-qa")
+        let args = ProcessInfo.processInfo.arguments
+        let qaInMemory = args.contains("-pipo-visual-qa")
+            || args.contains("-pipo-onboarding-qa")
         #else
         let qaInMemory = false
         #endif
