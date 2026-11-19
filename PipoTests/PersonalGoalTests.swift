@@ -1,4 +1,5 @@
 import Foundation
+import SwiftData
 import XCTest
 @testable import Pipo
 
@@ -81,5 +82,42 @@ final class PersonalGoalTests: XCTestCase {
 
     private func date(_ year: Int, _ month: Int, _ day: Int) -> Date {
         calendar.date(from: DateComponents(year: year, month: month, day: day))!
+    }
+}
+
+extension PersonalGoalTests {
+    @MainActor
+    func testGroupReviewPersistsLocalMetadataAndSingleTargetWithoutMockRows() throws {
+        var draft = GroupPlanDraft()
+        draft.title = "Supplies"
+        draft.category = .other
+        draft.customCategory = "Studio"
+        draft.groupName = "Art club"
+        draft.targetText = "1.250.000"
+        draft.mode = .flexible
+        draft.checkIn = .weekly
+        try draft.prepareMember("Ari")
+        let owner = UUID()
+        let review = try XCTUnwrap(draft.review(creatorID: owner))
+        let schema = Schema([PersonalGoal.self, SubItem.self])
+        let container = try ModelContainer(for: schema, configurations: [ModelConfiguration(isStoredInMemoryOnly: true)])
+        let writer = ModelContext(container)
+        try review.insertGoal(in: writer)
+        try writer.save()
+
+        let reader = ModelContext(container)
+        let goal = try XCTUnwrap(reader.fetch(FetchDescriptor<PersonalGoal>()).first)
+        XCTAssertEqual(goal.title, "Supplies")
+        XCTAssertEqual(goal.categoryTitle, "Studio")
+        XCTAssertEqual(goal.rhythm, .flexible)
+        XCTAssertEqual(goal.targetAmount, 1_250_000)
+        XCTAssertTrue(goal.subItems.isEmpty)
+        XCTAssertTrue(goal.isGroupGoal)
+        let details = try JSONDecoder().decode(GroupPlanDetails.self, from: XCTUnwrap(goal.groupDetails))
+        XCTAssertEqual(details.groupName, "Art club")
+        XCTAssertEqual(details.checkIn, .weekly)
+        XCTAssertEqual(details.creatorID, owner)
+        XCTAssertEqual(details.preparedMembers, ["Ari"])
+        XCTAssertEqual(review.members.map(\.status), [.accepted])
     }
 }
