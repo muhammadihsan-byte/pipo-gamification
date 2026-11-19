@@ -41,16 +41,17 @@ struct DashboardView: View {
         ScrollView {
             VStack(alignment: .leading, spacing: 24) {
                 welcomeHeader
-                savingsSummary
 
-                VStack(alignment: .leading, spacing: 12) {
-                    Text("Tujuan tabungan")
-                        .font(.title3.bold())
-                        .foregroundStyle(PipoTheme.ink)
+                if goals.isEmpty {
+                    firstGoalWelcomeCard
+                } else {
+                    savingsSummary
 
-                    if goals.isEmpty {
-                        emptyGoalsCard
-                    } else {
+                    VStack(alignment: .leading, spacing: 12) {
+                        Text("Your saving goals")
+                            .font(.title3.bold())
+                            .foregroundStyle(PipoTheme.ink)
+
                         ForEach(goals) { goal in
                             goalCard(goal)
                         }
@@ -103,7 +104,7 @@ struct DashboardView: View {
                 Text(onboardingPersonalization.flatMap { $0.nickname.isEmpty ? nil : "Hey, \($0.nickname)!" } ?? "Pipo")
                     .font(.largeTitle.bold())
                     .foregroundStyle(PipoTheme.ink)
-                Text(onboardingPersonalization?.motivation?.homeGreeting ?? "Sedikit demi sedikit, jadi bukit.")
+                Text(onboardingPersonalization?.motivation?.homeGreeting ?? "Little by little, it adds up.")
                     .font(.subheadline)
                     .foregroundStyle(PipoTheme.muted)
             }
@@ -117,34 +118,96 @@ struct DashboardView: View {
         .padding(.top, 12)
     }
 
-    private var savingsSummary: some View {
+    private var firstGoalInvitation: String {
+        switch onboardingPersonalization?.motivation {
+        case .buildHabit:
+            "Small steps start here."
+        case .excitingGoal:
+            "Big idea? Give it a place to grow."
+        case .feelInControl:
+            "Your plan, your pace."
+        case .exploring:
+            "Just looking around? That's fine too."
+        case nil:
+            "Whatever you're planning, start when you're ready."
+        }
+    }
+
+    /// The first Home state should teach the actual goal journey without
+    /// forcing a goal, showing fabricated progress, or duplicating the CTA.
+    private var firstGoalWelcomeCard: some View {
         TicketCard {
-            VStack(alignment: .leading, spacing: 8) {
-                Text("MULAI PERJALANANMU")
-                    .font(.caption.weight(.bold))
-                    .tracking(1)
-                    .foregroundStyle(PipoTheme.green)
-                Text("Setiap tabungan membawamu lebih dekat ke tujuan.")
-                    .font(.title3.weight(.semibold))
+            VStack(alignment: .leading, spacing: 15) {
+                HStack(alignment: .center, spacing: 12) {
+                    Image(systemName: "flag.checkered.circle.fill")
+                        .font(.system(size: 30))
+                        .foregroundStyle(PipoTheme.pink)
+                        .accessibilityHidden(true)
+                    VStack(alignment: .leading, spacing: 5) {
+                        Text("Your first saving goal")
+                            .font(.headline)
+                            .foregroundStyle(PipoTheme.ink)
+                            .accessibilityAddTraits(.isHeader)
+                        Text(firstGoalInvitation)
+                            .font(.subheadline)
+                            .foregroundStyle(PipoTheme.muted)
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
+                }
+
+                Text("Choose something that matters, set a target, then record what you save.")
+                    .font(.subheadline)
                     .foregroundStyle(PipoTheme.ink)
+                    .fixedSize(horizontal: false, vertical: true)
+
+                TicketSeparator()
+
+                VStack(alignment: .leading, spacing: 10) {
+                    firstGoalStep("1", title: "Pick your goal")
+                    firstGoalStep("2", title: "Set a target and date")
+                    firstGoalStep("3", title: "Record progress as you save")
+                }
+                .accessibilityElement(children: .contain)
+
                 Button("Create a saving goal", action: onCreateGoal)
                     .buttonStyle(PrimaryActionButtonStyle())
+                    .accessibilityIdentifier("pipo.home.firstGoal.create")
+
+                Text("No rush. You can explore Pipo before creating a goal.")
+                    .font(.footnote)
+                    .foregroundStyle(PipoTheme.muted)
+                    .fixedSize(horizontal: false, vertical: true)
             }
         }
     }
 
-    private var emptyGoalsCard: some View {
+    private func firstGoalStep(_ number: String, title: String) -> some View {
+        HStack(spacing: 12) {
+            Text(number)
+                .font(.caption.bold())
+                .foregroundStyle(PipoTheme.deepPink)
+                .frame(width: 26, height: 26)
+                .background(PipoTheme.palePink, in: Circle())
+                .accessibilityHidden(true)
+            Text(title)
+                .font(.subheadline.weight(.medium))
+                .foregroundStyle(PipoTheme.ink)
+        }
+        .accessibilityElement(children: .combine)
+    }
+
+    private var savingsSummary: some View {
         TicketCard {
             VStack(alignment: .leading, spacing: 8) {
-                Text("Belum ada tujuan")
-                    .font(.headline)
+                Text("YOUR SAVING JOURNEY")
+                    .font(.caption.weight(.bold))
+                    .tracking(1)
+                    .foregroundStyle(PipoTheme.green)
+                Text("Little by little, you're making progress.")
+                    .font(.title3.weight(.semibold))
                     .foregroundStyle(PipoTheme.ink)
-                Text("Tujuan pertamamu akan muncul di sini.")
-                    .font(.subheadline)
-                    .foregroundStyle(PipoTheme.muted)
-                Text("Create a goal before recording a saving.")
-                    .font(.caption)
-                    .foregroundStyle(PipoTheme.muted)
+                Button("Create a saving goal", action: onCreateGoal)
+                    .buttonStyle(PrimaryActionButtonStyle())
             }
         }
     }

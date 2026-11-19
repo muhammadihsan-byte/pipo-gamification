@@ -123,6 +123,10 @@ final class PipoUIRecordingTests: XCTestCase {
 
         XCTAssertTrue(app.staticTexts["Hey, Alex!"].waitForExistence(timeout: 25),
                       "Home must use saved onboarding nickname")
+        XCTAssertTrue(app.staticTexts["Your first saving goal"].waitForExistence(timeout: 15),
+                      "First-time Home should explain the first saving goal")
+        XCTAssertTrue(app.staticTexts["Big idea? Give it a place to grow."].exists,
+                      "Home should reflect the selected onboarding motivation")
         XCTAssertTrue(app.buttons["Create a saving goal"].waitForExistence(timeout: 15))
         attachOnboardingScreen("Personalized Pipo Home")
 
@@ -147,6 +151,8 @@ final class PipoUIRecordingTests: XCTestCase {
         XCTAssertTrue(app.buttons["Create a saving goal"].waitForExistence(timeout: 25))
         XCTAssertTrue(app.staticTexts["Pipo"].waitForExistence(timeout: 12),
                       "Skipped personalization should leave the default Home greeting")
+        XCTAssertTrue(app.staticTexts["Whatever you're planning, start when you're ready."].exists,
+                      "Skipped personalization should have a friendly default first-goal message")
         attachOnboardingScreen("Skipped options lead directly to Home")
     }
 
