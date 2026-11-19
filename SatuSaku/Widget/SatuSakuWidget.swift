@@ -65,7 +65,7 @@ struct SatuSakuWidget: Widget {
             SatuSakuWidgetView(entry: entry)
                 .widgetURL(entry.logDepositURL)
         }
-        .configurationDisplayName("Satu Saku")
+        .configurationDisplayName("Pipo")
         .description("Track your saving streak and goal progress.")
         .supportedFamilies([.systemSmall, .systemMedium])
     }
@@ -94,7 +94,7 @@ private struct SatuSakuWidgetView: View {
                     .resizable()
                     .scaledToFit()
                     .frame(width: 48, height: 48)
-                Text("Satu Saku")
+                Text("Pipo")
                     .font(.headline)
                     .lineLimit(1)
             }
@@ -156,7 +156,7 @@ private struct SatuSakuWidgetView: View {
                 } else {
                     Text("No active personal goal")
                         .font(.headline)
-                    Text("Create a goal in Satu Saku to track progress here.")
+                    Text("Create a goal in Pipo to track progress here.")
                         .font(.caption)
                         .foregroundStyle(.secondary)
                         .fixedSize(horizontal: false, vertical: true)
