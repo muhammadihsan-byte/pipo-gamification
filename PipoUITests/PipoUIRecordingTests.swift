@@ -84,6 +84,7 @@ final class PipoUIRecordingTests: XCTestCase {
 
         launchOnboarding()
         XCTAssertTrue(app.staticTexts["Little steps. Big dreams."].waitForExistence(timeout: 30))
+        attachOnboardingScreen("01 - V4 companion and connected greeting bubble")
         let pipo = app.buttons["pipo.greet"].firstMatch
         XCTAssertTrue(pipo.waitForExistence(timeout: 15), "V4 wave interaction is unavailable")
         XCTAssertTrue(pipo.isEnabled)
@@ -91,6 +92,7 @@ final class PipoUIRecordingTests: XCTestCase {
 
         tapButton("pipo.onboarding.continue")
         XCTAssertTrue(app.staticTexts["What should I call you?"].waitForExistence(timeout: 12))
+        attachOnboardingScreen("02 - Consistent V4 size and nickname bubble")
         typeText("pipo.onboarding.nickname", value: "Alex")
         let done = app.keyboards.buttons["Done"].firstMatch
         if done.exists { done.tap() }
@@ -101,9 +103,11 @@ final class PipoUIRecordingTests: XCTestCase {
         XCTAssertTrue(app.staticTexts["What should I call you?"].waitForExistence(timeout: 12))
         tapButton("pipo.onboarding.continue")
         tapButton("pipo.onboarding.motivation.excitingGoal")
+        XCTAssertTrue(app.staticTexts["Ooh, we've got plans. I like that."].waitForExistence(timeout: 12))
+        attachOnboardingScreen("03 - Mascot response inside connected bubble")
         tapButton("pipo.onboarding.continue")
         XCTAssertTrue(app.staticTexts["Want Pipo on your Home Screen?"].waitForExistence(timeout: 12))
-        attachOnboardingScreen("Pipo widget opt-in screen")
+        attachOnboardingScreen("04 - Consistent V4 size on widget page")
 
         tapButton("pipo.onboarding.continue")
         XCTAssertTrue(app.staticTexts["Add Pipo to your Home Screen"].waitForExistence(timeout: 12))
