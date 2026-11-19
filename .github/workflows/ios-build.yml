@@ -10,6 +10,15 @@ on:
       - ready_for_review
       - reopened
   workflow_dispatch:
+    inputs:
+      validation_mode:
+        description: "Choose fast compilation or full simulator tests"
+        type: choice
+        required: true
+        default: build-only
+        options:
+          - build-only
+          - build-and-test
   push:
     tags:
       - "v*-rc*"
@@ -67,6 +76,7 @@ jobs:
           echo "Using project $XCODE_PROJECT with scheme $XCODE_SCHEME"
 
       - name: Select a compatible installed iOS simulator
+        if: github.event_name != 'workflow_dispatch' || inputs.validation_mode == 'build-and-test'
         shell: bash
         run: |
           set -euo pipefail
@@ -133,7 +143,23 @@ jobs:
           print(f"Using existing simulator: {name} ({udid}) on {runtime_id}")
           PY
 
+      - name: Build only for iOS Simulator
+        if: github.event_name == 'workflow_dispatch' && inputs.validation_mode == 'build-only'
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p validation
+          xcodebuild \
+            -project "$XCODE_PROJECT" \
+            -scheme "$XCODE_SCHEME" \
+            -destination 'generic/platform=iOS Simulator' \
+            -derivedDataPath "$RUNNER_TEMP/PipoDerivedData" \
+            CODE_SIGNING_ALLOWED=NO \
+            CODE_SIGNING_REQUIRED=NO \
+            build 2>&1 | tee validation/xcodebuild.log
+
       - name: Build and test for iOS Simulator
+        if: github.event_name != 'workflow_dispatch' || inputs.validation_mode == 'build-and-test'
         shell: bash
         run: |
           set -euo pipefail
