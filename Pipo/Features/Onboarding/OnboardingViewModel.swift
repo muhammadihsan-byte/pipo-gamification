@@ -1,130 +1,99 @@
+import Foundation
 import Observation
 import SwiftUI
 
-/// Four short questions after Welcome, followed by an honest preview.
-/// Authentication happens in RootView after the user confirms the preview.
+/// A conversational introduction shown after an account first signs in.
 enum OnboardingStep: Int, CaseIterable, Hashable {
     case welcome
-    case goal
-    case savingMode
-    case rhythm
-    case preview
+    case nickname
+    case motivation
+    case widget
 
-    var showsProgress: Bool { self != .welcome }
-    var progress: Double { Double(rawValue) / Double(Self.allCases.count - 1) }
+    var number: Int { rawValue + 1 }
+    var progress: Double { Double(number) / Double(Self.allCases.count) }
 }
 
-enum OnboardingGoal: String, CaseIterable, Identifiable, Codable {
-    case wedding
-    case trip
-    case gadget
-    case emergency
-    case home
-    case explore
+enum OnboardingMotivation: String, CaseIterable, Codable, Identifiable {
+    case buildHabit
+    case excitingGoal
+    case feelInControl
+    case exploring
 
     var id: String { rawValue }
 
     var title: String {
         switch self {
-        case .wedding: "Wedding & Future"
-        case .trip: "Dream Trip"
-        case .gadget: "New Gadget"
-        case .emergency: "Emergency Fund"
-        case .home: "Home & Living"
-        case .explore: "Explore first"
-        }
-    }
-
-    /// System symbols are more visually consistent than mixed emoji illustrations.
-    var symbol: String {
-        switch self {
-        case .wedding: "heart.fill"
-        case .trip: "airplane"
-        case .gadget: "iphone.gen3"
-        case .emergency: "cross.case.fill"
-        case .home: "house.fill"
-        case .explore: "sparkles"
-        }
-    }
-
-    var category: GoalCategory? {
-        switch self {
-        case .wedding: .gift
-        case .trip: .trip
-        case .gadget: .gadget
-        case .emergency: .other // Never label an emergency fund as debt.
-        case .home: .house
-        case .explore: nil
-        }
-    }
-}
-
-enum OnboardingSavingMode: String, CaseIterable, Identifiable, Codable {
-    case personal
-    case group
-
-    var id: String { rawValue }
-
-    var title: String {
-        switch self {
-        case .personal: "Personal Saving"
-        case .group: "Group Saving"
-        }
-    }
-
-    var subtitle: String {
-        switch self {
-        case .personal: "Your goal, your pace"
-        case .group: "Plan together with someone you trust"
+        case .buildHabit: "Build a better saving habit"
+        case .excitingGoal: "Save for something exciting"
+        case .feelInControl: "Feel more in control of money"
+        case .exploring: "Just exploring for now"
         }
     }
 
     var symbol: String {
         switch self {
-        case .personal: "person.fill"
-        case .group: "person.2.fill"
+        case .buildHabit: "calendar.badge.checkmark"
+        case .excitingGoal: "airplane"
+        case .feelInControl: "wallet.pass.fill"
+        case .exploring: "sparkles"
+        }
+    }
+
+    var companionReply: String {
+        switch self {
+        case .buildHabit: "Small steps count. I'm with you."
+        case .excitingGoal: "Ooh, we've got plans. I like that."
+        case .feelInControl: "We'll take it one step at a time."
+        case .exploring: "No rush. I'll show you around."
+        }
+    }
+
+    var homeGreeting: String {
+        switch self {
+        case .buildHabit: "Small steps add up. Ready for one?"
+        case .excitingGoal: "That dream deserves a plan."
+        case .feelInControl: "Your pace, your progress."
+        case .exploring: "Take a look around. No pressure."
         }
     }
 }
 
-/// Only genuine setup choices are handed off. No paid offer or notification
-/// permission is requested during first-run onboarding.
-struct OnboardingCompletion: Codable {
-    let goalCategory: GoalCategory?
-    let goalTitle: String?
-    let rhythm: SavingRhythm?
-    let isPlusSelected: Bool
-    let isGroupSaving: Bool
+/// Keep user preferences separate from financial data and plan creation.
+/// Stored under an authenticated-user-specific key on this device.
+struct OnboardingPersonalization: Codable, Equatable {
+    var nickname: String
+    var motivation: OnboardingMotivation?
+    var viewedWidgetGuide: Bool
+    var completedAt: Date
+}
+
+enum OnboardingProfileStore {
+    private static func key(for userID: UUID) -> String {
+        "pipo.onboarding.personalization.v1.\(userID.uuidString.lowercased())"
+    }
+
+    static func load(for userID: UUID) -> OnboardingPersonalization? {
+        guard let data = UserDefaults.standard.data(forKey: key(for: userID)) else { return nil }
+        return try? JSONDecoder().decode(OnboardingPersonalization.self, from: data)
+    }
+
+    @discardableResult
+    static func save(_ personalization: OnboardingPersonalization, for userID: UUID) -> Bool {
+        guard let data = try? JSONEncoder().encode(personalization) else { return false }
+        UserDefaults.standard.set(data, forKey: key(for: userID))
+        return true
+    }
 }
 
 @MainActor
 @Observable
 final class OnboardingViewModel {
     var step: OnboardingStep = .welcome
-    var selectedGoal: OnboardingGoal?
-    var savingMode: OnboardingSavingMode?
-    var rhythm: SavingRhythm = .flexible
-
-    var canContinue: Bool {
-        switch step {
-        case .goal: selectedGoal != nil
-        case .savingMode: savingMode != nil
-        default: true
-        }
-    }
-
-    var question: String {
-        switch step {
-        case .welcome: ""
-        case .goal: "What would you like to save for?"
-        case .savingMode: "Going solo, or saving together?"
-        case .rhythm: "What pace feels right for you?"
-        case .preview: "Here's your starting point."
-        }
-    }
+    var nickname = ""
+    var motivation: OnboardingMotivation?
 
     func advance() {
-        guard canContinue, let next = OnboardingStep(rawValue: step.rawValue + 1) else { return }
+        guard let next = OnboardingStep(rawValue: step.rawValue + 1) else { return }
         step = next
     }
 
@@ -133,14 +102,12 @@ final class OnboardingViewModel {
         step = previous
     }
 
-    var completion: OnboardingCompletion {
-        let shouldPrefill = selectedGoal != .explore
-        return OnboardingCompletion(
-            goalCategory: shouldPrefill ? selectedGoal?.category : nil,
-            goalTitle: shouldPrefill ? selectedGoal?.title : nil,
-            rhythm: shouldPrefill ? rhythm : nil,
-            isPlusSelected: false,
-            isGroupSaving: savingMode == .group && selectedGoal != .explore
+    func finish(viewedWidgetGuide: Bool) -> OnboardingPersonalization {
+        OnboardingPersonalization(
+            nickname: String(nickname.trimmingCharacters(in: .whitespacesAndNewlines).prefix(32)),
+            motivation: motivation,
+            viewedWidgetGuide: viewedWidgetGuide,
+            completedAt: Date()
         )
     }
 }
