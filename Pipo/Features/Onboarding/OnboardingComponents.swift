@@ -1,16 +1,71 @@
 import SwiftUI
 
+enum OnboardingPipoReaction {
+    case acknowledge
+    case reassure
+    case celebrate
+
+    var lift: CGFloat {
+        switch self {
+        case .acknowledge: -5
+        case .reassure: -3
+        case .celebrate: -11
+        }
+    }
+
+    var rotation: Double {
+        switch self {
+        case .acknowledge: -4
+        case .reassure: 3
+        case .celebrate: -7
+        }
+    }
+
+    var scale: CGFloat {
+        switch self {
+        case .acknowledge: 1.025
+        case .reassure: 1.015
+        case .celebrate: 1.07
+        }
+    }
+}
+
+/// Onboarding-only reactions. The canonical V4 SVG and tap gesture remain unmodified.
+@MainActor
+struct OnboardingPipoView: View {
+    let height: CGFloat
+    var reaction: OnboardingPipoReaction = .acknowledge
+    var reactionID = 0
+
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+
+    var body: some View {
+        PipoMascotView(companion: .idle)
+            .frame(width: height * 460 / 500, height: height)
+            .phaseAnimator([false, true, false], trigger: reactionID) { content, active in
+                content
+                    .offset(y: active && !reduceMotion ? reaction.lift : 0)
+                    .rotationEffect(.degrees(active && !reduceMotion ? reaction.rotation : 0))
+                    .scaleEffect(active && !reduceMotion ? reaction.scale : 1)
+            } animation: { active in
+                active
+                    ? .spring(response: 0.23, dampingFraction: 0.67)
+                    : .spring(response: 0.43, dampingFraction: 0.79)
+            }
+            .frame(maxWidth: .infinity)
+    }
+}
+
 @MainActor
 struct OnboardingHeaderView: View {
     let progress: Double
-    var mascotBounce = false
+    var reaction: OnboardingPipoReaction = .acknowledge
+    var reactionID = 0
 
     var body: some View {
         HStack(spacing: 12) {
-            PipoMascotView(state: .happy)
+            OnboardingPipoView(height: 64, reaction: reaction, reactionID: reactionID)
                 .frame(width: 64, height: 64)
-                .offset(y: mascotBounce ? -5 : 0)
-                .animation(.spring(response: 0.35, dampingFraction: 0.48), value: mascotBounce)
             VStack(alignment: .leading, spacing: 8) {
                 HStack {
                     Text("PIPO")
