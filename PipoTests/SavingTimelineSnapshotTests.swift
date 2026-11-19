@@ -93,6 +93,5 @@ private struct SavingTimelineSnapshotFixture: View {
             PersonalPlanActions(back: {}, title: "Continue", action: {})
         }
         .environment(\.locale, Locale(identifier: "en_US"))
-        .environment(\.accessibilityReduceMotion, true)
     }
 }
