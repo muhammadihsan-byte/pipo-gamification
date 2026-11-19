@@ -161,10 +161,12 @@ struct ReviewPlanView: View {
     }
 
     private func syncEntitlements() {
+        guard let userID = authStateManager.userID else { return }
         let profile = currentProfile
         subscriptionManager.updateEntitlements(
             purchasedPersonalSlots: profile?.purchasedPersonalSlots ?? 0,
-            purchasedGroupSlots: profile?.purchasedGroupSlots ?? 0
+            purchasedGroupSlots: profile?.purchasedGroupSlots ?? 0,
+            for: userID
         )
     }
 
