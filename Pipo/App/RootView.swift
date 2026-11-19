@@ -13,12 +13,28 @@ struct RootView: View {
     @State private var choosingPlan = false
     @State private var noticeMessage: String?
     @AppStorage("hasCompletedOnboarding") private var hasCompletedOnboarding = false
+    @AppStorage("pipo.pendingOnboardingCompletion") private var pendingOnboardingData = Data()
     @State private var onboardingCompletion: OnboardingCompletion?
+    @State private var hasFinishedOnboardingQA = false
     @State private var isPrefillingOnboardingGoal = false
     @Environment(\.modelContext) private var modelContext
     @Query private var localTransactions: [SavingTransaction]
 
     private let supabaseConfigurationError: String?
+
+    private var isOnboardingQA: Bool {
+        #if DEBUG
+        ProcessInfo.processInfo.arguments.contains("-pipo-onboarding-qa")
+        #else
+        false
+        #endif
+    }
+
+    private var savedOnboardingCompletion: OnboardingCompletion? {
+        if let onboardingCompletion { return onboardingCompletion }
+        guard !pendingOnboardingData.isEmpty else { return nil }
+        return try? JSONDecoder().decode(OnboardingCompletion.self, from: pendingOnboardingData)
+    }
 
     init(
         initialAuthState: AuthState = .unauthenticated,
@@ -58,14 +74,16 @@ struct RootView: View {
         .tint(PipoTheme.green)
         .task {
             #if DEBUG
-            if ProcessInfo.processInfo.arguments.contains("-pipo-visual-qa") { return }
+            if ProcessInfo.processInfo.arguments.contains("-pipo-visual-qa")
+                || ProcessInfo.processInfo.arguments.contains("-pipo-onboarding-qa") { return }
             #endif
             guard let supabaseService else { return }
             await supabaseService.observeAuthStateChanges(using: authStateManager)
         }
         .task {
             #if DEBUG
-            if ProcessInfo.processInfo.arguments.contains("-pipo-visual-qa") { return }
+            if ProcessInfo.processInfo.arguments.contains("-pipo-visual-qa")
+                || ProcessInfo.processInfo.arguments.contains("-pipo-onboarding-qa") { return }
             #endif
             if authStateManager.userID == nil {
                 clearWidgetSnapshot()
@@ -95,8 +113,8 @@ struct RootView: View {
                 clearWidgetSnapshot()
             } else {
                 navigationManager.popToRoot()
-                if let onboardingCompletion {
-                    routeAfterOnboarding(completion: onboardingCompletion)
+                if let completion = savedOnboardingCompletion {
+                    routeAfterOnboarding(completion: completion)
                 }
             }
         }
@@ -188,7 +206,9 @@ struct RootView: View {
     private var rootContent: some View {
         switch authStateManager.authState {
         case .unauthenticated:
-            if hasCompletedOnboarding {
+            if isOnboardingQA && !hasFinishedOnboardingQA {
+                onboardingView
+            } else if hasCompletedOnboarding || isOnboardingQA {
                 authenticationView
             } else {
                 onboardingView
@@ -201,13 +221,24 @@ struct RootView: View {
     private var onboardingView: some View {
         OnboardingContainerView(
             onCompleted: { completion in
+                if isOnboardingQA {
+                    hasFinishedOnboardingQA = true
+                    return
+                }
                 onboardingCompletion = completion
+                pendingOnboardingData = (try? JSONEncoder().encode(completion)) ?? Data()
                 hasCompletedOnboarding = true
                 if authStateManager.authState == .authenticated {
                     routeAfterOnboarding(completion: completion)
                 }
             },
             onSignIn: {
+                if isOnboardingQA {
+                    hasFinishedOnboardingQA = true
+                    return
+                }
+                pendingOnboardingData = Data()
+                onboardingCompletion = nil
                 hasCompletedOnboarding = true
             }
         )
@@ -362,7 +393,22 @@ struct RootView: View {
                 navigationManager.requestDeposit(goalID: goalID)
             }
         case .createGroupPlan, .savingRhythm, .reviewGroupSaving:
-            CreateGroupPlanView(onBack: navigationManager.pop, onDashboard: navigationManager.popToRoot)
+            CreateGroupPlanView(
+                onBack: {
+                    onboardingCompletion = nil
+                    navigationManager.pop()
+                },
+                onDashboard: {
+                    onboardingCompletion = nil
+                    navigationManager.popToRoot()
+                },
+                initialTitle: onboardingCompletion?.isGroupSaving == true
+                    ? onboardingCompletion?.goalTitle : nil,
+                initialCategory: onboardingCompletion?.isGroupSaving == true
+                    ? onboardingCompletion?.goalCategory : nil,
+                initialRhythm: onboardingCompletion?.isGroupSaving == true
+                    ? onboardingCompletion?.rhythm : nil
+            )
         case .milestoneCelebration:
             ConsistencyMilestoneView(
                 xpEarned: navigationManager.milestoneXPEarned,
@@ -378,11 +424,12 @@ struct RootView: View {
 
     private func routeAfterOnboarding(completion: OnboardingCompletion) {
         guard authStateManager.authState == .authenticated else { return }
-        if completion.isPlusSelected {
-            navigationManager.navigate(to: .paywall(isGroup: completion.isGroupSaving))
-            onboardingCompletion = nil
-        } else if completion.isGroupSaving {
-            onboardingCompletion = nil
+        // The authentication screen can outlive the onboarding view, including
+        // across app restarts. Apply stored choices exactly once after sign-in.
+        pendingOnboardingData = Data()
+        onboardingCompletion = completion
+
+        if completion.isGroupSaving {
             navigationManager.navigate(to: .createGroupPlan)
         } else if completion.goalCategory != nil, completion.goalTitle != nil {
             isPrefillingOnboardingGoal = true
