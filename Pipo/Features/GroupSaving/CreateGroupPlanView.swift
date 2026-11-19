@@ -434,3 +434,15 @@ private struct PlanPhotoPicker: View {
         return UIImage(cgImage: image).jpegData(compressionQuality: 0.82)
     }
 }
+
+// Simulator fixtures, confined to the QA branch.
+extension CreateGroupPlanView {
+    init(capture step: GroupPlanStep, plan: GroupPlanDraft) {
+        self.init(onBack: {}, onDashboard: {})
+        var nav = GroupPlanNavigation()
+        for _ in 1..<min(step.rawValue, 7) { nav.advance(plan) }
+        if step == .success { nav.didSave() }
+        _navigation = State(initialValue: nav)
+        _draft = State(initialValue: plan)
+    }
+}

@@ -775,3 +775,13 @@ private func durationLabel(_ months: Int) -> String {
         CreateGoalView(onBack: {})
     }
 }
+
+extension CreateGoalView {
+    init(capture step: PersonalPlanStep) {
+        self.init(onBack: {}, initialTitle: "Buy new iPad")
+        _step = State(initialValue: step)
+        _targetAmount = State(initialValue: "7.500.000")
+        _breakdown = State(initialValue: [.init(title: "iPad", amount: "7.000.000"),
+                                          .init(title: "Accessories", amount: "500.000")])
+    }
+}
