@@ -59,6 +59,8 @@
 		D10000000000000000000001 /* OnboardingViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = D10000000000000000000101 /* OnboardingViewModel.swift */; };
 		D10000000000000000000002 /* OnboardingComponents.swift in Sources */ = {isa = PBXBuildFile; fileRef = D10000000000000000000102 /* OnboardingComponents.swift */; };
 		D10000000000000000000003 /* OnboardingContainerView.swift in Sources */ = {isa = PBXBuildFile; fileRef = D10000000000000000000103 /* OnboardingContainerView.swift */; };
+		A17C00000000000000000001 /* PipoUIRecordingTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = A17C00000000000000000002 /* PipoUIRecordingTests.swift */; };
+		A17C0000000000000000000E /* XCTest.framework in UI Test Frameworks */ = {isa = PBXBuildFile; fileRef = 000000000000000000000118 /* XCTest.framework */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -75,6 +77,13 @@
 			proxyType = 1;
 			remoteGlobalIDString = A71D5C9E6B20433BB8000031;
 			remoteInfo = PipoWidgetExtension;
+		};
+		A17C0000000000000000000C /* UI Test PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = 000000000000000000000801 /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = 000000000000000000000301;
+			remoteInfo = Pipo;
 		};
 /* End PBXContainerItemProxy section */
 
@@ -133,6 +142,8 @@
 		D10000000000000000000101 /* OnboardingViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OnboardingViewModel.swift; sourceTree = "<group>"; };
 		D10000000000000000000102 /* OnboardingComponents.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OnboardingComponents.swift; sourceTree = "<group>"; };
 		D10000000000000000000103 /* OnboardingContainerView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OnboardingContainerView.swift; sourceTree = "<group>"; };
+		A17C00000000000000000002 /* PipoUIRecordingTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PipoUIRecordingTests.swift; sourceTree = "<group>"; };
+		A17C00000000000000000003 /* PipoUITests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = PipoUITests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -161,6 +172,14 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
+		A17C0000000000000000000A /* UI Test Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				A17C0000000000000000000E /* XCTest.framework in UI Test Frameworks */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 /* End PBXFrameworksBuildPhase section */
 
 /* Begin PBXGroup section */
@@ -169,6 +188,7 @@
 			children = (
 				000000000000000000000702 /* Pipo */,
 				000000000000000000000713 /* PipoTests */,
+				A17C00000000000000000004 /* PipoUITests */,
 				000000000000000000000703 /* Products */,
 				000000000000000000000704 /* Frameworks */,
 				A0E9701C8A63461E9AF00105 /* StoreKit.storekit */,
@@ -194,6 +214,7 @@
 			children = (
 				000000000000000000000116 /* Pipo.app */,
 				000000000000000000000117 /* PipoTests.xctest */,
+				A17C00000000000000000003 /* PipoUITests.xctest */,
 				A71D5C9E6B20433BB8000014 /* PipoWidgetExtension.appex */,
 			);
 			name = Products;
@@ -417,6 +438,14 @@
 			path = Network;
 			sourceTree = "<group>";
 		};
+		A17C00000000000000000004 /* PipoUITests */ = {
+			isa = PBXGroup;
+			children = (
+				A17C00000000000000000002 /* PipoUIRecordingTests.swift */,
+			);
+			path = PipoUITests;
+			sourceTree = "<group>";
+		};
 /* End PBXGroup section */
 
 /* Begin PBXNativeTarget section */
@@ -479,6 +508,24 @@
 			productReference = A71D5C9E6B20433BB8000014 /* PipoWidgetExtension.appex */;
 			productType = "com.apple.product-type.app-extension";
 		};
+		A17C00000000000000000005 /* PipoUITests */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = A17C00000000000000000006 /* Build configuration list for PBXNativeTarget "PipoUITests" */;
+			buildPhases = (
+				A17C00000000000000000009 /* UI Test Sources */,
+				A17C0000000000000000000A /* UI Test Frameworks */,
+				A17C0000000000000000000B /* UI Test Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+				A17C0000000000000000000D /* UI Test target dependency */,
+			);
+			name = PipoUITests;
+			productName = PipoUITests;
+			productReference = A17C00000000000000000003 /* PipoUITests.xctest */;
+			productType = "com.apple.product-type.bundle.ui-testing";
+		};
 /* End PBXNativeTarget section */
 
 /* Begin PBXProject section */
@@ -492,6 +539,10 @@
 						CreatedOnToolsVersion = 16.0;
 					};
 					000000000000000000000302 = {
+						CreatedOnToolsVersion = 16.0;
+						TestTargetID = 000000000000000000000301;
+					};
+					A17C00000000000000000005 = {
 						CreatedOnToolsVersion = 16.0;
 						TestTargetID = 000000000000000000000301;
 					};
@@ -520,6 +571,7 @@
 			targets = (
 				000000000000000000000301 /* Pipo */,
 				000000000000000000000302 /* PipoTests */,
+				A17C00000000000000000005 /* PipoUITests */,
 				A71D5C9E6B20433BB8000031 /* PipoWidgetExtension */,
 			);
 		};
@@ -547,6 +599,13 @@
 			buildActionMask = 2147483647;
 			files = (
 				A71D5C9E6B20433BB8000005 /* Assets.xcassets in Widget Resources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		A17C0000000000000000000B /* UI Test Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -618,6 +677,14 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
+		A17C00000000000000000009 /* UI Test Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				A17C00000000000000000001 /* PipoUIRecordingTests.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 /* End PBXSourcesBuildPhase section */
 
 /* Begin PBXCopyFilesBuildPhase section */
@@ -644,6 +711,11 @@
 			isa = PBXTargetDependency;
 			target = A71D5C9E6B20433BB8000031 /* PipoWidgetExtension */;
 			targetProxy = A71D5C9E6B20433BB8000091 /* PBXContainerItemProxy */;
+		};
+		A17C0000000000000000000D /* UI Test target dependency */ = {
+			isa = PBXTargetDependency;
+			target = 000000000000000000000301 /* Pipo */;
+			targetProxy = A17C0000000000000000000C /* UI Test PBXContainerItemProxy */;
 		};
 /* End PBXTargetDependency section */
 
@@ -874,6 +946,34 @@
 			};
 			name = Release;
 		};
+		A17C00000000000000000007 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGN_STYLE = Automatic;
+				GENERATE_INFOPLIST_FILE = YES;
+				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.pipo.app.uitests;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SWIFT_VERSION = 6.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+				TEST_TARGET_NAME = Pipo;
+			};
+			name = Debug;
+		};
+		A17C00000000000000000008 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGN_STYLE = Automatic;
+				GENERATE_INFOPLIST_FILE = YES;
+				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.pipo.app.uitests;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SWIFT_VERSION = 6.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+				TEST_TARGET_NAME = Pipo;
+			};
+			name = Release;
+		};
 /* End XCBuildConfiguration section */
 
 /* Begin XCConfigurationList section */
@@ -909,6 +1009,15 @@
 			buildConfigurations = (
 				A71D5C9E6B20433BB8000041 /* Debug */,
 				A71D5C9E6B20433BB8000042 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		A17C00000000000000000006 /* Build configuration list for PBXNativeTarget "PipoUITests" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				A17C00000000000000000007 /* Debug */,
+				A17C00000000000000000008 /* Release */,
 			);
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Release;
