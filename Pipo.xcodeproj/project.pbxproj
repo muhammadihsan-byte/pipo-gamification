@@ -9,6 +9,7 @@
 /* Begin PBXBuildFile section */
 		D20000000000000000000001 /* PersonalSavingSchedule.swift in Sources */ = {isa = PBXBuildFile; fileRef = D20000000000000000000011 /* PersonalSavingSchedule.swift */; };
 		D20000000000000000000002 /* PersonalPlanComponents.swift in Sources */ = {isa = PBXBuildFile; fileRef = D20000000000000000000012 /* PersonalPlanComponents.swift */; };
+		9CA1E0000000000000000011 /* SavingInlineCalendar.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9CA1E0000000000000000012 /* SavingInlineCalendar.swift */; };
 		D20000000000000000000003 /* PersonalPlanMotion in Resources */ = {isa = PBXBuildFile; fileRef = D20000000000000000000013 /* PersonalPlanMotion */; };
 		D20000000000000000000004 /* Lottie in Frameworks */ = {isa = PBXBuildFile; productRef = D20000000000000000000021 /* Lottie */; };
 		000000000000000000000001 /* RootView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 000000000000000000000101 /* RootView.swift */; };
@@ -19,6 +20,8 @@
 		000000000000000000000006 /* ContentView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 000000000000000000000106 /* ContentView.swift */; };
 		000000000000000000000007 /* ConsistencyMilestoneView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 000000000000000000000107 /* ConsistencyMilestoneView.swift */; };
 		000000000000000000000008 /* ReviewGroupSavingView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 000000000000000000000108 /* ReviewGroupSavingView.swift */; };
+		5341564500000000000000B2 /* CreateGroupPlanView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5341564500000000000000D2 /* CreateGroupPlanView.swift */; };
+		5341564500000000000000B1 /* GroupPlanDraft.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5341564500000000000000D1 /* GroupPlanDraft.swift */; };
 		000000000000000000000009 /* MockData.swift in Sources */ = {isa = PBXBuildFile; fileRef = 000000000000000000000109 /* MockData.swift */; };
 		00000000000000000000000A /* SavingRhythmView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 000000000000000000000110 /* SavingRhythmView.swift */; };
 		00000000000000000000000B /* PersonalGoal.swift in Sources */ = {isa = PBXBuildFile; fileRef = 000000000000000000000111 /* PersonalGoal.swift */; };
@@ -38,6 +41,8 @@
 		000000000000000000000019 /* ReviewPlanView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 000000000000000000000127 /* ReviewPlanView.swift */; };
 		00000000000000000000001A /* GroupSavingManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = 000000000000000000000128 /* GroupSavingManager.swift */; };
 		00000000000000000000001B /* GroupSavingManagerTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 000000000000000000000129 /* GroupSavingManagerTests.swift */; };
+		5341564500000000000000B3 /* GroupPlanJourneyTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5341564500000000000000D3 /* GroupPlanJourneyTests.swift */; };
+		9CA1E0000000000000000021 /* SavingTimelineSnapshotTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9CA1E0000000000000000022 /* SavingTimelineSnapshotTests.swift */; };
 		0BA9C96E17E50FEC4485564A /* SupabaseServiceTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 27631892C68B8BF7E1BFBCD2 /* SupabaseServiceTests.swift */; };
 		374F65BF8A10D4071478164D /* RiveRuntime in Frameworks */ = {isa = PBXBuildFile; productRef = B9EB5CF9294E23998F6BCE27 /* RiveRuntime */; };
 		60435F130DABB711F96348C0 /* Supabase in Frameworks */ = {isa = PBXBuildFile; productRef = 30C881C1610D667FE7117C13 /* Supabase */; };
@@ -76,6 +81,7 @@
 /* Begin PBXFileReference section */
 		D20000000000000000000011 /* PersonalSavingSchedule.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PersonalSavingSchedule.swift; sourceTree = "<group>"; };
 		D20000000000000000000012 /* PersonalPlanComponents.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PersonalPlanComponents.swift; sourceTree = "<group>"; };
+		9CA1E0000000000000000012 /* SavingInlineCalendar.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SavingInlineCalendar.swift; sourceTree = "<group>"; };
 		D20000000000000000000013 /* PersonalPlanMotion */ = {isa = PBXFileReference; lastKnownFileType = folder; path = PersonalPlanMotion; sourceTree = "<group>"; };
 		000000000000000000000101 /* RootView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RootView.swift; sourceTree = "<group>"; };
 		000000000000000000000102 /* PipoApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PipoApp.swift; sourceTree = "<group>"; };
@@ -85,6 +91,8 @@
 		000000000000000000000106 /* ContentView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ContentView.swift; sourceTree = "<group>"; };
 		000000000000000000000107 /* ConsistencyMilestoneView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ConsistencyMilestoneView.swift; sourceTree = "<group>"; };
 		000000000000000000000108 /* ReviewGroupSavingView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ReviewGroupSavingView.swift; sourceTree = "<group>"; };
+		5341564500000000000000D2 /* CreateGroupPlanView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CreateGroupPlanView.swift; sourceTree = "<group>"; };
+		5341564500000000000000D1 /* GroupPlanDraft.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GroupPlanDraft.swift; sourceTree = "<group>"; };
 		000000000000000000000109 /* MockData.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MockData.swift; sourceTree = "<group>"; };
 		000000000000000000000110 /* SavingRhythmView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SavingRhythmView.swift; sourceTree = "<group>"; };
 		000000000000000000000111 /* PersonalGoal.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PersonalGoal.swift; sourceTree = "<group>"; };
@@ -106,6 +114,8 @@
 		000000000000000000000127 /* ReviewPlanView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ReviewPlanView.swift; sourceTree = "<group>"; };
 		000000000000000000000128 /* GroupSavingManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GroupSavingManager.swift; sourceTree = "<group>"; };
 		000000000000000000000129 /* GroupSavingManagerTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GroupSavingManagerTests.swift; sourceTree = "<group>"; };
+		5341564500000000000000D3 /* GroupPlanJourneyTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GroupPlanJourneyTests.swift; sourceTree = "<group>"; };
+		9CA1E0000000000000000022 /* SavingTimelineSnapshotTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SavingTimelineSnapshotTests.swift; sourceTree = "<group>"; };
 		27631892C68B8BF7E1BFBCD2 /* SupabaseServiceTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = SupabaseServiceTests.swift; sourceTree = "<group>"; };
 		73F534FD87463117278104F2 /* Info.plist */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
 		B965CFFB5D820A94B7CAD1B8 /* SupabaseService.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = SupabaseService.swift; sourceTree = "<group>"; };
@@ -299,6 +309,8 @@
 				000000000000000000000122 /* GamificationManagerTests.swift */,
 				000000000000000000000126 /* SubscriptionManagerTests.swift */,
 				000000000000000000000129 /* GroupSavingManagerTests.swift */,
+				5341564500000000000000D3 /* GroupPlanJourneyTests.swift */,
+				9CA1E0000000000000000022 /* SavingTimelineSnapshotTests.swift */,
 				27631892C68B8BF7E1BFBCD2 /* SupabaseServiceTests.swift */,
 				A0E9701C8A63461E9AF00103 /* StoreKitManagerTests.swift */,
 			);
@@ -317,6 +329,8 @@
 			isa = PBXGroup;
 			children = (
 				000000000000000000000108 /* ReviewGroupSavingView.swift */,
+				5341564500000000000000D2 /* CreateGroupPlanView.swift */,
+				5341564500000000000000D1 /* GroupPlanDraft.swift */,
 			);
 			path = GroupSaving;
 			sourceTree = "<group>";
@@ -337,6 +351,7 @@
 				000000000000000000000127 /* ReviewPlanView.swift */,
 				D20000000000000000000011 /* PersonalSavingSchedule.swift */,
 				D20000000000000000000012 /* PersonalPlanComponents.swift */,
+				9CA1E0000000000000000012 /* SavingInlineCalendar.swift */,
 				D20000000000000000000013 /* PersonalPlanMotion */,
 			);
 			path = PersonalSaving;
@@ -550,6 +565,8 @@
 				000000000000000000000006 /* ContentView.swift in Sources */,
 				000000000000000000000007 /* ConsistencyMilestoneView.swift in Sources */,
 				000000000000000000000008 /* ReviewGroupSavingView.swift in Sources */,
+				5341564500000000000000B2 /* CreateGroupPlanView.swift in Sources */,
+				5341564500000000000000B1 /* GroupPlanDraft.swift in Sources */,
 				000000000000000000000009 /* MockData.swift in Sources */,
 				00000000000000000000000A /* SavingRhythmView.swift in Sources */,
 				00000000000000000000000B /* PersonalGoal.swift in Sources */,
@@ -563,6 +580,7 @@
 				000000000000000000000019 /* ReviewPlanView.swift in Sources */,
 				D20000000000000000000001 /* PersonalSavingSchedule.swift in Sources */,
 				D20000000000000000000002 /* PersonalPlanComponents.swift in Sources */,
+				9CA1E0000000000000000011 /* SavingInlineCalendar.swift in Sources */,
 				00000000000000000000001A /* GroupSavingManager.swift in Sources */,
 				7B8C06B79BD2E563C8C18A18 /* PipoMascotView.swift in Sources */,
 				745C700C56FEE76E8F97792D /* SupabaseService.swift in Sources */,
@@ -583,6 +601,8 @@
 				000000000000000000000014 /* GamificationManagerTests.swift in Sources */,
 				000000000000000000000018 /* SubscriptionManagerTests.swift in Sources */,
 				00000000000000000000001B /* GroupSavingManagerTests.swift in Sources */,
+				5341564500000000000000B3 /* GroupPlanJourneyTests.swift in Sources */,
+				9CA1E0000000000000000021 /* SavingTimelineSnapshotTests.swift in Sources */,
 				0BA9C96E17E50FEC4485564A /* SupabaseServiceTests.swift in Sources */,
 				A0E9701C8A63461E9AF00104 /* StoreKitManagerTests.swift in Sources */,
 			);
