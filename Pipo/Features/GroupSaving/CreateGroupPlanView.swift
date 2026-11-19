@@ -118,6 +118,7 @@ struct CreateGroupPlanView: View {
             VStack(alignment: .leading, spacing: 6) {
                 PersonalPlanFieldLabel(title: "Goal category", status: "Required")
                 Button {
+                    nameFocused = false // Dismiss the keyboard before revealing category options.
                     categoryOpen.toggle()
                 } label: {
                     HStack {
