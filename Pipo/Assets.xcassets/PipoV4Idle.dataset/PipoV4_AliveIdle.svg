@@ -1,0 +1,437 @@
+<?xml version='1.0' encoding='UTF-8'?>
+<svg xmlns="http://www.w3.org/2000/svg" xmlns:inkscape="http://www.inkscape.org/namespaces/inkscape" width="460" height="500" viewBox="0 0 460 500">
+  <defs>
+    <radialGradient id="sh">
+      <stop offset="0%" stop-color="#aa5f72" stop-opacity="0.41"/>
+      <stop offset="42%" stop-color="#aa5f72" stop-opacity="0.28"/>
+      <stop offset="78%" stop-color="#aa5f72" stop-opacity="0.14"/>
+      <stop offset="100%" stop-color="#aa5f72" stop-opacity="0"/>
+    </radialGradient>
+    <linearGradient id="g2" x1="25%" x2="65%" y1="0%" y2="100%">
+      <stop offset="0%" stop-color="#ec8294"/>
+      <stop offset="27%" stop-color="#d2566b"/>
+      <stop offset="55%" stop-color="#ad3d52"/>
+      <stop offset="81%" stop-color="#9a3146"/>
+      <stop offset="100%" stop-color="#84243b"/>
+    </linearGradient>
+    <linearGradient id="g3" x1="25%" x2="65%" y1="0%" y2="100%">
+      <stop offset="0%" stop-color="#ec8294"/>
+      <stop offset="27%" stop-color="#d2566b"/>
+      <stop offset="55%" stop-color="#ad3d52"/>
+      <stop offset="81%" stop-color="#9a3146"/>
+      <stop offset="100%" stop-color="#84243b"/>
+    </linearGradient>
+    <linearGradient id="g4" x1="25%" x2="65%" y1="0%" y2="100%">
+      <stop offset="0%" stop-color="#ffbfcc"/>
+      <stop offset="26%" stop-color="#ffb0bd"/>
+      <stop offset="47%" stop-color="#fca1b0"/>
+      <stop offset="64%" stop-color="#f98c9d"/>
+      <stop offset="82%" stop-color="#ef7489"/>
+      <stop offset="100%" stop-color="#e95e77"/>
+    </linearGradient>
+    <linearGradient id="g5" x1="25%" x2="65%" y1="0%" y2="100%">
+      <stop offset="0%" stop-color="#d9536b"/>
+      <stop offset="54%" stop-color="#ea637a"/>
+      <stop offset="100%" stop-color="#f77c90"/>
+    </linearGradient>
+    <radialGradient id="body" cx="44%" cy="24%" r="81%">
+      <stop offset="0%" stop-color="#ffd0d7"/>
+      <stop offset="24%" stop-color="#ffbdc9"/>
+      <stop offset="43%" stop-color="#ffafbe"/>
+      <stop offset="69%" stop-color="#fda7b5"/>
+      <stop offset="79%" stop-color="#fda7b5"/>
+      <stop offset="88%" stop-color="#fa99a9"/>
+      <stop offset="95%" stop-color="#f8879b"/>
+      <stop offset="100%" stop-color="#eb7085"/>
+    </radialGradient>
+    <linearGradient id="g7" x1="25%" x2="65%" y1="0%" y2="100%">
+      <stop offset="0%" stop-color="#ffc6d1"/>
+      <stop offset="22%" stop-color="#ffbbc8"/>
+      <stop offset="44%" stop-color="#ffadbb"/>
+      <stop offset="65%" stop-color="#f99aaa"/>
+      <stop offset="83%" stop-color="#f78196"/>
+      <stop offset="100%" stop-color="#e96882"/>
+    </linearGradient>
+    <linearGradient id="g8" x1="25%" x2="65%" y1="0%" y2="100%">
+      <stop offset="0%" stop-color="#ff9baa"/>
+      <stop offset="25%" stop-color="#ed657c"/>
+      <stop offset="49%" stop-color="#d8425b"/>
+      <stop offset="80%" stop-color="#ea657d"/>
+      <stop offset="100%" stop-color="#f68b9d"/>
+    </linearGradient>
+    <linearGradient id="g9" x1="25%" x2="65%" y1="0%" y2="100%">
+      <stop offset="0%" stop-color="#ffbbc7"/>
+      <stop offset="33%" stop-color="#ffa8b7"/>
+      <stop offset="60%" stop-color="#fa8d9f"/>
+      <stop offset="100%" stop-color="#e46881"/>
+    </linearGradient>
+    <linearGradient id="g10" x1="25%" x2="65%" y1="0%" y2="100%">
+      <stop offset="0%" stop-color="#d96278"/>
+      <stop offset="32%" stop-color="#c85068"/>
+      <stop offset="67%" stop-color="#b1435b"/>
+      <stop offset="100%" stop-color="#923048"/>
+    </linearGradient>
+    <linearGradient id="g11" x1="25%" x2="65%" y1="0%" y2="100%">
+      <stop offset="0%" stop-color="#ffbbc7"/>
+      <stop offset="33%" stop-color="#ffa8b7"/>
+      <stop offset="60%" stop-color="#fa8d9f"/>
+      <stop offset="100%" stop-color="#e46881"/>
+    </linearGradient>
+    <linearGradient id="g12" x1="25%" x2="65%" y1="0%" y2="100%">
+      <stop offset="0%" stop-color="#d96278"/>
+      <stop offset="32%" stop-color="#c85068"/>
+      <stop offset="67%" stop-color="#b1435b"/>
+      <stop offset="100%" stop-color="#923048"/>
+    </linearGradient>
+    <radialGradient id="blushL" cx="48%" cy="52%" r="60%">
+      <stop offset="0%" stop-color="#f68b9d"/>
+      <stop offset="77%" stop-color="#f6899b"/>
+      <stop offset="100%" stop-color="#faa2b0"/>
+    </radialGradient>
+    <radialGradient id="blushR" cx="48%" cy="52%" r="60%">
+      <stop offset="0%" stop-color="#f68b9d"/>
+      <stop offset="77%" stop-color="#f6899b"/>
+      <stop offset="100%" stop-color="#faa2b0"/>
+    </radialGradient>
+    <linearGradient id="g15" x1="25%" x2="65%" y1="0%" y2="100%">
+      <stop offset="0%" stop-color="#401018"/>
+      <stop offset="53%" stop-color="#601822"/>
+      <stop offset="100%" stop-color="#913242"/>
+    </linearGradient>
+    <linearGradient id="g16" x1="25%" x2="65%" y1="0%" y2="100%">
+      <stop offset="0%" stop-color="#401018"/>
+      <stop offset="53%" stop-color="#601822"/>
+      <stop offset="100%" stop-color="#913242"/>
+    </linearGradient>
+    <linearGradient id="g18" x1="25%" x2="65%" y1="0%" y2="100%">
+      <stop offset="0%" stop-color="#682029"/>
+      <stop offset="46%" stop-color="#51151e"/>
+      <stop offset="100%" stop-color="#3e0b14"/>
+    </linearGradient>
+    <linearGradient id="g24" x1="25%" x2="65%" y1="0%" y2="100%">
+      <stop offset="0%" stop-color="#682029"/>
+      <stop offset="46%" stop-color="#51151e"/>
+      <stop offset="100%" stop-color="#3e0b14"/>
+    </linearGradient>
+    <linearGradient id="g29" x1="25%" x2="65%" y1="0%" y2="100%">
+      <stop offset="0%" stop-color="#ff9daa"/>
+      <stop offset="29%" stop-color="#fa7f90"/>
+      <stop offset="65%" stop-color="#ee667c"/>
+      <stop offset="100%" stop-color="#ea667b"/>
+    </linearGradient>
+    <linearGradient id="g30" x1="25%" x2="65%" y1="0%" y2="100%">
+      <stop offset="0%" stop-color="#7b2132"/>
+      <stop offset="65%" stop-color="#8e2535"/>
+      <stop offset="100%" stop-color="#a33545"/>
+    </linearGradient>
+    <linearGradient id="g31" x1="25%" x2="65%" y1="0%" y2="100%">
+      <stop offset="0%" stop-color="#7b2132"/>
+      <stop offset="65%" stop-color="#8e2535"/>
+      <stop offset="100%" stop-color="#a33545"/>
+    </linearGradient>
+    <linearGradient id="g35" x1="25%" x2="65%" y1="0%" y2="100%">
+      <stop offset="0%" stop-color="#ff639a"/>
+      <stop offset="34%" stop-color="#f94d8e"/>
+      <stop offset="54%" stop-color="#ea407f"/>
+      <stop offset="76%" stop-color="#d1316e"/>
+      <stop offset="100%" stop-color="#b32959"/>
+    </linearGradient>
+    <linearGradient id="g36" x1="25%" x2="65%" y1="0%" y2="100%">
+      <stop offset="0%" stop-color="#ff639a"/>
+      <stop offset="34%" stop-color="#f94d8e"/>
+      <stop offset="54%" stop-color="#ea407f"/>
+      <stop offset="76%" stop-color="#d1316e"/>
+      <stop offset="100%" stop-color="#b32959"/>
+    </linearGradient>
+    <linearGradient id="g37" x1="25%" x2="65%" y1="0%" y2="100%">
+      <stop offset="0%" stop-color="#ff639a"/>
+      <stop offset="34%" stop-color="#f94d8e"/>
+      <stop offset="54%" stop-color="#ea407f"/>
+      <stop offset="76%" stop-color="#d1316e"/>
+      <stop offset="100%" stop-color="#b32959"/>
+    </linearGradient>
+    <linearGradient id="g38" x1="25%" x2="65%" y1="0%" y2="100%">
+      <stop offset="0%" stop-color="#ff639a"/>
+      <stop offset="34%" stop-color="#f94d8e"/>
+      <stop offset="54%" stop-color="#ea407f"/>
+      <stop offset="76%" stop-color="#d1316e"/>
+      <stop offset="100%" stop-color="#b32959"/>
+    </linearGradient>
+    <linearGradient id="g39" x1="25%" x2="65%" y1="0%" y2="100%">
+      <stop offset="0%" stop-color="#ff639a"/>
+      <stop offset="34%" stop-color="#f94d8e"/>
+      <stop offset="54%" stop-color="#ea407f"/>
+      <stop offset="76%" stop-color="#d1316e"/>
+      <stop offset="100%" stop-color="#b32959"/>
+    </linearGradient>
+    <linearGradient id="g40" x1="25%" x2="65%" y1="0%" y2="100%">
+      <stop offset="0%" stop-color="#ffe48c"/>
+      <stop offset="22%" stop-color="#ffdb72"/>
+      <stop offset="60%" stop-color="#ffd469"/>
+      <stop offset="80%" stop-color="#ffc650"/>
+      <stop offset="100%" stop-color="#f4ab32"/>
+    </linearGradient>
+    <clipPath id="ScleraL" clipPathUnits="userSpaceOnUse">
+      <path d="M118 148 C119 137 124 127 131 125 C138 123 143 129 145 138 C146 145 144 155 141 159 C138 164 131 165 125 163 C119 161 117 155 118 148 Z"/>
+    </clipPath>
+    <clipPath id="ApertureL" clipPathUnits="userSpaceOnUse">
+      <path d="M112 119.000 Q131 115.000 150 119.000 L150 166.000 Q131 174.000 112 166.000 Z">
+        <animate attributeName="d" dur="6.5s" repeatCount="indefinite" calcMode="spline" keyTimes="0;0.291538462;0.302461538;0.310153846;0.323846154;1" values="M112 119.000 Q131 115.000 150 119.000 L150 166.000 Q131 174.000 112 166.000 Z;M112 119.000 Q131 115.000 150 119.000 L150 166.000 Q131 174.000 112 166.000 Z;M112 152.000 Q131 157.000 150 152.000 L150 152.000 Q131 157.000 112 152.000 Z;M112 152.000 Q131 157.000 150 152.000 L150 152.000 Q131 157.000 112 152.000 Z;M112 119.000 Q131 115.000 150 119.000 L150 166.000 Q131 174.000 112 166.000 Z;M112 119.000 Q131 115.000 150 119.000 L150 166.000 Q131 174.000 112 166.000 Z" keySplines="0.42 0 0.58 1;0.42 0 0.58 1;0.42 0 0.58 1;0.42 0 0.58 1;0.42 0 0.58 1"/>
+      </path>
+    </clipPath>
+    <clipPath id="ScleraR" clipPathUnits="userSpaceOnUse">
+      <path d="M182 138 C183 130 187 125 193 125 C200 125 206 132 208 142 C211 153 209 160 203 163 C198 165 190 163 186 160 C182 155 181 147 182 138 Z"/>
+    </clipPath>
+    <clipPath id="ApertureR" clipPathUnits="userSpaceOnUse">
+      <path d="M177 119.000 Q196 115.000 215 119.000 L215 166.000 Q196 174.000 177 166.000 Z">
+        <animate attributeName="d" dur="6.5s" repeatCount="indefinite" calcMode="spline" keyTimes="0;0.291538462;0.302461538;0.310153846;0.323846154;1" values="M177 119.000 Q196 115.000 215 119.000 L215 166.000 Q196 174.000 177 166.000 Z;M177 119.000 Q196 115.000 215 119.000 L215 166.000 Q196 174.000 177 166.000 Z;M177 152.000 Q196 157.000 215 152.000 L215 152.000 Q196 157.000 177 152.000 Z;M177 152.000 Q196 157.000 215 152.000 L215 152.000 Q196 157.000 177 152.000 Z;M177 119.000 Q196 115.000 215 119.000 L215 166.000 Q196 174.000 177 166.000 Z;M177 119.000 Q196 115.000 215 119.000 L215 166.000 Q196 174.000 177 166.000 Z" keySplines="0.42 0 0.58 1;0.42 0 0.58 1;0.42 0 0.58 1;0.42 0 0.58 1;0.42 0 0.58 1"/>
+      </path>
+    </clipPath>
+  </defs>
+  <g id="PipoV4_Root" transform="translate(-69.7 -66.35) scale(1.85)">
+    <g transform="translate(160 270)">
+      <g>
+        <g transform="translate(-160 -270)">
+          <g aria-label="GroundShadow" inkscape:label="GroundShadow">
+            <ellipse cx="160" cy="270" rx="90" ry="9" fill="url(#sh)"/>
+          </g>
+        </g>
+        <animateTransform attributeName="transform" dur="6.5s" repeatCount="indefinite" calcMode="spline" keyTimes="0;0.135384615;0.295384615;0.467692308;0.672307692;0.813846154;0.973846154;1" values="1 1;0.991 0.965;1.003 1.01;0.993 0.97;1.003 1.01;0.995 0.98;1 1;1 1" keySplines="0.42 0 0.58 1;0.42 0 0.58 1;0.42 0 0.58 1;0.42 0 0.58 1;0.42 0 0.58 1;0.42 0 0.58 1;0.42 0 0.58 1" type="scale"/>
+      </g>
+    </g>
+    <g aria-label="TailRoot" inkscape:groupmode="layer" inkscape:label="TailRoot">
+      <g aria-label="TailCurl" inkscape:label="TailCurl">
+        <path d="M213 233 C220 246 237 254 245 242 C253 229 241 226 236 236 C234 239 234 242 235 244" fill="none" stroke="#fa8e9e" stroke-width="5" stroke-linecap="round" stroke-linejoin="round"/>
+        <path d="M216 235 C222 244 228 247 236 247 M239 234 Q243 229 246 234" fill="none" stroke="#ffb6c2" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/>
+      </g>
+      <animateTransform attributeName="transform" dur="6.5s" repeatCount="indefinite" calcMode="spline" keyTimes="0;0.28;0.418461538;0.533846154;0.593846154;0.756923077;0.887692308;1" values="0 214 234;0 214 234;-1.0 214 234;-3.3 214 234;-2.8 214 234;0.65 214 234;0 214 234;0 214 234" keySplines="0.42 0 0.58 1;0.42 0 0.58 1;0.42 0 0.58 1;0.42 0 0.58 1;0.42 0 0.58 1;0.42 0 0.58 1;0.42 0 0.58 1" type="rotate"/>
+    </g>
+    <g aria-label="Foot_L" inkscape:label="Foot_L">
+      <path d="M113 239 C115 254 118 267 129 271 C140 276 150 270 153 261 L157 243 Z" fill="url(#g2)"/>
+      <path d="M118 251 Q135 256 144 261 Q136 266 133 270 C125 269 121 264 118 251" fill="#b44459"/>
+    </g>
+    <g aria-label="Foot_R" inkscape:label="Foot_R">
+      <path d="M170 242 C171 254 173 267 184 271 C194 275 204 271 209 260 L216 239 Z" fill="url(#g3)"/>
+      <path d="M177 251 Q189 254 201 253 Q184 260 187 264 Q192 269 198 269 Q186 274 179 265 Z" fill="#a73b4e"/>
+    </g>
+    <g transform="translate(162 254)">
+      <g>
+        <g transform="translate(-162 -254)">
+          <g transform="translate(162 249)">
+            <g>
+              <g transform="translate(-162 -249)">
+                <g id="UpperBody">
+                  <g>
+                    <g aria-label="EarBehind_R" inkscape:groupmode="layer" inkscape:label="EarBehind_R">
+                      <g aria-label="Back" inkscape:label="Back">
+                        <path d="M200 96 C214 93 225 97 233 102 C240 107 244 113 251 117 C264 126 274 136 269 148 C265 158 253 167 242 167 C232 162 226 151 219 139 C212 124 204 110 200 96 Z" fill="url(#g4)"/>
+                        <path d="M225 101 Q232 103 243 114 C254 124 266 126 269 137 C263 137 251 131 243 126 Q230 114 225 101 Z" fill="#ffb8c5" opacity=".64"/>
+                        <path d="M234 122 C244 134 259 143 269 144 L266 152 C251 147 241 138 234 122 Z" fill="#f58298" opacity=".54"/>
+                      </g>
+                      <g aria-label="Fold" inkscape:label="Fold">
+                        <path d="M212 101 C224 107 229 124 239 135 C245 142 256 146 263 150 C260 156 250 164 243 165 C238 153 227 123 212 101 Z" fill="url(#g5)"/>
+                        <path d="M217 106 C226 117 230 132 239 144 Q244 150 244 158 Q235 144 230 132 Z" fill="#df526a" opacity=".38"/>
+                      </g>
+                      <animateTransform attributeName="transform" dur="6.5s" repeatCount="indefinite" calcMode="spline" keyTimes="0;0.236923077;0.363076923;0.490769231;0.558461538;0.698461538;0.809230769;0.889230769;1" values="0 215 102;0 215 102;1.1 215 102;3.7 215 102;3.1 215 102;0.65 215 102;-0.7 215 102;0 215 102;0 215 102" keySplines="0.42 0 0.58 1;0.42 0 0.58 1;0.42 0 0.58 1;0.42 0 0.58 1;0.42 0 0.58 1;0.42 0 0.58 1;0.42 0 0.58 1;0.42 0 0.58 1" type="rotate"/>
+                    </g>
+                    <animateTransform attributeName="transform" dur="6.5s" repeatCount="indefinite" calcMode="spline" keyTimes="0;0.215384615;0.296923077;0.464615385;0.553846154;0.64;0.809230769;0.910769231;1" values="0.0 162 172;0.0 162 172;0.481 162 172;1.887 162 172;1.776 162 172;1.221 162 172;-0.1776 162 172;0.0 162 172;0.0 162 172" keySplines="0.42 0 0.58 1;0.42 0 0.58 1;0.42 0 0.58 1;0.42 0 0.58 1;0.42 0 0.58 1;0.42 0 0.58 1;0.42 0 0.58 1;0.42 0 0.58 1" type="rotate"/>
+                  </g>
+                  <g aria-label="BodyMesh" inkscape:label="BodyMesh">
+                    <path d="M87 150 C98 125 108 104 126 95 C142 86 160 86 176 88 C196 89 211 98 221 112 C234 132 243 159 245 181 C248 203 239 222 224 235 C210 248 190 255 168 255 C143 258 116 252 103 241 C87 229 80 213 80 193 C80 177 82 162 87 150 Z" fill="url(#body)"/>
+                    <path d="M89 204 C93 229 122 246 152 248 C179 251 207 244 225 232 C209 250 190 255 168 255 C140 257 116 251 103 240 C94 231 90 220 89 204 Z" fill="#f0798e" opacity=".30"/>
+                    <path d="M166 89 C181 87 199 93 214 104 L220 112 C212 107 204 103 198 103 C189 102 184 98 177 98 C171 97 167 95 165 92 Z" fill="#d75973" opacity=".36"/>
+                    <path d="M173 91 C186 88 199 94 211 103 C196 99 190 99 181 97 Z" fill="#be4d67" opacity=".31"/>
+                    <path d="M142 162 C146 174 154 177 165 176 C175 176 181 169 182 164 C184 176 176 181 165 181 C153 181 145 176 142 171 Z" fill="#ec8499" opacity=".42"/>
+                    <path d="M94 221 C105 234 114 236 127 239 C143 245 155 245 165 247 C177 244 189 246 199 240 C211 238 223 228 230 221 C218 239 209 246 196 250 C181 255 160 256 145 253 C125 251 105 244 94 226 Z" fill="#f68da1" opacity=".42"/>
+                    <path d="M101 232 C116 245 132 248 147 249 C168 253 203 248 220 237 C206 250 192 254 169 255 C142 257 118 250 107 242 Z" fill="#f57c91" opacity=".33"/>
+                  </g>
+                  <g>
+                    <g aria-label="HeadFaceRoot" inkscape:groupmode="layer" inkscape:label="HeadFaceRoot">
+                      <g aria-label="Ear_L" inkscape:groupmode="layer" inkscape:label="Ear_L">
+                        <g aria-label="Flap" inkscape:label="Flap">
+                          <path d="M54 116 C55 105 60 98 69 92 C82 84 90 79 99 74 C107 70 117 68 123 70 C135 72 142 78 148 89 C138 90 127 96 119 106 C114 113 110 125 103 132 C96 139 87 142 79 142 C65 142 53 133 54 116 Z" fill="url(#g7)"/>
+                          <path d="M71 137 C75 131 86 132 95 129 C104 125 108 118 114 109 C110 124 103 135 93 139 C85 143 75 143 71 137 Z" fill="#ed748a" opacity=".6"/>
+                          <path d="M57 105 C65 96 86 89 98 81 C109 75 119 74 125 76 C118 79 113 85 109 90 C93 99 78 102 65 102 Z" fill="#ffb6c4" opacity=".68"/>
+                          <path d="M54 116 C62 123 75 124 86 121 C98 118 106 113 114 103 C109 119 101 128 88 131 C75 135 61 131 55 123 Z" fill="#fa91a3" opacity=".56"/>
+                          <path d="M56 125 C65 132 82 135 95 128 Q108 121 112 114 Q105 132 92 138 Q65 146 56 125 Z" fill="#f68296" opacity=".56"/>
+                        </g>
+                        <g aria-label="Fold" inkscape:label="Fold">
+                          <path d="M96 137 C105 128 112 113 116 99 C119 89 122 79 130 79 C136 79 143 84 148 89 C134 92 123 99 117 110 C111 122 107 131 96 137 Z" fill="url(#g8)"/>
+                          <path d="M117 105 C119 93 122 82 129 81 C135 80 141 85 144 90 C134 91 125 97 117 105 Z" fill="#d9435b" opacity=".63"/>
+                        </g>
+                        <animateTransform attributeName="transform" dur="6.5s" repeatCount="indefinite" calcMode="spline" keyTimes="0;0.249230769;0.355384615;0.504615385;0.573846154;0.686153846;0.818461538;0.92;1" values="0 145 89;0 145 89;-0.8 145 89;-3.3 145 89;-2.6 145 89;-0.8 145 89;1.0 145 89;0 145 89;0 145 89" keySplines="0.42 0 0.58 1;0.42 0 0.58 1;0.42 0 0.58 1;0.42 0 0.58 1;0.42 0 0.58 1;0.42 0 0.58 1;0.42 0 0.58 1;0.42 0 0.58 1" type="rotate"/>
+                      </g>
+                      <g aria-label="Cheek_L" inkscape:label="Cheek_L">
+                        <ellipse cx="111" cy="167.8" rx="14.2" ry="9.3" fill="url(#blushL)"/>
+                      </g>
+                      <g aria-label="Cheek_R" inkscape:label="Cheek_R">
+                        <ellipse cx="215" cy="168.5" rx="14.2" ry="9.3" fill="url(#blushR)"/>
+                      </g>
+                      <g aria-label="Brow_L" inkscape:label="Brow_L">
+                        <path d="M127 111 C131 105 138 105 142 108 Q145 112 140 112 C135 110 133 112 129 114 Q125 115 127 111 Z" fill="url(#g15)"/>
+                        <animateTransform attributeName="transform" dur="6.5s" repeatCount="indefinite" calcMode="spline" keyTimes="0;0.193846154;0.253846154;0.290769231;0.304615385;0.333846154;0.543076923;0.7;1" values="0 0;0 0;0 -0.36;0 -0.4;0 0.45;0 -0.35;0 -0.5;0 0;0 0" keySplines="0.42 0 0.58 1;0.42 0 0.58 1;0.42 0 0.58 1;0.42 0 0.58 1;0.42 0 0.58 1;0.42 0 0.58 1;0.42 0 0.58 1;0.42 0 0.58 1" type="translate"/>
+                      </g>
+                      <g aria-label="Brow_R" inkscape:label="Brow_R">
+                        <path d="M186 110 C190 105 199 107 202 112 Q204 117 200 116 C196 113 193 111 189 113 Q185 114 186 110 Z" fill="url(#g16)"/>
+                        <animateTransform attributeName="transform" dur="6.5s" repeatCount="indefinite" calcMode="spline" keyTimes="0;0.193846154;0.253846154;0.290769231;0.304615385;0.333846154;0.543076923;0.7;1" values="0 0;0 0;0 -0.9;0 -0.4;0 0.45;0 -0.35;0 -0.5;0 0;0 0" keySplines="0.42 0 0.58 1;0.42 0 0.58 1;0.42 0 0.58 1;0.42 0 0.58 1;0.42 0 0.58 1;0.42 0 0.58 1;0.42 0 0.58 1;0.42 0 0.58 1" type="translate"/>
+                      </g>
+                      <g aria-label="Eye_L" inkscape:groupmode="layer" inkscape:label="Eye_L">
+                        <g aria-label="Open" inkscape:groupmode="layer" inkscape:label="Open" clip-path="url(#ApertureL)">
+                          <g aria-label="EyeWhite" inkscape:label="EyeWhite">
+                            <path d="M118 148 C119 137 124 127 131 125 C138 123 143 129 145 138 C146 145 144 155 141 159 C138 164 131 165 125 163 C119 161 117 155 118 148 Z" fill="#fff8f7"/>
+                            <path d="M119 143 Q123 126 132 125 Q138 124 142 131" fill="none" stroke="#d97b89" stroke-width="0.85" stroke-linecap="round" stroke-linejoin="round"/>
+                          </g>
+                          <g clip-path="url(#ScleraL)">
+                            <g aria-label="IrisPupil" inkscape:groupmode="layer" inkscape:label="IrisPupil">
+                              <g aria-label="Pupil" inkscape:label="Pupil">
+                                <path d="M131 139 C134 131 138 130 141 133 C145 137 144 146 141 154 C139 159 135 161 132 158 C129 155 129 146 131 139 Z" fill="url(#g18)"/>
+                              </g>
+                              <g aria-label="Catchlight" inkscape:label="Catchlight">
+                                <ellipse cx="138.5" cy="139.6" rx="2.1" ry="2.8" fill="#fffafa"/>
+                              </g>
+                              <animateTransform attributeName="transform" dur="6.5s" repeatCount="indefinite" calcMode="spline" keyTimes="0;0.190769231;0.235384615;0.378461538;0.515384615;0.564615385;1" values="0 0;0 0;2.05 -0.65;2.25 -0.55;2.25 -0.55;0 0;0 0" keySplines="0.42 0 0.58 1;0.42 0 0.58 1;0.42 0 0.58 1;0.42 0 0.58 1;0.42 0 0.58 1;0.42 0 0.58 1" type="translate"/>
+                            </g>
+                          </g>
+                        </g>
+                        <g aria-label="LowerLid" inkscape:groupmode="layer" inkscape:label="LowerLid">
+                          <g aria-label="Blink" inkscape:label="Blink" display="none">
+                            <path d="M117 149 Q130 160 144 149" fill="none" stroke="#5d1c29" stroke-width="3.4" stroke-linecap="round" stroke-linejoin="round"/>
+                          </g>
+                        </g>
+                        <g aria-label="UpperLid" inkscape:groupmode="layer" inkscape:label="UpperLid">
+                          <g aria-label="Gentle" inkscape:label="Gentle" display="none">
+                            <path d="M117 144 Q121 122 132 123 Q141 123 145 136 Q130 128 117 144 Z" fill="#ffafbd"/>
+                            <path d="M119 141 Q132 130 144 136" fill="none" stroke="#ca687e" stroke-width="1.2" stroke-linecap="round" stroke-linejoin="round"/>
+                          </g>
+                          <g aria-label="Joy" inkscape:label="Joy" display="none">
+                            <path d="M118 149 C124 135 136 134 142 146" fill="none" stroke="#591622" stroke-width="4.2" stroke-linecap="round" stroke-linejoin="round"/>
+                          </g>
+                        </g>
+                        <path fill="none" stroke="#66202f" stroke-width="2.7" stroke-linecap="round" opacity="0" d="M118.5 119.000 Q131 115.000 143.5 119.000">
+                          <animate attributeName="d" dur="6.5s" repeatCount="indefinite" calcMode="spline" keyTimes="0;0.291538462;0.302461538;0.310153846;0.323846154;1" values="M118.5 119.000 Q131 115.000 143.5 119.000;M118.5 119.000 Q131 115.000 143.5 119.000;M118.5 152.000 Q131 157.000 143.5 152.000;M118.5 152.000 Q131 157.000 143.5 152.000;M118.5 119.000 Q131 115.000 143.5 119.000;M118.5 119.000 Q131 115.000 143.5 119.000" keySplines="0.42 0 0.58 1;0.42 0 0.58 1;0.42 0 0.58 1;0.42 0 0.58 1;0.42 0 0.58 1"/>
+                          <animate attributeName="opacity" dur="6.5s" repeatCount="indefinite" calcMode="spline" keyTimes="0;0.294769231;0.300923077;0.310307692;0.319230769;1" values="0;0;0.94;0.94;0;0" keySplines="0.42 0 0.58 1;0.42 0 0.58 1;0.42 0 0.58 1;0.42 0 0.58 1;0.42 0 0.58 1"/>
+                        </path>
+                      </g>
+                      <g aria-label="Eye_R" inkscape:groupmode="layer" inkscape:label="Eye_R">
+                        <g aria-label="Open" inkscape:groupmode="layer" inkscape:label="Open" clip-path="url(#ApertureR)">
+                          <g aria-label="EyeWhite" inkscape:label="EyeWhite">
+                            <path d="M182 138 C183 130 187 125 193 125 C200 125 206 132 208 142 C211 153 209 160 203 163 C198 165 190 163 186 160 C182 155 181 147 182 138 Z" fill="#fff8f7"/>
+                            <path d="M184 131 Q190 121 198 127 Q205 130 208 144" fill="none" stroke="#d97b89" stroke-width="0.85" stroke-linecap="round" stroke-linejoin="round"/>
+                          </g>
+                          <g clip-path="url(#ScleraR)">
+                            <g aria-label="IrisPupil" inkscape:groupmode="layer" inkscape:label="IrisPupil">
+                              <g aria-label="Pupil" inkscape:label="Pupil">
+                                <path d="M184 138 C185 133 188 131 191 133 C197 136 199 147 197 155 C196 160 192 161 188 158 C184 153 183 144 184 138 Z" fill="url(#g24)"/>
+                              </g>
+                              <g aria-label="Catchlight" inkscape:label="Catchlight">
+                                <ellipse cx="188.3" cy="139.9" rx="2.1" ry="2.8" fill="#fffafa"/>
+                              </g>
+                              <animateTransform attributeName="transform" dur="6.5s" repeatCount="indefinite" calcMode="spline" keyTimes="0;0.190769231;0.235384615;0.378461538;0.515384615;0.564615385;1" values="0 0;0 0;2.05 -0.65;2.25 -0.55;2.25 -0.55;0 0;0 0" keySplines="0.42 0 0.58 1;0.42 0 0.58 1;0.42 0 0.58 1;0.42 0 0.58 1;0.42 0 0.58 1;0.42 0 0.58 1" type="translate"/>
+                            </g>
+                          </g>
+                        </g>
+                        <g aria-label="LowerLid" inkscape:groupmode="layer" inkscape:label="LowerLid">
+                          <g aria-label="Blink" inkscape:label="Blink" display="none">
+                            <path d="M183 149 Q196 160 209 149" fill="none" stroke="#5d1c29" stroke-width="3.4" stroke-linecap="round" stroke-linejoin="round"/>
+                          </g>
+                        </g>
+                        <g aria-label="UpperLid" inkscape:groupmode="layer" inkscape:label="UpperLid">
+                          <g aria-label="Gentle" inkscape:label="Gentle" display="none">
+                            <path d="M181 136 Q186 121 196 124 Q206 128 210 145 Q198 132 181 136 Z" fill="#ffafbd"/>
+                            <path d="M183 136 Q197 131 207 141" fill="none" stroke="#ca687e" stroke-width="1.2" stroke-linecap="round" stroke-linejoin="round"/>
+                          </g>
+                          <g aria-label="Joy" inkscape:label="Joy" display="none">
+                            <path d="M184 146 C191 134 203 137 208 150" fill="none" stroke="#591622" stroke-width="4.2" stroke-linecap="round" stroke-linejoin="round"/>
+                          </g>
+                        </g>
+                        <path fill="none" stroke="#66202f" stroke-width="2.7" stroke-linecap="round" opacity="0" d="M183.5 119.000 Q196 115.000 208.5 119.000">
+                          <animate attributeName="d" dur="6.5s" repeatCount="indefinite" calcMode="spline" keyTimes="0;0.291538462;0.302461538;0.310153846;0.323846154;1" values="M183.5 119.000 Q196 115.000 208.5 119.000;M183.5 119.000 Q196 115.000 208.5 119.000;M183.5 152.000 Q196 157.000 208.5 152.000;M183.5 152.000 Q196 157.000 208.5 152.000;M183.5 119.000 Q196 115.000 208.5 119.000;M183.5 119.000 Q196 115.000 208.5 119.000" keySplines="0.42 0 0.58 1;0.42 0 0.58 1;0.42 0 0.58 1;0.42 0 0.58 1;0.42 0 0.58 1"/>
+                          <animate attributeName="opacity" dur="6.5s" repeatCount="indefinite" calcMode="spline" keyTimes="0;0.294769231;0.300923077;0.310307692;0.319230769;1" values="0;0;0.94;0.94;0;0" keySplines="0.42 0 0.58 1;0.42 0 0.58 1;0.42 0 0.58 1;0.42 0 0.58 1;0.42 0 0.58 1"/>
+                        </path>
+                      </g>
+                      <g aria-label="SnoutRoot" inkscape:groupmode="layer" inkscape:label="SnoutRoot">
+                        <g aria-label="Nose" inkscape:label="Nose">
+                          <path d="M142 157 C143 148 149 144 159 144 C170 143 179 147 182 154 C186 162 182 171 175 174 C167 179 151 176 146 172 C142 168 140 163 142 157 Z" fill="url(#g29)"/>
+                        </g>
+                        <g aria-label="Nostril_L" inkscape:label="Nostril_L">
+                          <path d="M150.9 157 Q151.1 151 154.6 151 Q158.6 151 158.2 158 Q158.29999999999998 164 154.6 163 Q150.6 163 150.9 157 Z" fill="url(#g30)"/>
+                        </g>
+                        <g aria-label="Nostril_R" inkscape:label="Nostril_R">
+                          <path d="M167.5 157 Q167.7 151 171.2 151 Q175.2 151 174.79999999999998 158 Q174.89999999999998 164 171.2 163 Q167.2 163 167.5 157 Z" fill="url(#g31)"/>
+                        </g>
+                      </g>
+                      <g aria-label="Mouth" inkscape:groupmode="layer" inkscape:label="Mouth">
+                        <g aria-label="Rest" inkscape:label="Rest">
+                          <path d="M153 179 C159 185 167 185 173.5 178.8" fill="none" stroke="#741e2d" stroke-width="3.1" stroke-linecap="round" stroke-linejoin="round">
+                            <animate attributeName="d" dur="6.5s" repeatCount="indefinite" calcMode="spline" keyTimes="0;0.526153846;0.627692308;0.689230769;0.869230769;1" values="M153 179 C159 185 167 185 173.5 178.8;M153 179 C159 185 167 185 173.5 178.8;M151.9 178.1 C157.8 185.9 168.5 186.4 174.6 178.0;M152 178.2 C157.9 185.8 168.2 186.2 174.4 178.1;M153 179 C159 185 167 185 173.5 178.8;M153 179 C159 185 167 185 173.5 178.8" keySplines="0.42 0 0.58 1;0.42 0 0.58 1;0.42 0 0.58 1;0.42 0 0.58 1;0.42 0 0.58 1"/>
+                          </path>
+                        </g>
+                        <g aria-label="Gentle" inkscape:label="Gentle" display="none">
+                          <path d="M151.8 179 C156 185 168 187 175.4 178.6" fill="none" stroke="#762032" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/>
+                        </g>
+                        <g aria-label="Joy" inkscape:label="Joy" display="none">
+                          <path d="M149 176 Q161 181 177 175 C175 188 171 198 162 199 C152 199 148 187 149 176 Z" fill="#701524"/>
+                          <path d="M153 192 Q162 185 172 190 Q167 200 161 199 Q156 199 153 192 Z" fill="#ef637b"/>
+                        </g>
+                      </g>
+                    </g>
+                    <animateTransform attributeName="transform" dur="6.5s" repeatCount="indefinite" calcMode="spline" keyTimes="0;0.215384615;0.296923077;0.464615385;0.553846154;0.64;0.809230769;0.910769231;1" values="0.0 162 172;0.0 162 172;0.481 162 172;1.887 162 172;1.776 162 172;1.221 162 172;-0.1776 162 172;0.0 162 172;0.0 162 172" keySplines="0.42 0 0.58 1;0.42 0 0.58 1;0.42 0 0.58 1;0.42 0 0.58 1;0.42 0 0.58 1;0.42 0 0.58 1;0.42 0 0.58 1;0.42 0 0.58 1" type="rotate"/>
+                  </g>
+                  <g aria-label="Arm_L" inkscape:groupmode="layer" inkscape:label="Arm_L">
+                    <g aria-label="Arm" inkscape:label="Arm">
+                      <path d="M68 205 C70 192 81 184 92 183 C100 181 107 188 110 198 C114 209 107 220 99 225 C90 231 77 226 72 218 Z" fill="url(#g9)"/>
+                    </g>
+                    <g aria-label="Hoof" inkscape:label="Hoof">
+                      <path d="M69 201 C72 195 80 195 87 197 C96 199 103 204 103 213 C103 222 97 227 89 228 C78 230 69 222 67 214 C66 209 67 204 69 201 Z" fill="url(#g10)"/>
+                      <path d="M69 199 Q81 194 92 201 Q99 204 101 210 C88 211 83 204 69 203 Z" fill="#d25b72" opacity=".6"/>
+                      <path d="M68 207 C73 215 89 214 96 220 L100 221 Q92 231 81 226 Q71 222 68 215 Z" fill="#95344d" opacity=".35"/>
+                    </g>
+                    <animateTransform attributeName="transform" dur="6.5s" repeatCount="indefinite" calcMode="spline" keyTimes="0;0.36;0.48;0.538461538;0.675384615;0.727692308;0.787692308;1" values="0 99 191;0 99 191;8.2 99 191;7.5 99 191;0 99 191;-0.6 99 191;0 99 191;0 99 191" keySplines="0.42 0 0.58 1;0.42 0 0.58 1;0.42 0 0.58 1;0.42 0 0.58 1;0.42 0 0.58 1;0.42 0 0.58 1;0.42 0 0.58 1" type="rotate"/>
+                  </g>
+                  <g aria-label="Arm_R" inkscape:groupmode="layer" inkscape:label="Arm_R">
+                    <g aria-label="Arm" inkscape:label="Arm">
+                      <path d="M217 199 C221 188 229 183 238 183 C250 184 258 194 258 205 C258 217 248 227 237 228 C224 230 215 221 215 209 Z" fill="url(#g11)"/>
+                    </g>
+                    <g aria-label="Hoof" inkscape:label="Hoof">
+                      <path d="M226 209 C229 199 237 193 247 193 C253 193 258 198 259 205 C260 216 250 226 239 228 C232 229 226 226 225 219 C224 216 225 212 226 209 Z" fill="url(#g12)"/>
+                      <path d="M229 207 Q234 197 247 194 Q252 194 254 197 Q250 202 243 205 Q236 211 228 214 Z" fill="#d15b72" opacity=".65"/>
+                    </g>
+                  </g>
+                  <g>
+                    <g aria-label="FlowerRoot" inkscape:groupmode="layer" inkscape:label="FlowerRoot">
+                      <g aria-label="Petal_1" inkscape:label="Petal_1">
+                        <path d="M190 78 C182 73 180 69 185 66 C191 62 201 65 205 71 Q208 77 203 82 Z" fill="url(#g35)"/>
+                      </g>
+                      <g aria-label="Petal_2" inkscape:label="Petal_2">
+                        <path d="M189 79 C181 77 176 83 169 82 C162 81 158 76 160 71 C162 63 171 64 178 67 C184 70 188 74 189 79 Z" fill="url(#g36)"/>
+                      </g>
+                      <g aria-label="Petal_3" inkscape:label="Petal_3">
+                        <path d="M198 79 C206 77 213 77 220 81 C228 85 229 91 225 96 C221 101 212 99 208 94 Z" fill="url(#g37)"/>
+                      </g>
+                      <g aria-label="Petal_4" inkscape:label="Petal_4">
+                        <path d="M193 80 C201 78 207 81 213 87 C220 94 219 103 213 105 C205 107 197 100 192 96 Q188 92 188 87 Z" fill="url(#g38)"/>
+                        <path d="M191 88 C199 94 205 96 215 97 C214 102 211 104 208 103 C200 101 194 96 191 92 Z" fill="#c82d65" opacity=".52"/>
+                      </g>
+                      <g aria-label="Petal_5" inkscape:label="Petal_5">
+                        <path d="M190 78 C182 75 174 75 169 80 C163 86 168 94 177 96 C184 98 191 96 195 91 C198 87 195 82 190 78 Z" fill="url(#g39)"/>
+                        <path d="M166 86 Q173 94 193 90 Q190 96 181 96 Q169 96 166 90 Z" fill="#cc316b" opacity=".64"/>
+                      </g>
+                      <g aria-label="YellowCenter" inkscape:label="YellowCenter">
+                        <path d="M185 72 C185 68 191 65 196 65 C202 65 208 69 209 74 C211 79 207 83 201 83 C195 83 187 81 185 77 Z" fill="url(#g40)"/>
+                        <path d="M186 76 Q194 81 207 77 Q208 81 202 82 Q191 83 186 78 Z" fill="#f4b436" opacity=".61"/>
+                      </g>
+                      <animateTransform attributeName="transform" dur="6.5s" repeatCount="indefinite" calcMode="spline" keyTimes="0;0.244615385;0.361538462;0.496923077;0.572307692;0.704615385;0.84;0.927692308;1" values="0 192 84;0 192 84;-0.6 192 84;-2.4 192 84;-2.0 192 84;-0.35 192 84;0.78 192 84;0 192 84;0 192 84" keySplines="0.42 0 0.58 1;0.42 0 0.58 1;0.42 0 0.58 1;0.42 0 0.58 1;0.42 0 0.58 1;0.42 0 0.58 1;0.42 0 0.58 1;0.42 0 0.58 1" type="rotate"/>
+                    </g>
+                    <animateTransform attributeName="transform" dur="6.5s" repeatCount="indefinite" calcMode="spline" keyTimes="0;0.215384615;0.296923077;0.464615385;0.553846154;0.64;0.809230769;0.910769231;1" values="0.0 162 172;0.0 162 172;0.481 162 172;1.887 162 172;1.776 162 172;1.221 162 172;-0.1776 162 172;0.0 162 172;0.0 162 172" keySplines="0.42 0 0.58 1;0.42 0 0.58 1;0.42 0 0.58 1;0.42 0 0.58 1;0.42 0 0.58 1;0.42 0 0.58 1;0.42 0 0.58 1;0.42 0 0.58 1" type="rotate"/>
+                  </g>
+                </g>
+              </g>
+              <animateTransform attributeName="transform" dur="6.5s" repeatCount="indefinite" calcMode="spline" keyTimes="0;0.215384615;0.296923077;0.464615385;0.553846154;0.64;0.809230769;0.910769231;1" values="0.0;0.0;-0.319;-1.249;-1.176;-0.808;0.118;0.0;0.0" keySplines="0.42 0 0.58 1;0.42 0 0.58 1;0.42 0 0.58 1;0.42 0 0.58 1;0.42 0 0.58 1;0.42 0 0.58 1;0.42 0 0.58 1;0.42 0 0.58 1" type="skewX"/>
+            </g>
+          </g>
+        </g>
+        <animateTransform attributeName="transform" dur="6.5s" repeatCount="indefinite" calcMode="spline" keyTimes="0;0.135384615;0.295384615;0.467692308;0.672307692;0.813846154;0.973846154;1" values="1 1;0.996 1.009;1.002 0.997;0.997 1.007;1.001 0.998;0.998 1.005;1 1;1 1" keySplines="0.42 0 0.58 1;0.42 0 0.58 1;0.42 0 0.58 1;0.42 0 0.58 1;0.42 0 0.58 1;0.42 0 0.58 1;0.42 0 0.58 1" type="scale"/>
+      </g>
+    </g>
+  </g>
+</svg>

@@ -173,6 +173,17 @@ jobs:
             CODE_SIGNING_REQUIRED=NO \
             build test 2>&1 | tee validation/xcodebuild.log
 
+      - name: Export visual QA attachments
+        if: always()
+        shell: bash
+        run: |
+          if test -d "$RUNNER_TEMP/PipoTestResults.xcresult"; then
+            mkdir -p validation/visual-qa
+            xcrun xcresulttool export attachments \
+              --path "$RUNNER_TEMP/PipoTestResults.xcresult" \
+              --output-path validation/visual-qa || echo "Attachment export unavailable; xcresult is retained."
+          fi
+
       - name: Upload iOS validation results
         if: always()
         uses: actions/upload-artifact@v4
