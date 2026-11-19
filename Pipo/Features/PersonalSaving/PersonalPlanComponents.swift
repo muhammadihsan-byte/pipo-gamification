@@ -436,9 +436,8 @@ struct SavingDateEditor: View {
                 field("Month", $entry.month)
                 field("Year", $entry.year)
             }
-            DatePicker("Calendar", selection: $pickerDate,
-                       in: minimumPickerDate...,
-                       displayedComponents: .date)
+            SavingInlineCalendar(selection: $pickerDate, minimumDate: minimumPickerDate,
+                                 calendar: calendar)
                 .onChange(of: pickerDate) { _, date in select(date) }
         }
         .onChange(of: entry.day) { _, _ in syncPickerDate() }

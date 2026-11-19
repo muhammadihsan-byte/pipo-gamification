@@ -9,6 +9,7 @@
 /* Begin PBXBuildFile section */
 		D20000000000000000000001 /* PersonalSavingSchedule.swift in Sources */ = {isa = PBXBuildFile; fileRef = D20000000000000000000011 /* PersonalSavingSchedule.swift */; };
 		D20000000000000000000002 /* PersonalPlanComponents.swift in Sources */ = {isa = PBXBuildFile; fileRef = D20000000000000000000012 /* PersonalPlanComponents.swift */; };
+		9CA1E0000000000000000011 /* SavingInlineCalendar.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9CA1E0000000000000000012 /* SavingInlineCalendar.swift */; };
 		D20000000000000000000003 /* PersonalPlanMotion in Resources */ = {isa = PBXBuildFile; fileRef = D20000000000000000000013 /* PersonalPlanMotion */; };
 		D20000000000000000000004 /* Lottie in Frameworks */ = {isa = PBXBuildFile; productRef = D20000000000000000000021 /* Lottie */; };
 		000000000000000000000001 /* RootView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 000000000000000000000101 /* RootView.swift */; };
@@ -79,6 +80,7 @@
 /* Begin PBXFileReference section */
 		D20000000000000000000011 /* PersonalSavingSchedule.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PersonalSavingSchedule.swift; sourceTree = "<group>"; };
 		D20000000000000000000012 /* PersonalPlanComponents.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PersonalPlanComponents.swift; sourceTree = "<group>"; };
+		9CA1E0000000000000000012 /* SavingInlineCalendar.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SavingInlineCalendar.swift; sourceTree = "<group>"; };
 		D20000000000000000000013 /* PersonalPlanMotion */ = {isa = PBXFileReference; lastKnownFileType = folder; path = PersonalPlanMotion; sourceTree = "<group>"; };
 		000000000000000000000101 /* RootView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RootView.swift; sourceTree = "<group>"; };
 		000000000000000000000102 /* PipoApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PipoApp.swift; sourceTree = "<group>"; };
@@ -346,6 +348,7 @@
 				000000000000000000000127 /* ReviewPlanView.swift */,
 				D20000000000000000000011 /* PersonalSavingSchedule.swift */,
 				D20000000000000000000012 /* PersonalPlanComponents.swift */,
+				9CA1E0000000000000000012 /* SavingInlineCalendar.swift */,
 				D20000000000000000000013 /* PersonalPlanMotion */,
 			);
 			path = PersonalSaving;
@@ -574,6 +577,7 @@
 				000000000000000000000019 /* ReviewPlanView.swift in Sources */,
 				D20000000000000000000001 /* PersonalSavingSchedule.swift in Sources */,
 				D20000000000000000000002 /* PersonalPlanComponents.swift in Sources */,
+				9CA1E0000000000000000011 /* SavingInlineCalendar.swift in Sources */,
 				00000000000000000000001A /* GroupSavingManager.swift in Sources */,
 				7B8C06B79BD2E563C8C18A18 /* PipoMascotView.swift in Sources */,
 				745C700C56FEE76E8F97792D /* SupabaseService.swift in Sources */,
