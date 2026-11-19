@@ -11,6 +11,7 @@ final class StoreKitManagerTests: XCTestCase {
         let userID = UUID()
         let manager = StoreKitManager(defaults: try makeDefaults())
         let subscriptionManager = SubscriptionManager()
+        subscriptionManager.switchAccount(to: userID)
 
         let wasApplied = try manager.recordVerifiedSlotPurchase(
             transactionID: 101,
@@ -35,6 +36,7 @@ final class StoreKitManagerTests: XCTestCase {
         let userID = UUID()
         let manager = StoreKitManager(defaults: try makeDefaults())
         let subscriptionManager = SubscriptionManager()
+        subscriptionManager.switchAccount(to: userID)
 
         _ = try manager.recordVerifiedSlotPurchase(
             transactionID: 202,
