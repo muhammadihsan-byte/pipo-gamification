@@ -21,7 +21,7 @@ struct RootView: View {
 
     private var isOnboardingQA: Bool {
         #if DEBUG
-        ProcessInfo.processInfo.arguments.contains("-pipo-onboarding-qa")
+        (ProcessInfo.processInfo.arguments.contains("-pipo-onboarding-qa") || ProcessInfo.processInfo.arguments.contains("-pipo-onboarding-qa-returning"))
         #else
         false
         #endif
@@ -29,7 +29,9 @@ struct RootView: View {
 
     private var needsOnboarding: Bool {
         #if DEBUG
-        if isOnboardingQA { return !hasFinishedOnboardingQA }
+        if ProcessInfo.processInfo.arguments.contains("-pipo-onboarding-qa") {
+            return !hasFinishedOnboardingQA
+        }
         #endif
         guard let userID = authStateManager.userID else { return false }
         if completedOnboardingAccountID == userID { return false }
@@ -46,7 +48,7 @@ struct RootView: View {
         // A fixed test-only user lets remote QA prove per-account personalization
         // without using credentials, network calls or a real customer account.
         #if DEBUG
-        let onboardingQAUserID = ProcessInfo.processInfo.arguments.contains("-pipo-onboarding-qa")
+        let onboardingQAUserID = (ProcessInfo.processInfo.arguments.contains("-pipo-onboarding-qa") || ProcessInfo.processInfo.arguments.contains("-pipo-onboarding-qa-returning"))
             ? UUID(uuidString: "99999999-9999-4999-8999-999999999999")
             : nil
         #else
@@ -87,7 +89,7 @@ struct RootView: View {
         .task {
             #if DEBUG
             if ProcessInfo.processInfo.arguments.contains("-pipo-visual-qa")
-                || ProcessInfo.processInfo.arguments.contains("-pipo-onboarding-qa") { return }
+                || (ProcessInfo.processInfo.arguments.contains("-pipo-onboarding-qa") || ProcessInfo.processInfo.arguments.contains("-pipo-onboarding-qa-returning")) { return }
             #endif
             guard let supabaseService else { return }
             await supabaseService.observeAuthStateChanges(using: authStateManager)
@@ -95,7 +97,7 @@ struct RootView: View {
         .task {
             #if DEBUG
             if ProcessInfo.processInfo.arguments.contains("-pipo-visual-qa")
-                || ProcessInfo.processInfo.arguments.contains("-pipo-onboarding-qa") { return }
+                || (ProcessInfo.processInfo.arguments.contains("-pipo-onboarding-qa") || ProcessInfo.processInfo.arguments.contains("-pipo-onboarding-qa-returning")) { return }
             #endif
             if authStateManager.userID == nil {
                 clearWidgetSnapshot()
