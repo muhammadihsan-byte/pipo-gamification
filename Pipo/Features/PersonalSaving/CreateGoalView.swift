@@ -382,7 +382,8 @@ struct CreateGoalView: View {
                 .font(.caption)
                 .foregroundStyle(PersonalPlanStyle.muted)
 
-            PersonalPlanChoice(title: Timeline.targetDate.rawValue, selected: timeline == .targetDate) {
+            PersonalPlanChoice(title: timeline == .targetDate ? "Target date · selected" : "Target date",
+                               selected: timeline == .targetDate) {
                 timeline = .targetDate
             }
 
@@ -390,7 +391,8 @@ struct CreateGoalView: View {
                 SavingDateEditor(entry: $dateEntry, start: startDate, calendar: calendar)
             }
 
-            PersonalPlanChoice(title: Timeline.duration.rawValue, selected: timeline == .duration) {
+            PersonalPlanChoice(title: timeline == .duration ? "Duration · selected" : "Duration",
+                               selected: timeline == .duration) {
                 timeline = .duration
             }
 
@@ -420,7 +422,7 @@ struct CreateGoalView: View {
                         message: "\(durationLabel(durationMonths)) from today, \(dateLabel(startDate)). This is the date you’re aiming for."
                     )
                 } else {
-                    Text("Your target date is \(dateLabel(targetDate)).")
+                    Text("Aiming for \(dateLabel(targetDate)). Your date is an aspiration, not a promise — you can change it.")
                         .font(.caption)
                         .foregroundStyle(PersonalPlanStyle.muted)
                 }
@@ -585,7 +587,7 @@ struct CreateGoalView: View {
         switch step {
         case .goal: "What are you saving for?"
         case .target: "How much do you need?"
-        case .timeline: "When do you want to reach your goal?"
+        case .timeline: "When do you want to achieve it?"
         case .rhythm: "What’s your saving rhythm?"
         case .review: "Review your plan"
         }
@@ -595,7 +597,7 @@ struct CreateGoalView: View {
         switch step {
         case .goal: "Hi, I’m Pipo! Let’s give your next goal a little direction."
         case .target: "Set a target amount for \(cleanTitle)."
-        case .timeline: "Pick a date or set a timeline for \(cleanTitle)."
+        case .timeline: "Set a target for \(cleanTitle)."
         case .rhythm: "Choose how often you want to save for \(cleanTitle)."
         case .review: "Check the details for \(cleanTitle)."
         }

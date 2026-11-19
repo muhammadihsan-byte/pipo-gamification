@@ -108,7 +108,7 @@ struct ReviewPlanView: View {
         VStack(alignment: .leading, spacing: 10) {
             cardHeading("Target date", step: .timeline)
             Text(dateLabel(plan.targetDate)).font(.subheadline.bold())
-            Text("This is the date you’re aiming for.")
+            Text("A date to aim for, not a guaranteed finish.")
                 .font(.caption)
                 .foregroundStyle(PersonalPlanStyle.muted)
         }

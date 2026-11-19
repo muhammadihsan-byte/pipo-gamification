@@ -135,7 +135,7 @@ struct ReviewGroupSavingView: View {
                 rules.groupPlanCard()
                 members.groupPlanCard()
             }
-            Text("Pipo tracks self-reported contributions. Money stays with each member.")
+            Text("Pipo tracks self-reported contributions. It does not hold or transfer funds, and creating a group does not set up automatic payments. Money stays with each member.")
                 .font(.footnote).foregroundStyle(PersonalPlanStyle.muted)
         } footer: {
             PersonalPlanActions(back: onBack, title: busy ? "Creating…" : "Create Group Saving",
@@ -190,7 +190,11 @@ struct ReviewGroupSavingView: View {
         section("Timeline", .timeline) {
             LabeledContent("Plan starts", value: dateLabel(review.plannedStartDate))
             LabeledContent("Target date", value: dateLabel(review.targetDate))
-            if review.contributionCount > 0 { Text("\(review.contributionCount) planned contributions") }
+            if review.contributionCount > 0 {
+                Text("\(review.contributionCount) planned contributions. A date to aim for, not a guaranteed finish.")
+            } else {
+                Text("A date to aim for, not a guaranteed finish.")
+            }
         }
     }
     private var rules: some View {

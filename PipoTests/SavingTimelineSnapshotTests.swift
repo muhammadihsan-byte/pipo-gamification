@@ -128,14 +128,17 @@ private struct SavingTimelineSnapshotFixture: View {
             Text("Choose one · Required")
                 .font(.caption)
                 .foregroundStyle(PersonalPlanStyle.muted)
-            PersonalPlanChoice(title: "Target date", selected: true, action: {})
+            PersonalPlanChoice(title: "Target date · selected", selected: true, action: {})
             SavingDateEditor(entry: $entry, start: start, calendar: calendar)
             PersonalPlanChoice(title: "Duration", selected: false, action: {})
             if isGroup {
                 PersonalPlanNote(
                     title: "Plan starts · 25 October 2026",
-                    message: "Aiming for 25 July 2027."
+                    message: "Aiming for 25 July 2027. That gives 10 planned contribution dates."
                 )
+                Text("Your target date is an intention, not a guaranteed finish. You can adjust it as your group’s plans change.")
+                    .font(.caption)
+                    .foregroundStyle(PersonalPlanStyle.muted)
             } else {
                 Text("Aiming for 25 July 2027. Your date is an aspiration, not a promise — you can change it.")
                     .font(.caption)

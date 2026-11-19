@@ -193,20 +193,31 @@ struct CreateGroupPlanView: View {
     private var timeline: some View {
         Group {
             GroupStepIntro("When do we want to reach our goal?", "Choose a date to aim for, together.")
-            PersonalPlanChoice(title: "Target date", selected: !draft.usesDuration) { draft.usesDuration = false }
+            Text("Choose one · Required")
+                .font(.caption)
+                .foregroundStyle(PersonalPlanStyle.muted)
+            PersonalPlanChoice(title: draft.usesDuration ? "Target date" : "Target date · selected",
+                               selected: !draft.usesDuration) { draft.usesDuration = false }
             if !draft.usesDuration {
                 SavingDateEditor(entry: $draft.dateEntry, start: draft.start, calendar: draft.calendar)
             }
-            PersonalPlanChoice(title: "Duration", selected: draft.usesDuration) { draft.usesDuration = true }
+            PersonalPlanChoice(title: draft.usesDuration ? "Duration · selected" : "Duration",
+                               selected: draft.usesDuration) { draft.usesDuration = true }
             if draft.usesDuration {
                 Picker("Months from plan start", selection: $draft.months) {
                     ForEach(1...36, id: \.self) { value in Text("\(value) \(value == 1 ? "month" : "months")").tag(value) }
                 }.personalPlanField()
             }
             if let end = draft.end {
+                let contributionDetail = draft.schedule.map {
+                    " That gives \($0.count) planned contribution dates."
+                } ?? ""
                 PersonalPlanNote(title: "Plan starts · \(dateLabel(draft.start))",
-                                 message: "Aiming for \(dateLabel(end)).")
+                                 message: "Aiming for \(dateLabel(end)).\(contributionDetail)")
             } else { feedback("Choose a date after the plan starts.") }
+            Text("Your target date is an intention, not a guaranteed finish. You can adjust it as your group’s plans change.")
+                .font(.caption)
+                .foregroundStyle(PersonalPlanStyle.muted)
         }
     }
 

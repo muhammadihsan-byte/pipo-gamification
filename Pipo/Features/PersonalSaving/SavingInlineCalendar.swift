@@ -37,24 +37,36 @@ struct SavingInlineCalendar: View {
                 monthButton("chevron.right", label: "Next month", direction: 1)
             }
 
-            LazyVGrid(columns: columns, spacing: 4) {
-                ForEach(0..<7, id: \.self) { index in
-                    Text(["M", "T", "W", "T", "F", "S", "S"][index])
-                        .font(.caption2.weight(.semibold))
-                        .foregroundStyle(PersonalPlanStyle.muted)
-                        .frame(maxWidth: .infinity)
-                        .accessibilityHidden(true)
-                }
-                ForEach(dayCells) { cell in
-                    if cell.day == 0 {
-                        Color.clear.frame(height: 44).accessibilityHidden(true)
-                    } else {
-                        dayButton(cell)
+            ScrollViewReader { proxy in
+                ScrollView(.horizontal, showsIndicators: false) {
+                    LazyVGrid(columns: columns, spacing: 4) {
+                        ForEach(0..<7, id: \.self) { index in
+                            Text(["M", "T", "W", "T", "F", "S", "S"][index])
+                                .font(.caption2.weight(.semibold))
+                                .foregroundStyle(PersonalPlanStyle.muted)
+                                .frame(width: 44, height: 20)
+                                .id("weekday-\(index)")
+                                .accessibilityHidden(true)
+                        }
+                        ForEach(dayCells) { cell in
+                            if cell.day == 0 {
+                                Color.clear.frame(width: 44, height: 44).accessibilityHidden(true)
+                            } else {
+                                dayButton(cell)
+                            }
+                        }
                     }
+                    // 7 × 44pt day targets + 6 × 4pt spacing = 332pt;
+                    // horizontally scroll when the parent cannot display all weekdays.
+                    .frame(width: 332)
+                    .padding(.horizontal, 4)
                 }
+                .accessibilityHint("Swipe horizontally to reach other weekdays on smaller screens")
+                .onAppear { scrollToSelectedWeekday(using: proxy) }
+                .onChange(of: selection) { _, _ in scrollToSelectedWeekday(using: proxy) }
             }
         }
-        .padding(14)
+        .padding(.vertical, 14)
         .background(PersonalPlanStyle.surface, in: RoundedRectangle(cornerRadius: 16))
         .onChange(of: selection) { _, updated in
             displayedMonth = calendar.dateInterval(of: .month, for: updated)?.start ?? updated
@@ -62,7 +74,13 @@ struct SavingInlineCalendar: View {
     }
 
     private var columns: [GridItem] {
-        Array(repeating: GridItem(.flexible(minimum: 0), spacing: 4), count: 7)
+        Array(repeating: GridItem(.fixed(44), spacing: 4), count: 7)
+    }
+
+    private func scrollToSelectedWeekday(using proxy: ScrollViewProxy) {
+        let weekday = calendar.component(.weekday, from: selection)
+        let mondayFirstIndex = (weekday + 5) % 7
+        proxy.scrollTo("weekday-\(mondayFirstIndex)", anchor: .trailing)
     }
 
     private var monthStart: Date {
@@ -116,7 +134,7 @@ struct SavingInlineCalendar: View {
             Text(String(cell.day))
                 .font(.caption.weight(selected ? .semibold : .medium))
                 .foregroundStyle(selected ? .white : PersonalPlanStyle.ink.opacity(unavailable ? 0.35 : 1))
-                .frame(maxWidth: .infinity, minHeight: 44)
+                .frame(width: 44, height: 44)
                 .background(selected ? PersonalPlanStyle.pink : .clear,
                             in: RoundedRectangle(cornerRadius: 10))
                 .contentShape(Rectangle())
