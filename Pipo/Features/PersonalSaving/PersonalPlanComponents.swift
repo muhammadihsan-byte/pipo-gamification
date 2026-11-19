@@ -418,13 +418,15 @@ struct SavingDateEditor: View {
     @Binding var entry: SavingDateEntry
     let start: Date
     let calendar: Calendar
-    @State private var visibleMonth: Date
+    @State private var pickerDate: Date
 
     init(entry: Binding<SavingDateEntry>, start: Date, calendar: Calendar) {
         _entry = entry
         self.start = start
         self.calendar = calendar
-        _visibleMonth = State(initialValue: entry.wrappedValue.date(in: calendar) ?? start)
+        let initialDate = entry.wrappedValue.date(in: calendar) ?? start
+        _pickerDate = State(initialValue: initialDate > start ? initialDate
+                             : calendar.date(byAdding: .day, value: 1, to: start) ?? start)
     }
 
     var body: some View {
@@ -434,36 +436,25 @@ struct SavingDateEditor: View {
                 field("Month", $entry.month)
                 field("Year", $entry.year)
             }
-            ViewThatFits(in: .horizontal) {
-                PersonalPlanCalendar(month: $visibleMonth, selected: entry.date(in: calendar),
-                                     minimumDate: start, calendar: calendar, onSelect: select)
-                    .frame(minWidth: 332)
-                DatePicker("Calendar", selection: pickerSelection,
-                           in: minimumPickerDate...,
-                           displayedComponents: .date)
-            }
+            DatePicker("Calendar", selection: $pickerDate,
+                       in: minimumPickerDate...,
+                       displayedComponents: .date)
+                .onChange(of: pickerDate) { _, date in select(date) }
         }
-        .onChange(of: entry.day) { _, _ in updateVisibleMonth() }
-        .onChange(of: entry.month) { _, _ in updateVisibleMonth() }
-        .onChange(of: entry.year) { _, _ in updateVisibleMonth() }
+        .onChange(of: entry.day) { _, _ in syncPickerDate() }
+        .onChange(of: entry.month) { _, _ in syncPickerDate() }
+        .onChange(of: entry.year) { _, _ in syncPickerDate() }
     }
 
     private func select(_ date: Date) { entry = SavingDateEntry(date, calendar: calendar) }
-
-    private var pickerSelection: Binding<Date> {
-        Binding(
-            get: { entry.date(in: calendar) ?? start },
-            set: select
-        )
-    }
 
     private var minimumPickerDate: Date {
         calendar.date(byAdding: .day, value: 1, to: start) ?? start
     }
 
-    private func updateVisibleMonth() {
+    private func syncPickerDate() {
         if let date = entry.date(in: calendar), date > start {
-            visibleMonth = date
+            pickerDate = date
         }
     }
 
@@ -473,85 +464,5 @@ struct SavingDateEditor: View {
             TextField(title, text: text).accessibilityLabel(title).keyboardType(.numberPad)
                 .font(.caption.weight(.medium)).personalPlanField(height: 44)
         }
-    }
-}
-
-private struct PersonalPlanCalendar: View {
-    @Binding var month: Date
-    let selected: Date?
-    let minimumDate: Date
-    let calendar: Calendar
-    let onSelect: (Date) -> Void
-
-    var body: some View {
-        VStack(spacing: 7) {
-            HStack {
-                monthButton("chevron.left", label: "Previous month", direction: -1)
-                    .disabled(!canStepBack)
-                Spacer()
-                Text(month.formatted(.dateTime.month(.wide).year().locale(calendar.locale ?? .current)))
-                    .font(.subheadline.bold())
-                Spacer()
-                monthButton("chevron.right", label: "Next month", direction: 1)
-            }
-
-            if let interval = calendar.dateInterval(of: .month, for: month),
-               let days = calendar.range(of: .day, in: .month, for: interval.start) {
-                let leading = (calendar.component(.weekday, from: interval.start) + 5) % 7
-                LazyVGrid(columns: Array(repeating: GridItem(.flexible(minimum: 44), spacing: 0), count: 7), spacing: 3) {
-                    ForEach([2, 3, 4, 5, 6, 7, 1], id: \.self) { weekday in
-                        Text(calendar.veryShortWeekdaySymbols[weekday - 1])
-                            .foregroundStyle(PersonalPlanStyle.muted)
-                            .accessibilityHidden(true)
-                    }
-                    ForEach(0..<leading, id: \.self) { _ in Color.clear.frame(height: 30) }
-                    ForEach(days, id: \.self) { day in
-                        if let date = calendar.date(byAdding: .day, value: day - 1, to: interval.start) {
-                            dayButton(day, date: date)
-                        }
-                    }
-                }
-                .font(.caption.weight(.medium))
-            }
-        }
-        .padding(12)
-        .background(PersonalPlanStyle.surface, in: RoundedRectangle(cornerRadius: 16))
-    }
-
-    private var canStepBack: Bool {
-        guard let start = calendar.dateInterval(of: .month, for: month)?.start else { return false }
-        return start > minimumDate
-    }
-
-    private func monthButton(_ symbol: String, label: String, direction: Int) -> some View {
-        Button {
-            if let next = calendar.date(byAdding: .month, value: direction, to: month) {
-                month = next
-            }
-        } label: {
-            Image(systemName: symbol)
-                .font(.caption.weight(.bold))
-                .foregroundStyle(PersonalPlanStyle.muted)
-                .frame(width: 44, height: 44)
-        }
-        .buttonStyle(.plain)
-        .accessibilityLabel(label)
-    }
-
-    private func dayButton(_ day: Int, date: Date) -> some View {
-        let isSelected = selected.map { calendar.isDate($0, inSameDayAs: date) } ?? false
-        return Button {
-            onSelect(date)
-        } label: {
-            Text(String(day))
-                .foregroundStyle(isSelected ? .white : PersonalPlanStyle.ink.opacity(date <= minimumDate ? 0.4 : 1))
-                .frame(maxWidth: .infinity, minHeight: 44)
-                .background(isSelected ? PersonalPlanStyle.pink : .clear, in: RoundedRectangle(cornerRadius: 9))
-                .contentShape(Rectangle())
-        }
-        .buttonStyle(.plain)
-        .disabled(date <= minimumDate)
-        .accessibilityLabel(dateLabel(date))
-        .accessibilityAddTraits(isSelected ? .isSelected : [])
     }
 }
