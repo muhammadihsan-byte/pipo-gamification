@@ -98,7 +98,7 @@ struct ReviewPlanView: View {
     }
 
     private var activePersonalGoalCount: Int {
-        goals.filter { !$0.isGroupGoal }.count
+        goals.filter { $0.isOwned(by: authStateManager.userID) && !$0.isGroupGoal }.count
     }
 
     private var currentProfile: UserProfile? {
@@ -107,6 +107,10 @@ struct ReviewPlanView: View {
 
     private func confirmCreation() {
         guard !isCreatingGoal else { return }
+        guard let userID = authStateManager.userID else {
+            errorMessage = "Sign in before creating a saving goal."
+            return
+        }
         guard subscriptionManager.canCreateGoal(
             isGroup: false,
             activeCount: activePersonalGoalCount
@@ -118,7 +122,7 @@ struct ReviewPlanView: View {
         isCreatingGoal = true
         defer { isCreatingGoal = false }
         let existingProfile = currentProfile
-        let profile = existingProfile ?? UserProfile(userID: authStateManager.userID)
+        let profile = existingProfile ?? UserProfile(userID: userID)
         let previousCount = profile.activePersonalGoalsCount
         let previousUserID = profile.userID
         let goal = PersonalGoal(
@@ -127,14 +131,15 @@ struct ReviewPlanView: View {
             targetAmount: plan.targetAmount,
             startDate: plan.startDate,
             targetDate: plan.targetDate,
-            rhythm: plan.rhythm
+            rhythm: plan.rhythm,
+            userID: userID
         )
         goal.subItems = plan.breakdown.compactMap { item in
             guard let amount = parsedBreakdownAmount(item.amount) else { return nil }
             return SubItem(title: item.title, amount: amount)
         }
 
-        profile.userID = authStateManager.userID
+        profile.userID = userID
         profile.activePersonalGoalsCount = activePersonalGoalCount + 1
         modelContext.insert(goal)
         if existingProfile == nil {
