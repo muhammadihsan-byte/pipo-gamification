@@ -91,6 +91,12 @@ struct CreateGoalView: View {
         self.onCreated = onCreated
         _title = State(initialValue: initialTitle)
         _category = State(initialValue: initialCategory)
+        // Existing Personal Saving requires a name when category is Other.
+        // An emergency-fund onboarding goal must not introduce a blank required field.
+        _customCategory = State(
+            initialValue: initialCategory == .other && initialTitle == "Emergency Fund"
+                ? "Emergency Fund" : ""
+        )
         _rhythm = State(initialValue: initialRhythm)
         _startDate = State(initialValue: start)
         _dateEntry = State(initialValue: SavingDateEntry(target, calendar: calendar))
