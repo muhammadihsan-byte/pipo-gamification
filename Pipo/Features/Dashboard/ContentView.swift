@@ -104,7 +104,7 @@ struct DashboardView: View {
                 Text(onboardingPersonalization.flatMap { $0.nickname.isEmpty ? nil : "Hey, \($0.nickname)!" } ?? "Pipo")
                     .font(.largeTitle.bold())
                     .foregroundStyle(PipoTheme.ink)
-                Text(onboardingPersonalization?.motivation?.homeGreeting ?? "Sedikit demi sedikit, jadi bukit.")
+                Text(onboardingPersonalization?.motivation?.homeGreeting ?? "Little by little, it adds up.")
                     .font(.subheadline)
                     .foregroundStyle(PipoTheme.muted)
             }
