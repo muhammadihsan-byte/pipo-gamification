@@ -3,6 +3,7 @@ import XCTest
 /// Drives real SwiftUI screens inside the iOS Simulator while simctl records MP4s.
 /// The app uses a Debug-only in-memory model container and a fake signed-in state.
 /// No credentials, payment transactions, or actual invitations are used.
+@MainActor
 final class PipoUIRecordingTests: XCTestCase {
     private let app = XCUIApplication()
 
