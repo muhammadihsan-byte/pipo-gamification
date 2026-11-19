@@ -1,30 +1,109 @@
 name: iOS Build and Test
 
 on:
-  push:
-    branches:
-      - main
   pull_request:
     branches:
       - main
+    types:
+      - ready_for_review
+      - synchronize
+  workflow_dispatch:
+  push:
+    tags:
+      - "v*-rc*"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ios-validation-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
 
 jobs:
   build-and-test:
+    if: >-
+      github.event_name == 'workflow_dispatch' ||
+      github.event_name == 'push' ||
+      (github.event_name == 'pull_request' && github.event.pull_request.draft == false)
     runs-on: macos-14
+    timeout-minutes: 45
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      - name: Select Xcode
+      - name: Detect Xcode
         run: |
-          sudo xcode-select -s /Applications/Xcode.app/Contents/Developer
-          xcodebuild -version
+          set -euo pipefail
+          if test -d /Applications/Xcode.app/Contents/Developer; then
+            sudo xcode-select -s /Applications/Xcode.app/Contents/Developer
+          fi
+          DEVELOPER_DIR="$(xcode-select -p 2>/dev/null || true)"
+          if test -z "$DEVELOPER_DIR" || ! test -d "$DEVELOPER_DIR"; then
+            echo "No usable Xcode developer directory is available." >&2
+            exit 1
+          fi
+          xcodebuild -version | tee xcode-version.txt
+
+      - name: Select an installed iOS simulator
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p validation
+          xcrun simctl list runtimes | tee validation/runtimes.txt
+          AVAILABLE_RUNTIME="$(grep -E 'iOS .*com.apple.CoreSimulator.SimRuntime.iOS-' validation/runtimes.txt | grep -v unavailable | head -n1 || true)"
+          if test -z "$AVAILABLE_RUNTIME"; then
+            echo "No available iOS simulator runtime is installed; refusing to provision one." >&2
+            exit 1
+          fi
+
+          xcrun simctl list devices available | tee validation/devices.txt
+          DEVICE_LINE=""
+          for preferred in "iPhone 15" "iPhone 16" "iPhone 14" "iPhone 13"; do
+            DEVICE_LINE="$(grep -m1 "${preferred} (" validation/devices.txt || true)"
+            test -n "$DEVICE_LINE" && break
+          done
+          if test -z "$DEVICE_LINE"; then
+            DEVICE_LINE="$(grep -m1 -E 'iPhone [^()]+' validation/devices.txt || true)"
+          fi
+          if test -z "$DEVICE_LINE"; then
+            echo "No available iPhone simulator was found; refusing to create or install one." >&2
+            exit 1
+          fi
+
+          SIMULATOR_NAME="$(printf '%s\n' "$DEVICE_LINE" | sed -E 's/[[:space:]]+\([0-9A-Fa-f-]{36}\).*$//' | sed -E 's/^[[:space:]-]+//')"
+          SIMULATOR_UDID="$(printf '%s\n' "$DEVICE_LINE" | sed -nE 's/.*\(([0-9A-Fa-f-]{36})\).*/\1/p')"
+          if test -z "$SIMULATOR_NAME" || test -z "$SIMULATOR_UDID"; then
+            echo "Unable to parse the selected simulator: $DEVICE_LINE" >&2
+            exit 1
+          fi
+          {
+            echo "SIMULATOR_NAME=$SIMULATOR_NAME"
+            echo "SIMULATOR_UDID=$SIMULATOR_UDID"
+          } >> "$GITHUB_ENV"
+          echo "Using existing simulator: $SIMULATOR_NAME ($SIMULATOR_UDID)"
 
       - name: Build and test for iOS Simulator
         shell: bash
         run: |
+          set -euo pipefail
           xcodebuild \
+            -project SatuSaku.xcodeproj \
             -scheme SatuSaku \
-            -destination 'platform=iOS Simulator,name=iPhone 15,OS=latest' \
+            -destination "id=$SIMULATOR_UDID" \
+            -derivedDataPath "$RUNNER_TEMP/PipoDerivedData" \
+            -resultBundlePath "$RUNNER_TEMP/PipoTestResults.xcresult" \
+            CODE_SIGNING_ALLOWED=NO \
             CODE_SIGNING_REQUIRED=NO \
-            build test
+            build test 2>&1 | tee validation/xcodebuild.log
+
+      - name: Upload iOS validation results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: ios-validation-${{ github.run_id }}
+          path: |
+            validation/
+            xcode-version.txt
+            ${{ runner.temp }}/PipoTestResults.xcresult
+          if-no-files-found: warn
+          retention-days: 7
