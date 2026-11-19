@@ -48,6 +48,8 @@ final class SubItem {
 @Model
 final class PersonalGoal {
     var id: UUID
+    // Optional for lightweight migration: existing goals remain unassigned.
+    var userID: UUID? = nil
     var title: String
     var category: GoalCategory
     var targetAmount: Double
@@ -71,9 +73,11 @@ final class PersonalGoal {
         targetDate: Date,
         rhythm: SavingRhythm = .weekly,
         isGroupGoal: Bool = false,
-        createdAt: Date = .now
+        createdAt: Date = .now,
+        userID: UUID? = nil
     ) {
         self.id = id
+        self.userID = userID
         self.title = title
         self.category = category
         self.targetAmount = targetAmount
@@ -84,6 +88,12 @@ final class PersonalGoal {
         self.rhythm = rhythm
         self.isGroupGoal = isGroupGoal
         self.createdAt = createdAt
+    }
+
+    /// Unassigned legacy goals remain preserved but invisible to signed-in accounts.
+    func isOwned(by currentUserID: UUID?) -> Bool {
+        guard let currentUserID else { return false }
+        return userID == currentUserID
     }
 
     var progress: Double {
