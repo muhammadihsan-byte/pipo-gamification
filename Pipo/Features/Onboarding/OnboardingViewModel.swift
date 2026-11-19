@@ -134,7 +134,7 @@ final class OnboardingViewModel {
     }
 
     var completion: OnboardingCompletion {
-        let shouldPrefill = savingMode == .personal && selectedGoal != .explore
+        let shouldPrefill = selectedGoal != .explore
         return OnboardingCompletion(
             goalCategory: shouldPrefill ? selectedGoal?.category : nil,
             goalTitle: shouldPrefill ? selectedGoal?.title : nil,
