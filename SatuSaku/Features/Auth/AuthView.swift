@@ -62,7 +62,7 @@ struct AuthView: View {
     private var brandHeader: some View {
         HStack {
             HStack(spacing: 0) {
-                Text("satusaku")
+                Text("pipo")
                     .font(.system(size: 20, weight: .bold, design: .rounded))
                     .foregroundStyle(SatuSakuTheme.ink)
                 Text(".")
