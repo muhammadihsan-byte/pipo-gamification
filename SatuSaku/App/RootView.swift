@@ -11,6 +11,7 @@ struct RootView: View {
     @State private var storeKitManager: StoreKitManager
     @State private var supabaseService: SupabaseService?
     @State private var noticeMessage: String?
+    @State private var isAuthenticating = false
     @AppStorage("hasCompletedOnboarding") private var hasCompletedOnboarding = false
     @State private var onboardingCompletion: OnboardingCompletion?
     @State private var isPrefillingOnboardingGoal = false
@@ -208,6 +209,7 @@ struct RootView: View {
 
     private var authenticationView: some View {
         AuthView(
+            isSubmitting: isAuthenticating,
             onSubmit: authenticate,
             onAppleSignIn: {
                 beginOAuthSignIn(provider: .apple)
@@ -258,12 +260,15 @@ struct RootView: View {
     }
 
     private func authenticate(_ credentials: AuthCredentials) {
+        guard !isAuthenticating else { return }
         guard let supabaseService else {
             noticeMessage = supabaseConfigurationError ?? "Supabase is not configured."
             return
         }
 
-        Task {
+        isAuthenticating = true
+        Task { @MainActor in
+            defer { isAuthenticating = false }
             do {
                 if credentials.isSignUp {
                     let needsConfirmation = try await supabaseService.signUp(
