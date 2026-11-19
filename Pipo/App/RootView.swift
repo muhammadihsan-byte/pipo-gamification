@@ -12,13 +12,31 @@ struct RootView: View {
     @State private var supabaseService: SupabaseService?
     @State private var choosingPlan = false
     @State private var noticeMessage: String?
-    @AppStorage("hasCompletedOnboarding") private var hasCompletedOnboarding = false
-    @State private var onboardingCompletion: OnboardingCompletion?
-    @State private var isPrefillingOnboardingGoal = false
+    @State private var hasFinishedOnboardingQA = false
+    @State private var completedOnboardingAccountID: UUID?
     @Environment(\.modelContext) private var modelContext
     @Query private var localTransactions: [SavingTransaction]
 
     private let supabaseConfigurationError: String?
+
+    private var isOnboardingQA: Bool {
+        #if DEBUG
+        (ProcessInfo.processInfo.arguments.contains("-pipo-onboarding-qa") || ProcessInfo.processInfo.arguments.contains("-pipo-onboarding-qa-returning"))
+        #else
+        false
+        #endif
+    }
+
+    private var needsOnboarding: Bool {
+        #if DEBUG
+        if ProcessInfo.processInfo.arguments.contains("-pipo-onboarding-qa") {
+            return !hasFinishedOnboardingQA
+        }
+        #endif
+        guard let userID = authStateManager.userID else { return false }
+        if completedOnboardingAccountID == userID { return false }
+        return OnboardingProfileStore.load(for: userID) == nil
+    }
 
     init(
         initialAuthState: AuthState = .unauthenticated,
@@ -27,8 +45,20 @@ struct RootView: View {
         _navigationManager = State(
             initialValue: NavigationManager(initialRoute: initialRoute)
         )
+        // A fixed test-only user lets remote QA prove per-account personalization
+        // without using credentials, network calls or a real customer account.
+        #if DEBUG
+        let onboardingQAUserID = (ProcessInfo.processInfo.arguments.contains("-pipo-onboarding-qa") || ProcessInfo.processInfo.arguments.contains("-pipo-onboarding-qa-returning"))
+            ? UUID(uuidString: "99999999-9999-4999-8999-999999999999")
+            : nil
+        #else
+        let onboardingQAUserID: UUID? = nil
+        #endif
         _authStateManager = State(
-            initialValue: AuthStateManager(initialState: initialAuthState)
+            initialValue: AuthStateManager(
+                initialState: initialAuthState,
+                userID: onboardingQAUserID
+            )
         )
         _subscriptionManager = State(initialValue: SubscriptionManager())
         do {
@@ -58,14 +88,16 @@ struct RootView: View {
         .tint(PipoTheme.green)
         .task {
             #if DEBUG
-            if ProcessInfo.processInfo.arguments.contains("-pipo-visual-qa") { return }
+            if ProcessInfo.processInfo.arguments.contains("-pipo-visual-qa")
+                || (ProcessInfo.processInfo.arguments.contains("-pipo-onboarding-qa") || ProcessInfo.processInfo.arguments.contains("-pipo-onboarding-qa-returning")) { return }
             #endif
             guard let supabaseService else { return }
             await supabaseService.observeAuthStateChanges(using: authStateManager)
         }
         .task {
             #if DEBUG
-            if ProcessInfo.processInfo.arguments.contains("-pipo-visual-qa") { return }
+            if ProcessInfo.processInfo.arguments.contains("-pipo-visual-qa")
+                || (ProcessInfo.processInfo.arguments.contains("-pipo-onboarding-qa") || ProcessInfo.processInfo.arguments.contains("-pipo-onboarding-qa-returning")) { return }
             #endif
             if authStateManager.userID == nil {
                 clearWidgetSnapshot()
@@ -95,9 +127,8 @@ struct RootView: View {
                 clearWidgetSnapshot()
             } else {
                 navigationManager.popToRoot()
-                if let onboardingCompletion {
-                    routeAfterOnboarding(completion: onboardingCompletion)
-                }
+                // Onboarding runs after authentication, never before it.
+                // Account-scoped completion state is read by rootContent.
             }
         }
         .onChange(of: authStateManager.userID) { _, userID in
@@ -188,29 +219,36 @@ struct RootView: View {
     private var rootContent: some View {
         switch authStateManager.authState {
         case .unauthenticated:
-            if hasCompletedOnboarding {
-                authenticationView
-            } else {
-                onboardingView
-            }
+            authenticationView
         case .authenticated:
-            dashboardView
+            if needsOnboarding {
+                onboardingView
+            } else {
+                dashboardView
+            }
         }
     }
 
     private var onboardingView: some View {
-        OnboardingContainerView(
-            onCompleted: { completion in
-                onboardingCompletion = completion
-                hasCompletedOnboarding = true
-                if authStateManager.authState == .authenticated {
-                    routeAfterOnboarding(completion: completion)
+        OnboardingContainerView { personalization in
+            if isOnboardingQA {
+                if let userID = authStateManager.userID {
+                    _ = OnboardingProfileStore.save(personalization, for: userID)
                 }
-            },
-            onSignIn: {
-                hasCompletedOnboarding = true
+                hasFinishedOnboardingQA = true
+                return
             }
-        )
+            guard let userID = authStateManager.userID else {
+                noticeMessage = "Sign in to save your Pipo preferences."
+                return
+            }
+            if OnboardingProfileStore.save(personalization, for: userID) {
+                completedOnboardingAccountID = userID
+                navigationManager.popToRoot()
+            } else {
+                noticeMessage = "Your Pipo preferences could not be saved. Please try again."
+            }
+        }
     }
 
     private var authenticationView: some View {
@@ -336,26 +374,11 @@ struct RootView: View {
             dashboardView
         case .createGoal:
             CreateGoalView(
-                onBack: {
-                    isPrefillingOnboardingGoal = false
-                    onboardingCompletion = nil
-                    navigationManager.pop()
-                },
+                onBack: navigationManager.pop,
                 onCreated: { goalID in
-                    isPrefillingOnboardingGoal = false
-                    onboardingCompletion = nil
                     navigationManager.popToRoot()
                     navigationManager.navigate(to: .personalGoal(goalID))
-                },
-                initialTitle: isPrefillingOnboardingGoal
-                    ? (onboardingCompletion?.goalTitle ?? "")
-                    : "",
-                initialCategory: isPrefillingOnboardingGoal
-                    ? (onboardingCompletion?.goalCategory ?? .gadget)
-                    : .gadget,
-                initialRhythm: isPrefillingOnboardingGoal
-                    ? (onboardingCompletion?.rhythm ?? .monthly)
-                    : .monthly
+                }
             )
         case .personalGoal(let goalID):
             PersonalGoalDetailView(goalID: goalID, onBack: navigationManager.pop) {
@@ -376,22 +399,6 @@ struct RootView: View {
         }
     }
 
-    private func routeAfterOnboarding(completion: OnboardingCompletion) {
-        guard authStateManager.authState == .authenticated else { return }
-        if completion.isPlusSelected {
-            navigationManager.navigate(to: .paywall(isGroup: completion.isGroupSaving))
-            onboardingCompletion = nil
-        } else if completion.isGroupSaving {
-            onboardingCompletion = nil
-            navigationManager.navigate(to: .createGroupPlan)
-        } else if completion.goalCategory != nil, completion.goalTitle != nil {
-            isPrefillingOnboardingGoal = true
-            navigationManager.navigate(to: .createGoal)
-        } else {
-            navigationManager.popToRoot()
-            onboardingCompletion = nil
-        }
-    }
 }
 
 struct RootView_Previews: PreviewProvider {

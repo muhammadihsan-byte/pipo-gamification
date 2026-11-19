@@ -20,6 +20,7 @@ on:
           - build-only
           - build-and-test
           - visual-qa
+          - onboarding-qa
   push:
     tags:
       - "v*-rc*"
@@ -163,7 +164,9 @@ jobs:
         if: >-
           (github.event_name == 'workflow_dispatch' && inputs.validation_mode == 'build-and-test') ||
           (github.event_name == 'push') ||
-          (github.event_name == 'pull_request' && github.head_ref != 'feat/pipo-ui-video-qa')
+          (github.event_name == 'pull_request' &&
+           github.head_ref != 'feat/pipo-ui-video-qa' &&
+           github.head_ref != 'feat/pipo-onboarding-v4-interactions')
         shell: bash
         run: |
           set -euo pipefail
@@ -190,6 +193,16 @@ jobs:
           set -euo pipefail
           mkdir -p validation
           bash scripts/record-ios-saving-journeys.sh 2>&1 | tee validation/visual-qa.log
+
+      - name: Record V4 onboarding and both choice previews in one MP4
+        if: >-
+          (github.event_name == 'workflow_dispatch' && inputs.validation_mode == 'onboarding-qa') ||
+          (github.event_name == 'pull_request' && github.head_ref == 'feat/pipo-onboarding-v4-interactions')
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p validation
+          bash scripts/record-ios-onboarding.sh 2>&1 | tee validation/onboarding-qa.log
 
       - name: Export visual QA attachments
         if: always()

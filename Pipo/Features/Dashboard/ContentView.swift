@@ -92,13 +92,18 @@ struct DashboardView: View {
         }
     }
 
+    private var onboardingPersonalization: OnboardingPersonalization? {
+        guard let userID = authStateManager.userID else { return nil }
+        return OnboardingProfileStore.load(for: userID)
+    }
+
     private var welcomeHeader: some View {
         HStack(spacing: 12) {
             VStack(alignment: .leading, spacing: 6) {
-                Text("Pipo")
+                Text(onboardingPersonalization.flatMap { $0.nickname.isEmpty ? nil : "Hey, \($0.nickname)!" } ?? "Pipo")
                     .font(.largeTitle.bold())
                     .foregroundStyle(PipoTheme.ink)
-                Text("Sedikit demi sedikit, jadi bukit.")
+                Text(onboardingPersonalization?.motivation?.homeGreeting ?? "Sedikit demi sedikit, jadi bukit.")
                     .font(.subheadline)
                     .foregroundStyle(PipoTheme.muted)
             }

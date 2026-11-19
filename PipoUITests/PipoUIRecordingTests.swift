@@ -76,6 +76,116 @@ final class PipoUIRecordingTests: XCTestCase {
         XCTAssertTrue(app.buttons["Create a saving goal"].waitForExistence(timeout: 20))
     }
 
+    /// Post-login onboarding: V4 wave, nickname, motivation, optional
+    /// widget walkthrough and returning-user account-scoped behavior.
+    /// Uses a fixed Debug-only account and never signs in to a real backend.
+    func testPostLoginPersonalizationAndWidgetPreview() {
+        continueAfterFailure = false
+
+        launchOnboarding()
+        XCTAssertTrue(app.staticTexts["Little steps. Big dreams."].waitForExistence(timeout: 30))
+        attachOnboardingScreen("01 - V4 companion and connected greeting bubble")
+        let pipo = app.buttons["pipo.greet"].firstMatch
+        XCTAssertTrue(pipo.waitForExistence(timeout: 15), "V4 wave interaction is unavailable")
+        XCTAssertTrue(pipo.isEnabled)
+        let referenceMascotHeight = pipo.frame.height
+        XCTAssertGreaterThan(referenceMascotHeight, 100, "V4 mascot must be visible at usable size")
+        pipo.tap()
+
+        tapButton("pipo.onboarding.continue")
+        XCTAssertTrue(app.staticTexts["What should I call you?"].waitForExistence(timeout: 12))
+        assertMascotSettlesToSize(referenceMascotHeight)
+        attachOnboardingScreen("02 - Consistent V4 size and nickname bubble")
+        typeText("pipo.onboarding.nickname", value: "Alex")
+        let done = app.keyboards.buttons["Done"].firstMatch
+        if done.exists { done.tap() }
+        tapButton("pipo.onboarding.continue")
+
+        XCTAssertTrue(app.staticTexts["What brings you to Pipo?"].waitForExistence(timeout: 12))
+        tapButton("pipo.onboarding.back")
+        XCTAssertTrue(app.staticTexts["What should I call you?"].waitForExistence(timeout: 12))
+        tapButton("pipo.onboarding.continue")
+        tapButton("pipo.onboarding.motivation.excitingGoal")
+        // The contextual reply is a visual transition inside the conversation
+        // bubble. Review its retained screenshot; the accessibility tree may
+        // aggregate the bubble contents into one element on iOS.
+        assertMascotSettlesToSize(referenceMascotHeight)
+        attachOnboardingScreen("03 - Mascot response inside connected bubble")
+        tapButton("pipo.onboarding.continue")
+        XCTAssertTrue(app.staticTexts["Want Pipo on your Home Screen?"].waitForExistence(timeout: 12))
+        assertMascotSettlesToSize(referenceMascotHeight)
+        attachOnboardingScreen("04 - Consistent V4 size on widget page")
+
+        tapButton("pipo.onboarding.continue")
+        XCTAssertTrue(app.staticTexts["Add Pipo to your Home Screen"].waitForExistence(timeout: 12))
+        attachOnboardingScreen("Optional widget setup instructions")
+        tapButton("pipo.onboarding.widget.done")
+
+        XCTAssertTrue(app.staticTexts["Hey, Alex!"].waitForExistence(timeout: 25),
+                      "Home must use saved onboarding nickname")
+        XCTAssertTrue(app.buttons["Create a saving goal"].waitForExistence(timeout: 15))
+        attachOnboardingScreen("Personalized Pipo Home")
+
+        // Relaunch as the SAME authenticated user without the forced-first-run
+        // flag. Account-specific completion should bypass onboarding entirely.
+        app.terminate()
+        app.launchArguments = ["-pipo-onboarding-qa-returning"]
+        app.launch()
+        XCTAssertTrue(app.staticTexts["Hey, Alex!"].waitForExistence(timeout: 25))
+        XCTAssertFalse(app.staticTexts["Little steps. Big dreams."].exists,
+                       "A returning account must not repeat onboarding")
+
+        // Also cover both optional Skip actions in the same controlled run.
+        app.terminate()
+        launchOnboarding()
+        tapButton("pipo.onboarding.continue")
+        tapButton("pipo.onboarding.skip")
+        XCTAssertTrue(app.staticTexts["What brings you to Pipo?"].waitForExistence(timeout: 12))
+        tapButton("pipo.onboarding.skip")
+        XCTAssertTrue(app.staticTexts["Want Pipo on your Home Screen?"].waitForExistence(timeout: 12))
+        tapButton("pipo.onboarding.widget.skip")
+        XCTAssertTrue(app.buttons["Create a saving goal"].waitForExistence(timeout: 25))
+        XCTAssertTrue(app.staticTexts["Pipo"].waitForExistence(timeout: 12),
+                      "Skipped personalization should leave the default Home greeting")
+        attachOnboardingScreen("Skipped options lead directly to Home")
+    }
+
+    private func launchOnboarding() {
+        app.launchArguments = ["-pipo-onboarding-qa"]
+        app.launch()
+    }
+
+    /// View-level Pipo reactions intentionally lift and scale for a moment.
+    /// Compare the settled resting state rather than a spring's intermediate frame.
+    private func assertMascotSettlesToSize(
+        _ expectedHeight: CGFloat,
+        file: StaticString = #filePath,
+        line: UInt = #line
+    ) {
+        let mascot = app.buttons["pipo.greet"].firstMatch
+        XCTAssertTrue(mascot.waitForExistence(timeout: 8), file: file, line: line)
+        let deadline = Date().addingTimeInterval(4)
+        var difference = abs(mascot.frame.height - expectedHeight)
+        while difference >= 2 && Date() < deadline {
+            RunLoop.current.run(until: Date().addingTimeInterval(0.15))
+            difference = abs(mascot.frame.height - expectedHeight)
+        }
+        XCTAssertLessThan(
+            difference,
+            2,
+            "Pipo must return to the same resting height on each step",
+            file: file,
+            line: line
+        )
+    }
+
+    private func attachOnboardingScreen(_ title: String) {
+        let attachment = XCTAttachment(screenshot: app.screenshot())
+        attachment.name = title
+        attachment.lifetime = .keepAlways
+        add(attachment)
+    }
+
     private func launchFromDashboard() {
         continueAfterFailure = false
         app.launchArguments = ["-pipo-visual-qa"]

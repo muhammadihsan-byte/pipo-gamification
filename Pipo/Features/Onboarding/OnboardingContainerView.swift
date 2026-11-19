@@ -1,658 +1,378 @@
 import SwiftUI
 import UIKit
-import UserNotifications
 
+/// A one-time, authenticated introduction to Pipo, not a saving-plan wizard.
+/// The optional widget guidance is informational: iOS installs widgets in its gallery.
 @MainActor
 struct OnboardingContainerView: View {
     @State private var viewModel = OnboardingViewModel()
-    @State private var mascotBounce = false
-    @State private var hasAnimatedSplash = false
-    @State private var notificationError: String?
-    @State private var isShowingWidgetInstructions = false
+    @State private var mascotReaction: OnboardingPipoReaction = .acknowledge
+    @State private var mascotReactionID = 0
+    @State private var mascotReply: String?
+    @State private var showingWidgetGuide = false
 
-    let onCompleted: (OnboardingCompletion) -> Void
-    let onSignIn: () -> Void
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @FocusState private var nicknameFocused: Bool
+
+    // Same 126pt V4 hero size as the approved optional-widget screen.
+    private let mascotHeight: CGFloat = 126
+
+    let onCompleted: (OnboardingPersonalization) -> Void
 
     var body: some View {
         VStack(spacing: 0) {
-            if viewModel.step.showsProgress {
-                OnboardingHeaderView(
-                    progress: viewModel.step.progress,
-                    mascotBounce: mascotBounce
-                )
-                    .padding(.bottom, 14)
-            }
+            OnboardingProgressHeader(step: viewModel.step, onBack: back)
+                .padding(.bottom, 6)
 
             ScrollView {
-                VStack(spacing: 20) {
-                    if viewModel.step.showsProgress {
-                        SpeechBubbleView(text: viewModel.question)
-                            .padding(.horizontal, 24)
-                    }
+                VStack(spacing: 18) {
                     stepContent
-                        .padding(.horizontal, 24)
-                        .padding(.bottom, 24)
                 }
                 .frame(maxWidth: 520)
                 .frame(maxWidth: .infinity)
-                .padding(.top, viewModel.step.showsProgress ? 4 : 20)
+                .padding(.horizontal, 24)
+                .padding(.top, 12)
+                .padding(.bottom, 24)
             }
+            .scrollDismissesKeyboard(.interactively)
+            .id(viewModel.step)
         }
-        .background(
-            LinearGradient(
-                colors: [.white, PipoTheme.mint.opacity(0.42)],
-                startPoint: .topLeading,
-                endPoint: .bottomTrailing
-            )
-            .ignoresSafeArea()
-        )
-        .safeAreaInset(edge: .bottom, spacing: 0) {
-            footer
-        }
+        .background(.white)
+        .safeAreaInset(edge: .bottom, spacing: 0) { footer }
         .preferredColorScheme(.light)
-        .animation(.spring(response: 0.42, dampingFraction: 0.86), value: viewModel.step)
-        .task(id: viewModel.step) {
-            guard viewModel.step == .splash || viewModel.step == .loading else { return }
-            let delay: UInt64 = viewModel.step == .splash ? 1_500_000_000 : 1_800_000_000
-            do {
-                try await Task.sleep(nanoseconds: delay)
-                guard !Task.isCancelled else { return }
-                withAnimation(.spring(response: 0.42, dampingFraction: 0.86)) {
-                    advance()
-                }
-            } catch {
-                return
-            }
+        .onChange(of: viewModel.step) { _, step in
+            mascotReply = nil
+            nicknameFocused = false
+            mascotReaction = step == .widget ? .reassure : .acknowledge
+            mascotReactionID += 1
         }
-        .alert(
-            "Notifications unavailable",
-            isPresented: Binding(
-                get: { notificationError != nil },
-                set: { if !$0 { notificationError = nil } }
-            )
-        ) {
-            Button("OK", role: .cancel) {
-                notificationError = nil
-            }
-        } message: {
-            Text(notificationError ?? "")
-        }
-        .onAppear {
-            hasAnimatedSplash = true
+        .sheet(isPresented: $showingWidgetGuide) {
+            widgetGuide
+                .presentationDetents([.large])
+                .presentationDragIndicator(.visible)
         }
     }
 
     @ViewBuilder
     private var stepContent: some View {
         switch viewModel.step {
-        case .splash:
-            splashContent
-        case .welcome:
-            welcomeContent
-        case .mascotIntro:
-            mascotIntroContent
-        case .expectations:
-            expectationsContent
-        case .goal:
-            goalOptions
-        case .savingMode:
-            savingModeOptions
-        case .loading:
-            loadingContent
-        case .habit:
-            habitOptions
-        case .motivation:
-            motivationOptions
-        case .rhythm:
-            rhythmOptions
-        case .reinforcement:
-            reinforcementContent
-        case .notifications:
-            notificationContent
-        case .widget:
-            widgetContent
-        case .vision:
-            visionContent
-        case .plan:
-            planOptions
-        }
-    }
-
-    private var splashContent: some View {
-        VStack(spacing: 18) {
-            Spacer(minLength: 18)
-            PipoMascotView(state: .celebrating)
-                .frame(width: 210, height: 210)
-                .scaleEffect(hasAnimatedSplash ? 1 : 0.72)
-                .animation(.spring(response: 0.72, dampingFraction: 0.48), value: hasAnimatedSplash)
-            Text("Pipo")
-                .font(.system(size: 32, weight: .bold, design: .rounded))
-                .foregroundStyle(PipoTheme.ink)
-                .opacity(hasAnimatedSplash ? 1 : 0)
-                .offset(y: hasAnimatedSplash ? 0 : 10)
-                .animation(.easeOut(duration: 0.7).delay(0.25), value: hasAnimatedSplash)
-            Text("A little saving, a lot of possibility.")
-                .font(.subheadline)
-                .foregroundStyle(PipoTheme.muted)
-            Spacer(minLength: 18)
-        }
-        .frame(maxWidth: .infinity, minHeight: 390)
-        .contentShape(Rectangle())
-        .onTapGesture {
-            guard viewModel.step == .splash else { return }
-            withAnimation(.spring()) { advance() }
+        case .welcome: welcomeContent
+        case .nickname: nicknameContent
+        case .motivation: motivationContent
+        case .widget: widgetContent
         }
     }
 
     private var welcomeContent: some View {
-        VStack(spacing: 18) {
-            PipoMascotView(state: .idle)
-                .frame(height: 245)
-                .frame(maxWidth: .infinity)
-                .scaleEffect(mascotBounce ? 1.03 : 1)
-                .animation(.spring(response: 0.35, dampingFraction: 0.48), value: mascotBounce)
-            Text("Save together.\nReach your goals.")
-                .font(.system(size: 32, weight: .bold, design: .rounded))
-                .multilineTextAlignment(.center)
+        VStack(spacing: 16) {
+            Text("YOUR SAVING BUDDY")
+                .font(.caption.weight(.bold))
+                .tracking(1.2)
+                .foregroundStyle(PipoTheme.deepPink)
+                .frame(maxWidth: .infinity, alignment: .leading)
+
+            Text("Little steps. Big dreams.")
+                .font(.system(size: 29, weight: .bold, design: .rounded))
                 .foregroundStyle(PipoTheme.ink)
-        }
-    }
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .accessibilityAddTraits(.isHeader)
 
-    private var mascotIntroContent: some View {
-        VStack(spacing: 18) {
-            mascotIllustration(state: .happy, height: 250)
-                .overlay(alignment: .topTrailing) {
-                    Text("👋")
-                        .font(.system(size: 42))
-                        .offset(x: -34, y: 28)
-                        .accessibilityHidden(true)
-                }
-            SpeechBubbleView(text: "Hi there! I'm Pipo!")
-        }
-    }
+            companionDialogue("Hey! I'm Pipo. Want to make saving a little more fun?")
 
-    private var expectationsContent: some View {
-        VStack(spacing: 18) {
-            mascotIllustration(state: .idle, height: 230)
-                .rotationEffect(.degrees(-4))
-            SpeechBubbleView(text: "Just 4 quick questions before we build your first saving plan!")
-        }
-    }
-
-    private var goalOptions: some View {
-        VStack(spacing: 10) {
-            ForEach(OnboardingGoal.allCases) { goal in
-                Button {
-                    optionTapped { viewModel.selectedGoal = goal }
-                } label: {
-                    SelectableOptionCard(
-                        symbol: goal.symbol,
-                        title: goal.title,
-                        selected: viewModel.selectedGoal == goal,
-                        dashed: goal == .explore
-                    )
-                }
-                .buttonStyle(.plain)
-                .accessibilityLabel(goal.title)
-            }
-        }
-    }
-
-    private var savingModeOptions: some View {
-        VStack(spacing: 12) {
-            ForEach(OnboardingSavingMode.allCases) { mode in
-                Button {
-                    optionTapped { viewModel.savingMode = mode }
-                } label: {
-                    SelectableOptionCard(
-                        symbol: mode.symbol,
-                        title: mode.title,
-                        subtitle: mode.subtitle,
-                        selected: viewModel.savingMode == mode
-                    )
-                }
-                .buttonStyle(.plain)
-                .accessibilityLabel("\(mode.title), \(mode.subtitle)")
-            }
-        }
-    }
-
-    private var loadingContent: some View {
-        VStack(spacing: 18) {
-            mascotIllustration(state: .celebrating, height: 220)
-                .overlay(alignment: .bottomTrailing) {
-                    Text("🐷")
-                        .font(.system(size: 54))
-                        .padding(10)
-                        .background(.white, in: Circle())
-                        .overlay { Circle().strokeBorder(PipoTheme.palePink, lineWidth: 2) }
-                        .offset(x: -16, y: -5)
-                }
-            Text(viewModel.loadingTitle)
-                .font(.headline.weight(.heavy))
-                .tracking(1)
-                .foregroundStyle(PipoTheme.green)
-            ProgressView()
-                .controlSize(.large)
-                .tint(PipoTheme.pink)
-            Text("Join thousands reaching their targets faster with Pipo!")
+            Text("Tap Pipo to wave hello.")
                 .font(.subheadline)
                 .foregroundStyle(PipoTheme.muted)
-                .multilineTextAlignment(.center)
+                .frame(maxWidth: .infinity, alignment: .leading)
+
+            Text("No pressure. We'll figure things out together.")
+                .font(.subheadline)
+                .foregroundStyle(PipoTheme.muted)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .padding(.top, 14)
         }
-        .frame(maxWidth: .infinity)
-        .padding(.top, 24)
     }
 
-    private var habitOptions: some View {
-        VStack(spacing: 10) {
-            ForEach(OnboardingHabit.allCases) { habit in
-                Button {
-                    optionTapped { viewModel.habit = habit }
-                } label: {
-                    HStack(spacing: 14) {
-                        SignalBarsView(level: habit.signalLevel)
-                            .frame(width: 42, height: 34)
-                        Text(habit.title)
-                            .font(.headline.weight(.semibold))
-                            .foregroundStyle(viewModel.habit == habit ? PipoTheme.deepPink : PipoTheme.ink)
-                            .multilineTextAlignment(.leading)
-                        Spacer(minLength: 0)
-                        if viewModel.habit == habit {
-                            Image(systemName: "checkmark.circle.fill")
-                                .foregroundStyle(PipoTheme.pink)
-                        }
-                    }
-                    .padding(14)
-                    .frame(maxWidth: .infinity, minHeight: 68)
-                    .background(
-                        viewModel.habit == habit ? PipoTheme.palePink : .white,
-                        in: RoundedRectangle(cornerRadius: 18)
-                    )
-                    .overlay {
-                        RoundedRectangle(cornerRadius: 18)
-                            .strokeBorder(
-                                viewModel.habit == habit ? PipoTheme.pink : PipoTheme.border,
-                                lineWidth: viewModel.habit == habit ? 1.8 : 1
-                            )
-                    }
+    private var nicknameContent: some View {
+        VStack(alignment: .leading, spacing: 16) {
+            companionDialogue("What should I call you?", reply: mascotReply)
+
+            Text("YOUR NAME")
+                .font(.caption.weight(.bold))
+                .tracking(0.8)
+                .foregroundStyle(PipoTheme.muted)
+                .padding(.top, 8)
+
+            TextField("e.g. Alex", text: $viewModel.nickname)
+                .focused($nicknameFocused)
+                .textInputAutocapitalization(.words)
+                .autocorrectionDisabled()
+                .submitLabel(.done)
+                .onSubmit { nicknameFocused = false }
+                .onChange(of: viewModel.nickname) { _, name in
+                    if name.count > 32 { viewModel.nickname = String(name.prefix(32)) }
+                    let trimmed = viewModel.nickname.trimmingCharacters(in: .whitespacesAndNewlines)
+                    mascotReply = trimmed.isEmpty ? nil : "Nice to meet you, \(trimmed)!"
                 }
-                .buttonStyle(.plain)
-                .accessibilityAddTraits(viewModel.habit == habit ? .isSelected : [])
-            }
+                .font(.body)
+                .padding(.horizontal, 18)
+                .frame(minHeight: 60)
+                .background(PipoTheme.cream, in: RoundedRectangle(cornerRadius: 16))
+                .overlay {
+                    RoundedRectangle(cornerRadius: 16)
+                        .strokeBorder(PipoTheme.border, lineWidth: 1)
+                }
+                .accessibilityIdentifier("pipo.onboarding.nickname")
+
+            Text("A nickname is fine. You can change this anytime.")
+                .font(.footnote)
+                .foregroundStyle(PipoTheme.muted)
+
         }
     }
 
-    private var motivationOptions: some View {
-        VStack(spacing: 10) {
+    private var motivationContent: some View {
+        VStack(spacing: 14) {
+            companionDialogue("What brings you to Pipo?", reply: mascotReply)
+
             ForEach(OnboardingMotivation.allCases) { motivation in
                 Button {
-                    optionTapped { viewModel.toggle(motivation) }
+                    UISelectionFeedbackGenerator().selectionChanged()
+                    withAnimation(reduceMotion ? nil : .spring(response: 0.3, dampingFraction: 0.8)) {
+                        viewModel.motivation = motivation
+                        mascotReply = motivation.companionReply
+                        mascotReaction = motivation == .feelInControl || motivation == .exploring
+                            ? .reassure : .celebrate
+                        mascotReactionID += 1
+                    }
                 } label: {
                     SelectableOptionCard(
                         symbol: motivation.symbol,
                         title: motivation.title,
-                        selected: viewModel.motivations.contains(motivation)
+                        selected: viewModel.motivation == motivation
                     )
                 }
                 .buttonStyle(.plain)
-                .accessibilityLabel(motivation.title)
+                .accessibilityIdentifier("pipo.onboarding.motivation.\(motivation.rawValue)")
+                .accessibilityAddTraits(viewModel.motivation == motivation ? [.isSelected] : [])
             }
-        }
-    }
 
-    private var rhythmOptions: some View {
-        VStack(spacing: 12) {
-            rhythmCard(.daily, subtitle: "Casual", symbol: "☀️")
-            rhythmCard(.weekly, subtitle: "Recommended", symbol: "📅", badge: "RECOMMENDED")
-            rhythmCard(.monthly, subtitle: "Focused", symbol: "💪")
-        }
-    }
-
-    private var reinforcementContent: some View {
-        VStack(spacing: 18) {
-            mascotIllustration(state: .celebrating, height: 265)
-                .overlay(alignment: .topTrailing) {
-                    Text("✨")
-                        .font(.system(size: 36))
-                        .offset(x: -34, y: 32)
-                        .accessibilityHidden(true)
-                }
-            Text("Your rhythm, your progress.")
-                .font(.title2.weight(.bold))
-                .foregroundStyle(PipoTheme.ink)
-                .multilineTextAlignment(.center)
-        }
-    }
-
-    private var notificationContent: some View {
-        VStack(spacing: 20) {
-            mascotIllustration(state: .happy, height: 200)
-                .overlay(alignment: .topTrailing) {
-                    Text("👍")
-                        .font(.system(size: 38))
-                        .offset(x: -30, y: 28)
-                        .accessibilityHidden(true)
-                }
-            VStack(alignment: .leading, spacing: 12) {
-                Label("Pipo", systemImage: "app.fill")
-                    .font(.caption.weight(.bold))
-                    .foregroundStyle(PipoTheme.muted)
-                Text("A little reminder for your goal")
-                    .font(.headline.weight(.bold))
-                    .foregroundStyle(PipoTheme.ink)
-                Text("It's your saving day! Add a little to your goal and keep that streak going.")
-                    .font(.subheadline)
-                    .foregroundStyle(PipoTheme.muted)
-                Text("now")
-                    .font(.caption)
-                    .foregroundStyle(PipoTheme.muted)
-            }
-            .padding(16)
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .background(.white.opacity(0.94), in: RoundedRectangle(cornerRadius: 20))
-            .overlay {
-                RoundedRectangle(cornerRadius: 20)
-                    .strokeBorder(PipoTheme.border, lineWidth: 1)
-            }
         }
     }
 
     private var widgetContent: some View {
-        VStack(spacing: 16) {
-            phonePreview
-            Text("Add the Pipo widget any time from your Home Screen's edit mode.")
+        VStack(spacing: 17) {
+            companionDialogue("Want Pipo on your Home Screen?")
+
+            Text("See your saving progress without opening the app.")
                 .font(.subheadline)
                 .foregroundStyle(PipoTheme.muted)
-                .multilineTextAlignment(.center)
-        }
-        .alert("Add Pipo to your Home Screen", isPresented: $isShowingWidgetInstructions) {
-            Button("Continue") { advance() }
-        } message: {
-            Text("Touch and hold your Home Screen, tap Edit, then Add Widget and choose Pipo.")
-        }
-    }
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .fixedSize(horizontal: false, vertical: true)
 
-    private var phonePreview: some View {
-        VStack(spacing: 18) {
-            HStack {
-                Text("9:41")
-                    .font(.caption.weight(.bold))
-                    .foregroundStyle(PipoTheme.ink)
-                Spacer()
-                Image(systemName: "wifi")
-                Image(systemName: "battery.100percent")
+            HStack(alignment: .top, spacing: 12) {
+                widgetPreviewSmall
+                widgetPreviewMedium
             }
-            .font(.caption2.weight(.semibold))
-            .foregroundStyle(PipoTheme.ink)
+            .frame(maxWidth: .infinity)
+            .padding(.top, 6)
 
-            widgetPreview
-
-            Capsule()
-                .fill(PipoTheme.ink.opacity(0.75))
-                .frame(width: 92, height: 5)
-        }
-        .padding(.horizontal, 18)
-        .padding(.vertical, 22)
-        .frame(maxWidth: 350)
-        .background(PipoTheme.cream, in: RoundedRectangle(cornerRadius: 34))
-        .overlay {
-            RoundedRectangle(cornerRadius: 34)
-                .strokeBorder(PipoTheme.ink.opacity(0.2), lineWidth: 2)
-        }
-        .shadow(color: PipoTheme.ink.opacity(0.12), radius: 12, y: 6)
-    }
-
-    private var widgetPreview: some View {
-        HStack(spacing: 14) {
-            ZStack(alignment: .bottomTrailing) {
-                RoundedRectangle(cornerRadius: 18)
-                    .fill(PipoTheme.mint)
-                    .frame(width: 90, height: 104)
-                PipoMascotView(state: .happy)
-                    .frame(width: 90, height: 92)
-                    .offset(x: 3, y: 6)
-            }
-            VStack(alignment: .leading, spacing: 9) {
-                Text("Dream Trip")
-                    .font(.headline.weight(.bold))
-                    .foregroundStyle(PipoTheme.ink)
-                HStack {
-                    Text("Progress")
-                    Spacer()
-                    Text("65%")
-                }
-                .font(.caption)
+            Text("Optional. Add a widget anytime from the iPhone Home Screen gallery.")
+                .font(.footnote)
                 .foregroundStyle(PipoTheme.muted)
-                ProgressView(value: 0.65)
-                    .tint(PipoTheme.green)
-                Label("7 day streak", systemImage: "flame.fill")
-                    .font(.caption.weight(.semibold))
-                    .foregroundStyle(PipoTheme.pink)
-            }
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .fixedSize(horizontal: false, vertical: true)
         }
-        .padding(14)
-        .frame(maxWidth: .infinity)
-        .background(.white, in: RoundedRectangle(cornerRadius: 24))
+    }
+
+    private var widgetPreviewSmall: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            HStack {
+                Image("PipoV4Neutral")
+                    .resizable()
+                    .scaledToFit()
+                    .frame(width: 28, height: 28)
+                Text("Pipo").font(.subheadline.bold())
+            }
+            Spacer(minLength: 4)
+            Text("Day one starts here")
+                .font(.footnote.weight(.semibold))
+            Text("Your journey awaits.")
+                .font(.caption2)
+                .foregroundStyle(PipoTheme.muted)
+        }
+        .foregroundStyle(PipoTheme.ink)
+        .padding(12)
+        .frame(maxWidth: .infinity, minHeight: 154, maxHeight: 154)
+        .background(PipoTheme.palePink, in: RoundedRectangle(cornerRadius: 19))
         .overlay {
-            RoundedRectangle(cornerRadius: 24)
+            RoundedRectangle(cornerRadius: 19)
                 .strokeBorder(PipoTheme.border, lineWidth: 1)
         }
-        .shadow(color: PipoTheme.ink.opacity(0.1), radius: 10, y: 5)
-        .accessibilityElement(children: .combine)
-        .accessibilityLabel("Pipo home screen widget preview, Dream Trip at 65 percent, 7 day streak")
+        .accessibilityLabel("Small Pipo widget preview. Day one starts here.")
     }
 
-    private var visionContent: some View {
-        VStack(spacing: 12) {
-            mascotIllustration(state: .celebrating, height: 205)
-                .overlay(alignment: .topTrailing) {
-                    Text("🏅")
-                        .font(.system(size: 44))
-                        .offset(x: -34, y: 26)
-                        .accessibilityHidden(true)
-                }
-            visionRow(symbol: "🔥", title: "Build an unbreakable streak", subtitle: "Daily or weekly check-ins")
-            visionRow(symbol: "💰", title: "Hit your first milestone", subtitle: "Smart automated breakdowns")
-            visionRow(symbol: "🏆", title: "Unlock Pipo badges & rewards", subtitle: "Celebrate every deposit")
+    private var widgetPreviewMedium: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            HStack {
+                Image("PipoV4Neutral")
+                    .resizable()
+                    .scaledToFit()
+                    .frame(width: 28, height: 28)
+                Text("Pipo").font(.subheadline.bold())
+            }
+            Spacer(minLength: 4)
+            Text("No saving goal yet")
+                .font(.footnote.weight(.semibold))
+            Text("Start whenever you're ready.")
+                .font(.caption2)
+                .foregroundStyle(PipoTheme.muted)
+        }
+        .foregroundStyle(PipoTheme.ink)
+        .padding(12)
+        .frame(maxWidth: .infinity, minHeight: 154, maxHeight: 154)
+        .background(PipoTheme.cream, in: RoundedRectangle(cornerRadius: 19))
+        .overlay {
+            RoundedRectangle(cornerRadius: 19)
+                .strokeBorder(PipoTheme.border, lineWidth: 1)
+        }
+        .accessibilityLabel("Medium Pipo widget preview. No saving goal yet.")
+    }
+
+    private var widgetGuide: some View {
+        VStack(alignment: .leading, spacing: 18) {
+            Text("Add Pipo to your Home Screen")
+                .font(.title2.bold())
+                .foregroundStyle(PipoTheme.ink)
+                .accessibilityAddTraits(.isHeader)
+
+            Text("You can do this anytime. No setup is required to use Pipo.")
+                .font(.subheadline)
+                .foregroundStyle(PipoTheme.muted)
+
+            VStack(alignment: .leading, spacing: 13) {
+                guideRow("1", "Touch and hold an empty area on your Home Screen.")
+                guideRow("2", "Tap Edit, then Add Widget.")
+                guideRow("3", "Search for Pipo, pick a size, and tap Add Widget.")
+            }
+
+            Spacer(minLength: 4)
+
+            Button {
+                showingWidgetGuide = false
+                finish(viewedWidgetGuide: true)
+            } label: {
+                Text("Go to Home")
+                    .frame(maxWidth: .infinity)
+            }
+            .buttonStyle(TactileButtonStyle())
+            .accessibilityIdentifier("pipo.onboarding.widget.done")
+        }
+        .padding(24)
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .background(.white)
+    }
+
+    private func guideRow(_ number: String, _ instruction: String) -> some View {
+        HStack(alignment: .top, spacing: 12) {
+            Text(number)
+                .font(.subheadline.bold())
+                .foregroundStyle(.white)
+                .frame(width: 28, height: 28)
+                .background(PipoTheme.pink, in: Circle())
+            Text(instruction)
+                .font(.subheadline)
+                .foregroundStyle(PipoTheme.ink)
+                .fixedSize(horizontal: false, vertical: true)
         }
     }
 
-    private var planOptions: some View {
-        VStack(spacing: 12) {
-            Button {
-                optionTapped { viewModel.plan = .plus }
-            } label: {
-                SelectableOptionCard(
-                    symbol: "✨",
-                    title: OnboardingPlan.plus.title,
-                    subtitle: OnboardingPlan.plus.subtitle,
-                    selected: viewModel.plan == .plus,
-                    badge: "RECOMMENDED"
-                )
-            }
-            .buttonStyle(.plain)
-            .accessibilityLabel("Pipo Plus, recommended. \(OnboardingPlan.plus.subtitle)")
+    /// Keeps Pipo at the same actual size and places the connected speech
+    /// bubble immediately beneath him on every onboarding step.
+    private func companionDialogue(_ prompt: String, reply: String? = nil) -> some View {
+        VStack(spacing: 6) {
+            OnboardingPipoView(
+                height: mascotHeight,
+                reaction: mascotReaction,
+                reactionID: mascotReactionID
+            )
+            .accessibilityHint("Double tap Pipo to make him wave.")
 
-            Button {
-                optionTapped { viewModel.plan = .free }
-            } label: {
-                SelectableOptionCard(
-                    symbol: "🌱",
-                    title: OnboardingPlan.free.title,
-                    subtitle: OnboardingPlan.free.subtitle,
-                    selected: viewModel.plan == .free
-                )
-            }
-            .buttonStyle(.plain)
-            .accessibilityLabel("\(OnboardingPlan.free.title). \(OnboardingPlan.free.subtitle)")
+            SpeechBubbleView(text: prompt, response: reply)
         }
+        .frame(maxWidth: .infinity)
     }
 
     private var footer: some View {
-        Group {
-            switch viewModel.step {
-            case .splash:
-                actionButton("CONTINUE") { advance() }
-            case .welcome:
-                VStack(spacing: 10) {
-                    actionButton("GET STARTED") { advance() }
-                    Button("I ALREADY HAVE AN ACCOUNT", action: onSignIn)
-                        .font(.caption.weight(.bold))
-                        .tracking(0.7)
-                        .foregroundStyle(PipoTheme.muted)
-                        .frame(maxWidth: .infinity, minHeight: 46)
+        VStack(spacing: 7) {
+            Button {
+                switch viewModel.step {
+                case .widget:
+                    showingWidgetGuide = true
+                default:
+                    nicknameFocused = false
+                    withAnimation(reduceMotion ? nil : .easeInOut(duration: 0.2)) {
+                        viewModel.advance()
+                    }
                 }
-            case .mascotIntro, .expectations, .reinforcement, .vision:
-                actionButton("CONTINUE") { advance() }
-            case .goal, .savingMode, .habit, .motivation:
-                actionButton("CONTINUE", isDisabled: !viewModel.canContinue) { advance() }
-            case .loading:
-                EmptyView()
-            case .rhythm:
-                actionButton("I'M COMMITTED", isDisabled: !viewModel.canContinue) { advance() }
-            case .notifications:
-                actionButton("REMIND ME TO SAVE") { requestNotificationsAndContinue() }
-            case .widget:
-                VStack(spacing: 8) {
-                    actionButton("ADD WIDGET") { isShowingWidgetInstructions = true }
-                    Button("NOT NOW") { advance() }
-                        .font(.subheadline.weight(.semibold))
-                        .foregroundStyle(PipoTheme.muted)
-                        .frame(maxWidth: .infinity, minHeight: 38)
+            } label: {
+                Text(primaryTitle)
+                    .frame(maxWidth: .infinity)
+            }
+            .buttonStyle(TactileButtonStyle())
+            .accessibilityIdentifier("pipo.onboarding.continue")
+
+            if viewModel.step == .nickname || viewModel.step == .motivation {
+                Button("Skip for now") {
+                    nicknameFocused = false
+                    if viewModel.step == .nickname { viewModel.nickname = "" }
+                    if viewModel.step == .motivation { viewModel.motivation = nil }
+                    viewModel.advance()
                 }
-            case .plan:
-                actionButton("CONTINUE", isDisabled: !viewModel.canContinue) {
-                    onCompleted(viewModel.completion)
+                .font(.subheadline.weight(.medium))
+                .foregroundStyle(PipoTheme.muted)
+                .frame(minHeight: 44)
+                .accessibilityIdentifier("pipo.onboarding.skip")
+            } else if viewModel.step == .widget {
+                Button("Maybe later — go to Home") {
+                    finish(viewedWidgetGuide: false)
                 }
+                .font(.subheadline.weight(.medium))
+                .foregroundStyle(PipoTheme.muted)
+                .frame(minHeight: 44)
+                .accessibilityIdentifier("pipo.onboarding.widget.skip")
             }
         }
         .padding(.horizontal, 24)
-        .padding(.top, 14)
-        .padding(.bottom, 10)
+        .padding(.top, 12)
+        .padding(.bottom, 8)
         .frame(maxWidth: 568)
         .frame(maxWidth: .infinity)
-        .background(.white.opacity(0.97))
+        .background(.white)
         .overlay(alignment: .top) {
             PipoTheme.border.frame(height: 1)
         }
     }
 
-    private func actionButton(
-        _ title: String,
-        isDisabled: Bool = false,
-        action: @escaping () -> Void
-    ) -> some View {
-        Button(action: action) {
-            Text(title)
-                .tracking(0.6)
-        }
-        .buttonStyle(TactileButtonStyle())
-        .disabled(isDisabled)
-        .opacity(isDisabled ? 0.5 : 1)
-    }
-
-    private func mascotIllustration(state: PipoMascotState, height: CGFloat) -> some View {
-        PipoMascotView(state: state)
-            .frame(height: height)
-            .frame(maxWidth: .infinity)
-            .offset(y: mascotBounce ? -5 : 0)
-            .animation(.spring(response: 0.35, dampingFraction: 0.48), value: mascotBounce)
-    }
-
-    private func rhythmCard(
-        _ rhythm: SavingRhythm,
-        subtitle: String,
-        symbol: String,
-        badge: String? = nil
-    ) -> some View {
-        let selected = viewModel.rhythm == rhythm
-        return Button {
-            optionTapped { viewModel.rhythm = rhythm }
-        } label: {
-            SelectableOptionCard(
-                symbol: symbol,
-                title: rhythm.title,
-                subtitle: subtitle,
-                selected: selected,
-                badge: badge
-            )
-        }
-        .buttonStyle(.plain)
-        .accessibilityLabel("\(rhythm.title), \(subtitle)")
-    }
-
-    private func visionRow(symbol: String, title: String, subtitle: String) -> some View {
-        HStack(spacing: 14) {
-            Text(symbol)
-                .font(.system(size: 30))
-                .frame(width: 44)
-                .accessibilityHidden(true)
-            VStack(alignment: .leading, spacing: 4) {
-                Text(title)
-                    .font(.headline.weight(.semibold))
-                    .foregroundStyle(PipoTheme.ink)
-                Text(subtitle)
-                    .font(.subheadline)
-                    .foregroundStyle(PipoTheme.muted)
-            }
-            Spacer(minLength: 0)
-        }
-        .padding(14)
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .background(.white, in: RoundedRectangle(cornerRadius: 18))
-        .overlay {
-            RoundedRectangle(cornerRadius: 18)
-                .strokeBorder(PipoTheme.border, lineWidth: 1)
+    private var primaryTitle: String {
+        switch viewModel.step {
+        case .welcome: "Let's do this"
+        case .nickname, .motivation: "Continue"
+        case .widget: "Show me how"
         }
     }
 
-    private func optionTapped(_ selection: () -> Void) {
-        UIImpactFeedbackGenerator(style: .light).impactOccurred()
-        withAnimation(.spring(response: 0.35, dampingFraction: 0.48)) {
-            mascotBounce.toggle()
-            selection()
+    private func back() {
+        nicknameFocused = false
+        withAnimation(reduceMotion ? nil : .easeInOut(duration: 0.2)) {
+            viewModel.goBack()
         }
     }
 
-    private func advance() {
-        viewModel.advance()
-    }
-
-    private func requestNotificationsAndContinue() {
-        Task {
-            do {
-                _ = try await UNUserNotificationCenter.current()
-                    .requestAuthorization(options: [.alert, .badge, .sound])
-            } catch {
-                notificationError = error.localizedDescription
-            }
-            withAnimation(.spring(response: 0.42, dampingFraction: 0.86)) {
-                advance()
-            }
-        }
-    }
-}
-
-@MainActor
-private struct SignalBarsView: View {
-    let level: Int
-
-    var body: some View {
-        HStack(alignment: .bottom, spacing: 3) {
-            ForEach(1...4, id: \.self) { bar in
-                Capsule()
-                    .fill(bar <= level ? PipoTheme.green : PipoTheme.border)
-                    .frame(width: 6, height: CGFloat(8 + bar * 5))
-            }
-        }
-        .accessibilityLabel("\(level) out of 4 saving experience")
+    private func finish(viewedWidgetGuide: Bool) {
+        onCompleted(viewModel.finish(viewedWidgetGuide: viewedWidgetGuide))
     }
 }
 
 #Preview {
-    OnboardingContainerView(
-        onCompleted: { _ in },
-        onSignIn: {}
-    )
+    OnboardingContainerView(onCompleted: { _ in })
 }

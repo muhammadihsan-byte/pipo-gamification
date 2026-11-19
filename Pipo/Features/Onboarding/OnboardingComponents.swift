@@ -1,16 +1,113 @@
 import SwiftUI
 
+enum OnboardingPipoReaction {
+    case acknowledge
+    case reassure
+    case celebrate
+
+    var lift: CGFloat {
+        switch self {
+        case .acknowledge: -5
+        case .reassure: -3
+        case .celebrate: -11
+        }
+    }
+
+    var rotation: Double {
+        switch self {
+        case .acknowledge: -4
+        case .reassure: 3
+        case .celebrate: -7
+        }
+    }
+
+    var scale: CGFloat {
+        switch self {
+        case .acknowledge: 1.025
+        case .reassure: 1.015
+        case .celebrate: 1.07
+        }
+    }
+}
+
+/// Onboarding-only reactions. The canonical V4 SVG and tap gesture remain unmodified.
+@MainActor
+struct OnboardingPipoView: View {
+    let height: CGFloat
+    var reaction: OnboardingPipoReaction = .acknowledge
+    var reactionID = 0
+
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+
+    var body: some View {
+        PipoMascotView(companion: .idle)
+            .frame(width: height * 460 / 500, height: height)
+            .phaseAnimator([false, true, false], trigger: reactionID) { content, active in
+                content
+                    .offset(y: active && !reduceMotion ? reaction.lift : 0)
+                    .rotationEffect(.degrees(active && !reduceMotion ? reaction.rotation : 0))
+                    .scaleEffect(active && !reduceMotion ? reaction.scale : 1)
+            } animation: { active in
+                active
+                    ? .spring(response: 0.23, dampingFraction: 0.67)
+                    : .spring(response: 0.43, dampingFraction: 0.79)
+            }
+            .frame(maxWidth: .infinity)
+    }
+}
+
+/// Duolingo-inspired progress structure, styled exclusively with Pipo tokens.
+@MainActor
+struct OnboardingProgressHeader: View {
+    let step: OnboardingStep
+    let onBack: () -> Void
+
+    var body: some View {
+        HStack(spacing: 14) {
+            Button(action: onBack) {
+                Image(systemName: "chevron.left")
+                    .font(.headline.weight(.semibold))
+                    .foregroundStyle(PipoTheme.ink)
+                    .frame(width: 44, height: 44)
+            }
+            .buttonStyle(.plain)
+            .disabled(step == .welcome)
+            .opacity(step == .welcome ? 0 : 1)
+            .accessibilityIdentifier("pipo.onboarding.back")
+
+            GeometryReader { geometry in
+                ZStack(alignment: .leading) {
+                    Capsule()
+                        .fill(PipoTheme.border)
+                    Capsule()
+                        .fill(PipoTheme.pink)
+                        .frame(width: geometry.size.width * step.progress)
+                }
+            }
+            .frame(height: 8)
+
+            Text("\(step.number) / 4")
+                .font(.caption.weight(.semibold))
+                .monospacedDigit()
+                .foregroundStyle(PipoTheme.muted)
+                .frame(width: 44, alignment: .trailing)
+        }
+        .padding(.horizontal, 18)
+        .padding(.top, 8)
+        .accessibilityElement(children: .contain)
+        .accessibilityLabel("Onboarding step \(step.number) of 4")
+    }
+}
+
 @MainActor
 struct OnboardingHeaderView: View {
     let progress: Double
-    var mascotBounce = false
 
     var body: some View {
         HStack(spacing: 12) {
-            PipoMascotView(state: .happy)
-                .frame(width: 64, height: 64)
-                .offset(y: mascotBounce ? -5 : 0)
-                .animation(.spring(response: 0.35, dampingFraction: 0.48), value: mascotBounce)
+            // A small static V4 companion avoids running two animated web views.
+            PipoMascotView(companion: .reassurance)
+                .frame(width: 58, height: 62)
             VStack(alignment: .leading, spacing: 8) {
                 HStack {
                     Text("PIPO")
@@ -44,46 +141,83 @@ struct OnboardingHeaderView: View {
     }
 }
 
-@MainActor
-struct SpeechBubbleView: View {
-    let text: String
+/// The pointer and body share one closed path, so the outline never draws
+/// a dividing line through the tail or leaves the triangle floating.
+private struct PipoSpeechBubbleShape: Shape {
+    func path(in rect: CGRect) -> Path {
+        let tailHeight: CGFloat = 10
+        let radius: CGFloat = 20
+        let left = rect.minX
+        let right = rect.maxX
+        let top = rect.minY + tailHeight
+        let bottom = rect.maxY
 
-    var body: some View {
-        Text(text)
-            .font(.system(.headline, design: .rounded, weight: .semibold))
-            .foregroundStyle(PipoTheme.ink)
-            .multilineTextAlignment(.leading)
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .padding(.horizontal, 18)
-            .padding(.vertical, 16)
-            .background(.white, in: RoundedRectangle(cornerRadius: 22))
-            .overlay {
-                RoundedRectangle(cornerRadius: 22)
-                    .strokeBorder(PipoTheme.border, lineWidth: 1)
-            }
-            .overlay(alignment: .topLeading) {
-                SpeechBubbleTail()
-                    .fill(.white)
-                    .frame(width: 18, height: 12)
-                    .overlay {
-                        SpeechBubbleTail()
-                            .stroke(PipoTheme.border, lineWidth: 1)
-                    }
-                    .offset(x: 28, y: -9)
-            }
-            .padding(.top, 8)
-            .accessibilityAddTraits(.isStaticText)
+        var path = Path()
+        path.move(to: CGPoint(x: left + radius, y: top))
+        // Aim the tail toward the centered V4 mascot, not the left gutter.
+        path.addLine(to: CGPoint(x: rect.midX - 11, y: top))
+        path.addLine(to: CGPoint(x: rect.midX, y: rect.minY))
+        path.addLine(to: CGPoint(x: rect.midX + 11, y: top))
+        path.addLine(to: CGPoint(x: right - radius, y: top))
+        path.addQuadCurve(
+            to: CGPoint(x: right, y: top + radius),
+            control: CGPoint(x: right, y: top)
+        )
+        path.addLine(to: CGPoint(x: right, y: bottom - radius))
+        path.addQuadCurve(
+            to: CGPoint(x: right - radius, y: bottom),
+            control: CGPoint(x: right, y: bottom)
+        )
+        path.addLine(to: CGPoint(x: left + radius, y: bottom))
+        path.addQuadCurve(
+            to: CGPoint(x: left, y: bottom - radius),
+            control: CGPoint(x: left, y: bottom)
+        )
+        path.addLine(to: CGPoint(x: left, y: top + radius))
+        path.addQuadCurve(
+            to: CGPoint(x: left + radius, y: top),
+            control: CGPoint(x: left, y: top)
+        )
+        path.closeSubpath()
+        return path
     }
 }
 
-private struct SpeechBubbleTail: Shape {
-    func path(in rect: CGRect) -> Path {
-        Path { path in
-            path.move(to: CGPoint(x: 0, y: rect.maxY))
-            path.addLine(to: CGPoint(x: rect.midX, y: 0))
-            path.addLine(to: CGPoint(x: rect.maxX, y: rect.maxY))
-            path.closeSubpath()
+@MainActor
+struct SpeechBubbleView: View {
+    let text: String
+    var response: String? = nil
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            Text(text)
+                .font(.system(.headline, design: .rounded, weight: .semibold))
+                .foregroundStyle(PipoTheme.ink)
+                .multilineTextAlignment(.leading)
+                .fixedSize(horizontal: false, vertical: true)
+
+            if let response, !response.isEmpty {
+                Text(response)
+                    .font(.subheadline.weight(.medium))
+                    .foregroundStyle(PipoTheme.deepPink)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .accessibilityLabel("Pipo says: \\(response)")
+                    .transition(.opacity)
+            }
         }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(.horizontal, 18)
+        .padding(.top, 26)
+        .padding(.bottom, 17)
+        .background {
+            PipoSpeechBubbleShape()
+                .fill(.white)
+        }
+        .overlay {
+            PipoSpeechBubbleShape()
+                .stroke(PipoTheme.border, lineWidth: 1)
+        }
+        .fixedSize(horizontal: false, vertical: true)
     }
 }
 
@@ -124,9 +258,14 @@ struct SelectableOptionCard: View {
 
     var body: some View {
         HStack(spacing: 14) {
-            Text(symbol)
-                .font(.system(size: 28))
+            Image(systemName: symbol)
+                .font(.system(size: 22, weight: .semibold))
+                .foregroundStyle(selected ? PipoTheme.deepPink : PipoTheme.green)
                 .frame(width: 42, height: 42)
+                .background(
+                    selected ? PipoTheme.palePink : PipoTheme.mint.opacity(0.6),
+                    in: RoundedRectangle(cornerRadius: 12)
+                )
                 .accessibilityHidden(true)
 
             VStack(alignment: .leading, spacing: 4) {
@@ -190,7 +329,7 @@ struct SelectableOptionCard: View {
     VStack(spacing: 20) {
         OnboardingHeaderView(progress: 0.6)
         SpeechBubbleView(text: "What are you saving for first?")
-        SelectableOptionCard(symbol: "✈️", title: "Dream Trip", selected: true)
+        SelectableOptionCard(symbol: "airplane", title: "Dream Trip", selected: true)
         Button("CONTINUE") {}
             .buttonStyle(TactileButtonStyle())
     }
