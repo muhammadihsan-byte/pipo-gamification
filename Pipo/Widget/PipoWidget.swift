@@ -90,7 +90,7 @@ private struct PipoWidgetView: View {
     private var smallWidget: some View {
         VStack(alignment: .leading, spacing: 4) {
             HStack(spacing: 8) {
-                Image("PipoAuthHero")
+                Image("PipoV4Neutral")
                     .resizable()
                     .scaledToFit()
                     .frame(width: 48, height: 48)
@@ -101,22 +101,32 @@ private struct PipoWidgetView: View {
 
             Spacer(minLength: 2)
 
-            Text("🔥 \(entry.snapshot.streakDays) Day Streak")
-                .font(.subheadline.weight(.bold))
-                .lineLimit(1)
-                .minimumScaleFactor(0.8)
-            Text("Level \(entry.snapshot.currentLevel) · \(entry.snapshot.totalXP.formatted()) XP")
-                .font(.caption)
-                .foregroundStyle(.secondary)
-                .lineLimit(1)
-                .minimumScaleFactor(0.8)
+            if entry.snapshot.goalID == nil {
+                Text("Day one starts here")
+                    .font(.subheadline.weight(.bold))
+                    .lineLimit(2)
+                Text("Your journey awaits.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .lineLimit(2)
+            } else {
+                Text("🔥 \(entry.snapshot.streakDays) Day Streak")
+                    .font(.subheadline.weight(.bold))
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.8)
+                Text("Level \(entry.snapshot.currentLevel) · \(entry.snapshot.totalXP.formatted()) XP")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.8)
+            }
         }
         .padding(4)
     }
 
     private var mediumWidget: some View {
         HStack(spacing: 12) {
-            Image("PipoAuthHero")
+            Image("PipoV4Neutral")
                 .resizable()
                 .scaledToFit()
                 .frame(width: 72, height: 82)
@@ -154,9 +164,9 @@ private struct PipoWidgetView: View {
                         }
                     }
                 } else {
-                    Text("No active personal goal")
+                    Text("No saving goal yet")
                         .font(.headline)
-                    Text("Create a goal in Pipo to track progress here.")
+                    Text("Start whenever you're ready.")
                         .font(.caption)
                         .foregroundStyle(.secondary)
                         .fixedSize(horizontal: false, vertical: true)
