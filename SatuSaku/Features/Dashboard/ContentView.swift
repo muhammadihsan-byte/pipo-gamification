@@ -79,7 +79,7 @@ struct DashboardView: View {
                 .presentationDetents([.medium])
         }
         .alert(
-            "Satu Saku",
+            "Pipo",
             isPresented: Binding(
                 get: { saveErrorMessage != nil },
                 set: { if !$0 { saveErrorMessage = nil } }
@@ -96,7 +96,7 @@ struct DashboardView: View {
     private var welcomeHeader: some View {
         HStack(spacing: 12) {
             VStack(alignment: .leading, spacing: 6) {
-                Text("Satu Saku")
+                Text("Pipo")
                     .font(.largeTitle.bold())
                     .foregroundStyle(SatuSakuTheme.ink)
                 Text("Sedikit demi sedikit, jadi bukit.")
