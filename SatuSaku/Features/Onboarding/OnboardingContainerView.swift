@@ -125,13 +125,8 @@ struct OnboardingContainerView: View {
                 .frame(width: 210, height: 210)
                 .scaleEffect(hasAnimatedSplash ? 1 : 0.72)
                 .animation(.spring(response: 0.72, dampingFraction: 0.48), value: hasAnimatedSplash)
-            HStack(spacing: 8) {
-                Text("Pipo")
-                Text("/")
-                    .foregroundStyle(SatuSakuTheme.pink)
-                Text("SatuSaku")
-            }
-            .font(.system(size: 32, weight: .bold, design: .rounded))
+            Text("Pipo")
+                .font(.system(size: 32, weight: .bold, design: .rounded))
             .foregroundStyle(SatuSakuTheme.ink)
             .opacity(hasAnimatedSplash ? 1 : 0)
             .offset(y: hasAnimatedSplash ? 0 : 10)
@@ -340,7 +335,7 @@ struct OnboardingContainerView: View {
                         .accessibilityHidden(true)
                 }
             VStack(alignment: .leading, spacing: 12) {
-                Label("SatuSaku", systemImage: "app.fill")
+                Label("Pipo", systemImage: "app.fill")
                     .font(.caption.weight(.bold))
                     .foregroundStyle(SatuSakuTheme.muted)
                 Text("A little reminder for your goal")
@@ -366,15 +361,15 @@ struct OnboardingContainerView: View {
     private var widgetContent: some View {
         VStack(spacing: 16) {
             phonePreview
-            Text("Add the SatuSaku widget any time from your Home Screen's edit mode.")
+            Text("Add the Pipo widget any time from your Home Screen's edit mode.")
                 .font(.subheadline)
                 .foregroundStyle(SatuSakuTheme.muted)
                 .multilineTextAlignment(.center)
         }
-        .alert("Add SatuSaku to your Home Screen", isPresented: $isShowingWidgetInstructions) {
+        .alert("Add Pipo to your Home Screen", isPresented: $isShowingWidgetInstructions) {
             Button("Continue") { advance() }
         } message: {
-            Text("Touch and hold your Home Screen, tap Edit, then Add Widget and choose SatuSaku.")
+            Text("Touch and hold your Home Screen, tap Edit, then Add Widget and choose Pipo.")
         }
     }
 
@@ -445,7 +440,7 @@ struct OnboardingContainerView: View {
         }
         .shadow(color: SatuSakuTheme.ink.opacity(0.1), radius: 10, y: 5)
         .accessibilityElement(children: .combine)
-        .accessibilityLabel("SatuSaku home screen widget preview, Dream Trip at 65 percent, 7 day streak")
+        .accessibilityLabel("Pipo home screen widget preview, Dream Trip at 65 percent, 7 day streak")
     }
 
     private var visionContent: some View {
