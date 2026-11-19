@@ -123,7 +123,6 @@ struct CreateGoalView: View {
                     if let goalPlan {
                         ReviewPlanView(
                             plan: goalPlan,
-                            onBack: onBack,
                             onCreated: onCreated
                         )
                     } else {
