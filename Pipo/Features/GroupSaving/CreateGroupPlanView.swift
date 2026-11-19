@@ -32,7 +32,10 @@ struct CreateGroupPlanView: View {
         self.onDashboard = onDashboard
         var initialDraft = GroupPlanDraft()
         if let initialTitle { initialDraft.title = initialTitle }
-        if let initialRhythm { initialDraft.rhythm = initialRhythm }
+        // "Decide later" must not select an unschedulable equal-payment plan.
+        if let initialRhythm, initialRhythm != .flexible {
+            initialDraft.rhythm = initialRhythm
+        }
 
         if let initialCategory {
             switch initialCategory {
