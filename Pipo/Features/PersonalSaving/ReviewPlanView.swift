@@ -141,7 +141,7 @@ struct ReviewPlanView: View {
     private func confirmation(goalID: UUID) -> some View {
         PersonalPlanDialog {
             PipoMascotView(companion: .celebration)
-                .frame(width: 108, height: 108)
+                .frame(width: 94, height: 99)
                 .accessibilityHidden(true)
 
             Text("Your plan is ready!")

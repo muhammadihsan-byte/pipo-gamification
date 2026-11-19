@@ -60,7 +60,7 @@ struct GroupPlanDraft {
     var usesDuration = false
     var months = 9
     let start: Date
-    var selectedDate: Date
+    var dateEntry: SavingDateEntry
     var mode = GroupContributionMode.equal
     var expected = "1"
     var rhythm = SavingRhythm.monthly
@@ -77,7 +77,8 @@ struct GroupPlanDraft {
     init(start: Date = .now, calendar: Calendar = .current) {
         self.calendar = calendar
         self.start = calendar.startOfDay(for: start)
-        selectedDate = calendar.date(byAdding: .month, value: 2, to: self.start) ?? self.start
+        let end = calendar.date(byAdding: .month, value: 2, to: self.start) ?? self.start
+        dateEntry = SavingDateEntry(end, calendar: calendar)
         monthDay = calendar.component(.day, from: start)
         weekday = calendar.component(.weekday, from: start)
     }
@@ -89,7 +90,7 @@ struct GroupPlanDraft {
         return items.validBreakdownTotal
     }
     var end: Date? {
-        let date = usesDuration ? calendar.date(byAdding: .month, value: months, to: start) : selectedDate
+        let date = usesDuration ? calendar.date(byAdding: .month, value: months, to: start) : dateEntry.date(in: calendar)
         guard let date, calendar.startOfDay(for: date) > start else { return nil }
         return calendar.startOfDay(for: date)
     }
