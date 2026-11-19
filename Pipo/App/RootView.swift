@@ -258,7 +258,7 @@ struct RootView: View {
         )
         .confirmationDialog("Choose a saving plan", isPresented: $choosingPlan, titleVisibility: .visible) {
             Button("Personal saving") { navigationManager.navigate(to: .createGoal) }
-            Button("Group saving") { navigationManager.navigate(to: .reviewGroupSaving) }
+            Button("Group saving") { navigationManager.navigate(to: .createGroupPlan) }
             Button("Cancel", role: .cancel) {}
         }
     }
@@ -355,7 +355,7 @@ struct RootView: View {
             PersonalGoalDetailView(goalID: goalID, onBack: navigationManager.pop) {
                 navigationManager.requestDeposit(goalID: goalID)
             }
-        case .savingRhythm, .reviewGroupSaving:
+        case .createGroupPlan, .savingRhythm, .reviewGroupSaving:
             CreateGroupPlanView(onBack: navigationManager.pop, onDashboard: navigationManager.popToRoot)
         case .milestoneCelebration:
             ConsistencyMilestoneView(
@@ -377,7 +377,7 @@ struct RootView: View {
             onboardingCompletion = nil
         } else if completion.isGroupSaving {
             onboardingCompletion = nil
-            navigationManager.navigate(to: .reviewGroupSaving)
+            navigationManager.navigate(to: .createGroupPlan)
         } else if completion.goalCategory != nil, completion.goalTitle != nil {
             isPrefillingOnboardingGoal = true
             navigationManager.navigate(to: .createGoal)
@@ -395,10 +395,8 @@ struct RootView_Previews: PreviewProvider {
                 .previewDisplayName("Sign In")
             RootView(initialAuthState: .authenticated)
                 .previewDisplayName("Dashboard")
-            RootView(initialAuthState: .authenticated, initialRoute: .savingRhythm)
-                .previewDisplayName("Saving Rhythm")
-            RootView(initialAuthState: .authenticated, initialRoute: .reviewGroupSaving)
-                .previewDisplayName("Group Review")
+            RootView(initialAuthState: .authenticated, initialRoute: .createGroupPlan)
+                .previewDisplayName("Group Saving")
             RootView(initialAuthState: .authenticated, initialRoute: .milestoneCelebration)
                 .previewDisplayName("Milestone")
         }

@@ -75,6 +75,22 @@ final class GroupPlanJourneyTests: XCTestCase {
         XCTAssertEqual(plan.estimate, 325_000)
     }
 
+    func testDateEntryRejectsNormalizedDatesAndPreservesTheAlternative() {
+        var plan = draft()
+        plan.usesDuration = false
+        plan.dateEntry.day = "29"
+        plan.dateEntry.month = "02"
+        plan.dateEntry.year = "2028"
+        XCTAssertNotNil(plan.end)
+        plan.dateEntry.year = "2027"
+        XCTAssertNil(plan.end)
+        plan.usesDuration = true
+        XCTAssertNotNil(plan.end)
+        plan.usesDuration = false
+        XCTAssertEqual(plan.dateEntry.day, "29")
+        XCTAssertNil(plan.end)
+    }
+
     func testInvalidDatesAndCustomCategoryGateAdvancement() {
         var plan = draft()
         plan.category = .other
@@ -87,7 +103,7 @@ final class GroupPlanJourneyTests: XCTestCase {
         XCTAssertEqual(navigation.step, .target)
         navigation.advance(plan)
         plan.usesDuration = false
-        plan.selectedDate = plan.start
+        plan.dateEntry = SavingDateEntry(plan.start, calendar: calendar)
         navigation.advance(plan)
         XCTAssertEqual(navigation.step, .timeline)
         navigation.back(plan)
@@ -103,7 +119,7 @@ final class GroupPlanJourneyTests: XCTestCase {
         XCTAssertEqual(navigation.step, .review)
         navigation.edit(.timeline)
         plan.usesDuration = false
-        plan.selectedDate = calendar.date(byAdding: .day, value: 1, to: plan.start)!
+        plan.dateEntry = SavingDateEntry(calendar.date(byAdding: .day, value: 1, to: plan.start)!, calendar: calendar)
         plan.monthDay = 30
         navigation.advance(plan)
         XCTAssertEqual(navigation.step, .rules)

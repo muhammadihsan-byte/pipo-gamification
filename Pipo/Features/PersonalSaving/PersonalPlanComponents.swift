@@ -109,8 +109,7 @@ struct SavingPlanPage<Content: View, Footer: View>: View {
                         .frame(width: 32, height: 32)
                         .background(PersonalPlanStyle.surface, in: RoundedRectangle(cornerRadius: 12))
                         .frame(minWidth: 44, minHeight: 44)
-                        .padding(.leading, -6)
-                        .padding(.trailing, -6)
+                        .contentShape(Rectangle())
                 }
                 .buttonStyle(.plain)
                 .accessibilityLabel("Back")
@@ -124,7 +123,7 @@ struct SavingPlanPage<Content: View, Footer: View>: View {
                     .accessibilityLabel(ready ? "Ready" : "Step \(stepNumber) of \(count)")
             }
 
-            HStack(spacing: 6) {
+            HStack(spacing: count == 7 ? 14 : 6) {
                 ForEach(1..<(count + 1), id: \.self) { bar in
                     Capsule()
                         .fill(progressColor(for: bar))
@@ -157,13 +156,13 @@ struct PersonalPlanIntro: View {
     var body: some View {
         if step == .review {
             VStack(spacing: 12) {
-                illustration(size: 132)
+                illustration(size: 126)
                 copy
             }
             .frame(maxWidth: .infinity)
         } else {
             HStack(spacing: 16) {
-                illustration(size: 82)
+                illustration(size: 84)
                 copy
             }
             .frame(maxWidth: .infinity)
@@ -197,7 +196,7 @@ struct PersonalPlanIntro: View {
                 Image("PlanTargetHeart").resizable().scaledToFit()
             }
         }
-        .frame(width: size, height: size)
+        .frame(width: size, height: step == .goal ? 92 : size)
         .accessibilityHidden(true)
     }
 }
@@ -212,7 +211,8 @@ struct PersonalPlanActions: View {
     var body: some View {
         HStack(spacing: 12) {
             if showsBack {
-                Button(action: back) { Text("Back")
+                Button(action: back) {
+                    Text("Back")
                     .font(.subheadline.bold())
                     .foregroundStyle(PersonalPlanStyle.muted)
                     .padding(.horizontal, 24)
@@ -390,7 +390,7 @@ struct SavingDayGrid: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
             Text(title).font(.subheadline.bold())
-            LazyVGrid(columns: [GridItem(.adaptive(minimum: 44), spacing: 4)], spacing: 4) {
+            LazyVGrid(columns: [GridItem(.adaptive(minimum: 44, maximum: 68), spacing: 4)], spacing: 4) {
                 ForEach(days, id: \.self) { day in
                     let selected = selection == day
                     Button {
@@ -411,5 +411,131 @@ struct SavingDayGrid: View {
                 }
             }
         }
+    }
+}
+
+struct SavingDateEditor: View {
+    @Binding var entry: SavingDateEntry
+    let start: Date
+    let calendar: Calendar
+    @State private var visibleMonth: Date
+
+    init(entry: Binding<SavingDateEntry>, start: Date, calendar: Calendar) {
+        _entry = entry
+        self.start = start
+        self.calendar = calendar
+        _visibleMonth = State(initialValue: entry.wrappedValue.date(in: calendar) ?? start)
+    }
+
+    var body: some View {
+        VStack(spacing: 10) {
+            HStack(spacing: 10) {
+                field("Day", $entry.day)
+                field("Month", $entry.month)
+                field("Year", $entry.year)
+            }
+            ViewThatFits(in: .horizontal) {
+                PersonalPlanCalendar(month: $visibleMonth, selected: entry.date(in: calendar),
+                                     minimumDate: start, calendar: calendar, onSelect: select)
+                    .frame(minWidth: 332)
+                DatePicker("Calendar", selection: Binding(get: { entry.date(in: calendar) ?? start },
+                                                          set: select),
+                           in: (calendar.date(byAdding: .day, value: 1, to: start) ?? start)...,
+                           displayedComponents: .date)
+            }
+        }
+        .onChange(of: entry.date(in: calendar)) { _, date in
+            if let date, date > start { visibleMonth = date }
+        }
+    }
+
+    private func select(_ date: Date) { entry = SavingDateEntry(date, calendar: calendar) }
+
+    private func field(_ title: String, _ text: Binding<String>) -> some View {
+        VStack(alignment: .leading, spacing: 6) {
+            Text(title).font(.caption.weight(.semibold)).foregroundStyle(PersonalPlanStyle.muted)
+            TextField(title, text: text).accessibilityLabel(title).keyboardType(.numberPad)
+                .font(.caption.weight(.medium)).personalPlanField(height: 44)
+        }
+    }
+}
+
+private struct PersonalPlanCalendar: View {
+    @Binding var month: Date
+    let selected: Date?
+    let minimumDate: Date
+    let calendar: Calendar
+    let onSelect: (Date) -> Void
+
+    var body: some View {
+        VStack(spacing: 7) {
+            HStack {
+                monthButton("chevron.left", label: "Previous month", direction: -1)
+                    .disabled(!canStepBack)
+                Spacer()
+                Text(month.formatted(.dateTime.month(.wide).year().locale(calendar.locale ?? .current)))
+                    .font(.subheadline.bold())
+                Spacer()
+                monthButton("chevron.right", label: "Next month", direction: 1)
+            }
+
+            if let interval = calendar.dateInterval(of: .month, for: month),
+               let days = calendar.range(of: .day, in: .month, for: interval.start) {
+                let leading = (calendar.component(.weekday, from: interval.start) + 5) % 7
+                LazyVGrid(columns: Array(repeating: GridItem(.flexible(minimum: 44), spacing: 0), count: 7), spacing: 3) {
+                    ForEach([2, 3, 4, 5, 6, 7, 1], id: \.self) { weekday in
+                        Text(calendar.veryShortWeekdaySymbols[weekday - 1])
+                            .foregroundStyle(PersonalPlanStyle.muted)
+                            .accessibilityHidden(true)
+                    }
+                    ForEach(0..<leading, id: \.self) { _ in Color.clear.frame(height: 30) }
+                    ForEach(days, id: \.self) { day in
+                        if let date = calendar.date(byAdding: .day, value: day - 1, to: interval.start) {
+                            dayButton(day, date: date)
+                        }
+                    }
+                }
+                .font(.caption.weight(.medium))
+            }
+        }
+        .padding(12)
+        .background(PersonalPlanStyle.surface, in: RoundedRectangle(cornerRadius: 16))
+    }
+
+    private var canStepBack: Bool {
+        guard let start = calendar.dateInterval(of: .month, for: month)?.start else { return false }
+        return start > minimumDate
+    }
+
+    private func monthButton(_ symbol: String, label: String, direction: Int) -> some View {
+        Button {
+            if let next = calendar.date(byAdding: .month, value: direction, to: month) {
+                month = next
+            }
+        } label: {
+            Image(systemName: symbol)
+                .font(.caption.weight(.bold))
+                .foregroundStyle(PersonalPlanStyle.muted)
+                .frame(width: 44, height: 44)
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel(label)
+    }
+
+    private func dayButton(_ day: Int, date: Date) -> some View {
+        let isSelected = selected.map { calendar.isDate($0, inSameDayAs: date) } ?? false
+        return Button {
+            onSelect(date)
+        } label: {
+            Text(String(day))
+                .foregroundStyle(isSelected ? .white : PersonalPlanStyle.ink.opacity(date <= minimumDate ? 0.4 : 1))
+                .frame(maxWidth: .infinity, minHeight: 44)
+                .background(isSelected ? PersonalPlanStyle.pink : .clear, in: RoundedRectangle(cornerRadius: 9))
+                .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .disabled(date <= minimumDate)
+        .accessibilityLabel(dateLabel(date))
+        .accessibilityAddTraits(isSelected ? .isSelected : [])
     }
 }

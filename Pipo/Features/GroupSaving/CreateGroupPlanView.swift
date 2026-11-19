@@ -14,6 +14,8 @@ struct CreateGroupPlanView: View {
     @State private var memberInput = ""
     @State private var memberError: String?
     @State private var photoLoading = false
+    @State private var didCelebrate = false
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @FocusState private var nameFocused: Bool
     @State private var touchedName = false
     @Environment(AuthStateManager.self) private var auth
@@ -59,8 +61,9 @@ struct CreateGroupPlanView: View {
                                     dimmed: !draft.valid(navigation.step) || photoLoading,
                                     action: { advance(skipping: false) })
                 if navigation.step == .invitations {
-                    Button("Invite later") { advance(skipping: true) }
-                        .frame(minHeight: 44).font(.subheadline.bold())
+                    Button { advance(skipping: true) } label: {
+                        Text("Invite later").font(.subheadline.bold()).frame(minHeight: 44)
+                    }
                 }
             }
         }
@@ -192,8 +195,7 @@ struct CreateGroupPlanView: View {
             GroupStepIntro("When do we want to reach our goal?", "Choose a date to aim for, together.")
             PersonalPlanChoice(title: "Target date", selected: !draft.usesDuration) { draft.usesDuration = false }
             if !draft.usesDuration {
-                DatePicker("Target date", selection: $draft.selectedDate, in: minimumEnd..., displayedComponents: .date)
-                    .datePickerStyle(.graphical)
+                SavingDateEditor(entry: $draft.dateEntry, start: draft.start, calendar: draft.calendar)
             }
             PersonalPlanChoice(title: "Duration", selected: draft.usesDuration) { draft.usesDuration = true }
             if draft.usesDuration {
@@ -207,7 +209,6 @@ struct CreateGroupPlanView: View {
             } else { feedback("Choose a date after the plan starts.") }
         }
     }
-    private var minimumEnd: Date { draft.calendar.date(byAdding: .day, value: 1, to: draft.start) ?? draft.start }
 
     private var rules: some View {
         Group {
@@ -292,8 +293,8 @@ struct CreateGroupPlanView: View {
                     .textInputAutocapitalization(.never).autocorrectionDisabled().personalPlanField()
                     .onChange(of: memberInput) { _, _ in memberError = nil }
                 if let memberError { feedback(memberError) }
-                Button("Add to list") { _ = addMember() }
-                    .frame(minHeight: 44).disabled(memberInput.trimmed.isEmpty)
+                Button { _ = addMember() } label: { Text("Add to list").frame(minHeight: 44) }
+                    .disabled(memberInput.trimmed.isEmpty)
                 ForEach(draft.preparedMembers, id: \.self) { name in
                     HStack {
                         Text(name)
@@ -304,6 +305,12 @@ struct CreateGroupPlanView: View {
                         }.accessibilityLabel("Remove \(name)")
                     }
                 }
+            }.groupPlanCard()
+            VStack(alignment: .leading, spacing: 8) {
+                Text("Private invite link").font(.caption.bold())
+                Label("Link unavailable", systemImage: "link")
+                    .foregroundStyle(PersonalPlanStyle.muted).personalPlanField()
+                hint("Link sharing is unavailable for this local plan.")
             }.groupPlanCard()
             PersonalPlanNote(title: "0 invitations sent", message: "Names stay on this device. Invite links and delivery are unavailable.")
         }.font(.subheadline)
@@ -325,8 +332,13 @@ struct CreateGroupPlanView: View {
         Group {
             GroupStepIntro("Your saving team is ready!", "One small step, together.")
             PipoMascotView(companion: .celebration).frame(height: 108).frame(maxWidth: .infinity).accessibilityHidden(true)
-            Label("\(draft.groupName.trimmed) saved on this device", systemImage: "checkmark.circle")
-                .font(.headline).foregroundStyle(PersonalPlanStyle.green)
+            Label {
+                Text("\(draft.groupName.trimmed) saved on this device")
+            } icon: {
+                Image(systemName: "checkmark.circle").symbolEffect(.bounce, value: didCelebrate)
+            }
+            .font(.headline).foregroundStyle(PersonalPlanStyle.green)
+            .onAppear { if !reduceMotion { didCelebrate = true } }
             VStack(alignment: .leading, spacing: 12) {
                 Text(draft.title.trimmed).font(.headline)
                 if let target = draft.target { LabeledContent("Shared target", value: money(target)) }
@@ -399,11 +411,13 @@ private struct PlanPhotoPicker: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
             PlanPhotoPreview(data: data)
+            let photoLabel = data == nil ? title : "Change photo"
             PhotosPicker(selection: $selection, matching: .images) {
-                Label(data == nil ? title : "Change photo", systemImage: "photo.badge.plus").personalPlanField()
+                Label(photoLabel, systemImage: "photo.badge.plus")
             }
+            .personalPlanField()
             if data != nil {
-                Button("Remove photo") { selection = nil; data = nil }.frame(minHeight: 44)
+                Button { selection = nil; data = nil } label: { Text("Remove photo").frame(minHeight: 44) }
             }
             if loading { ProgressView("Loading photo…") }
             if let error { Text(error).font(.caption).foregroundStyle(PersonalPlanStyle.error) }
