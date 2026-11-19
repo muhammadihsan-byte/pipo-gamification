@@ -12,11 +12,8 @@ struct RootView: View {
     @State private var supabaseService: SupabaseService?
     @State private var choosingPlan = false
     @State private var noticeMessage: String?
-    @AppStorage("hasCompletedOnboarding") private var hasCompletedOnboarding = false
-    @AppStorage("pipo.pendingOnboardingCompletion") private var pendingOnboardingData = Data()
-    @State private var onboardingCompletion: OnboardingCompletion?
     @State private var hasFinishedOnboardingQA = false
-    @State private var isPrefillingOnboardingGoal = false
+    @State private var completedOnboardingAccountID: UUID?
     @Environment(\.modelContext) private var modelContext
     @Query private var localTransactions: [SavingTransaction]
 
@@ -30,10 +27,13 @@ struct RootView: View {
         #endif
     }
 
-    private var savedOnboardingCompletion: OnboardingCompletion? {
-        if let onboardingCompletion { return onboardingCompletion }
-        guard !pendingOnboardingData.isEmpty else { return nil }
-        return try? JSONDecoder().decode(OnboardingCompletion.self, from: pendingOnboardingData)
+    private var needsOnboarding: Bool {
+        #if DEBUG
+        if isOnboardingQA { return !hasFinishedOnboardingQA }
+        #endif
+        guard let userID = authStateManager.userID else { return false }
+        if completedOnboardingAccountID == userID { return false }
+        return OnboardingProfileStore.load(for: userID) == nil
     }
 
     init(
@@ -113,9 +113,8 @@ struct RootView: View {
                 clearWidgetSnapshot()
             } else {
                 navigationManager.popToRoot()
-                if let completion = savedOnboardingCompletion {
-                    routeAfterOnboarding(completion: completion)
-                }
+                // Onboarding runs after authentication, never before it.
+                // Account-scoped completion state is read by rootContent.
             }
         }
         .onChange(of: authStateManager.userID) { _, userID in
@@ -206,42 +205,33 @@ struct RootView: View {
     private var rootContent: some View {
         switch authStateManager.authState {
         case .unauthenticated:
-            if isOnboardingQA && !hasFinishedOnboardingQA {
-                onboardingView
-            } else if hasCompletedOnboarding || isOnboardingQA {
-                authenticationView
-            } else {
-                onboardingView
-            }
+            authenticationView
         case .authenticated:
-            dashboardView
+            if needsOnboarding {
+                onboardingView
+            } else {
+                dashboardView
+            }
         }
     }
 
     private var onboardingView: some View {
-        OnboardingContainerView(
-            onCompleted: { completion in
-                if isOnboardingQA {
-                    hasFinishedOnboardingQA = true
-                    return
-                }
-                onboardingCompletion = completion
-                pendingOnboardingData = (try? JSONEncoder().encode(completion)) ?? Data()
-                hasCompletedOnboarding = true
-                if authStateManager.authState == .authenticated {
-                    routeAfterOnboarding(completion: completion)
-                }
-            },
-            onSignIn: {
-                if isOnboardingQA {
-                    hasFinishedOnboardingQA = true
-                    return
-                }
-                pendingOnboardingData = Data()
-                onboardingCompletion = nil
-                hasCompletedOnboarding = true
+        OnboardingContainerView { personalization in
+            if isOnboardingQA {
+                hasFinishedOnboardingQA = true
+                return
             }
-        )
+            guard let userID = authStateManager.userID else {
+                noticeMessage = "Sign in to save your Pipo preferences."
+                return
+            }
+            if OnboardingProfileStore.save(personalization, for: userID) {
+                completedOnboardingAccountID = userID
+                navigationManager.popToRoot()
+            } else {
+                noticeMessage = "Your Pipo preferences could not be saved. Please try again."
+            }
+        }
     }
 
     private var authenticationView: some View {
@@ -367,48 +357,18 @@ struct RootView: View {
             dashboardView
         case .createGoal:
             CreateGoalView(
-                onBack: {
-                    isPrefillingOnboardingGoal = false
-                    onboardingCompletion = nil
-                    navigationManager.pop()
-                },
+                onBack: navigationManager.pop,
                 onCreated: { goalID in
-                    isPrefillingOnboardingGoal = false
-                    onboardingCompletion = nil
                     navigationManager.popToRoot()
                     navigationManager.navigate(to: .personalGoal(goalID))
-                },
-                initialTitle: isPrefillingOnboardingGoal
-                    ? (onboardingCompletion?.goalTitle ?? "")
-                    : "",
-                initialCategory: isPrefillingOnboardingGoal
-                    ? (onboardingCompletion?.goalCategory ?? .gadget)
-                    : .gadget,
-                initialRhythm: isPrefillingOnboardingGoal
-                    ? (onboardingCompletion?.rhythm ?? .monthly)
-                    : .monthly
+                }
             )
         case .personalGoal(let goalID):
             PersonalGoalDetailView(goalID: goalID, onBack: navigationManager.pop) {
                 navigationManager.requestDeposit(goalID: goalID)
             }
         case .createGroupPlan, .savingRhythm, .reviewGroupSaving:
-            CreateGroupPlanView(
-                onBack: {
-                    onboardingCompletion = nil
-                    navigationManager.pop()
-                },
-                onDashboard: {
-                    onboardingCompletion = nil
-                    navigationManager.popToRoot()
-                },
-                initialTitle: onboardingCompletion?.isGroupSaving == true
-                    ? onboardingCompletion?.goalTitle : nil,
-                initialCategory: onboardingCompletion?.isGroupSaving == true
-                    ? onboardingCompletion?.goalCategory : nil,
-                initialRhythm: onboardingCompletion?.isGroupSaving == true
-                    ? onboardingCompletion?.rhythm : nil
-            )
+            CreateGroupPlanView(onBack: navigationManager.pop, onDashboard: navigationManager.popToRoot)
         case .milestoneCelebration:
             ConsistencyMilestoneView(
                 xpEarned: navigationManager.milestoneXPEarned,
@@ -422,23 +382,6 @@ struct RootView: View {
         }
     }
 
-    private func routeAfterOnboarding(completion: OnboardingCompletion) {
-        guard authStateManager.authState == .authenticated else { return }
-        // The authentication screen can outlive the onboarding view, including
-        // across app restarts. Apply stored choices exactly once after sign-in.
-        pendingOnboardingData = Data()
-        onboardingCompletion = completion
-
-        if completion.isGroupSaving {
-            navigationManager.navigate(to: .createGroupPlan)
-        } else if completion.goalCategory != nil, completion.goalTitle != nil {
-            isPrefillingOnboardingGoal = true
-            navigationManager.navigate(to: .createGoal)
-        } else {
-            navigationManager.popToRoot()
-            onboardingCompletion = nil
-        }
-    }
 }
 
 struct RootView_Previews: PreviewProvider {
