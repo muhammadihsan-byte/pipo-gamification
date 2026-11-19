@@ -141,46 +141,83 @@ struct OnboardingHeaderView: View {
     }
 }
 
-@MainActor
-struct SpeechBubbleView: View {
-    let text: String
+/// The pointer and body share one closed path, so the outline never draws
+/// a dividing line through the tail or leaves the triangle floating.
+private struct PipoSpeechBubbleShape: Shape {
+    func path(in rect: CGRect) -> Path {
+        let tailHeight: CGFloat = 10
+        let radius: CGFloat = 20
+        let left = rect.minX
+        let right = rect.maxX
+        let top = rect.minY + tailHeight
+        let bottom = rect.maxY
 
-    var body: some View {
-        Text(text)
-            .font(.system(.headline, design: .rounded, weight: .semibold))
-            .foregroundStyle(PipoTheme.ink)
-            .multilineTextAlignment(.leading)
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .padding(.horizontal, 18)
-            .padding(.vertical, 16)
-            .background(.white, in: RoundedRectangle(cornerRadius: 22))
-            .overlay {
-                RoundedRectangle(cornerRadius: 22)
-                    .strokeBorder(PipoTheme.border, lineWidth: 1)
-            }
-            .overlay(alignment: .topLeading) {
-                SpeechBubbleTail()
-                    .fill(.white)
-                    .frame(width: 18, height: 12)
-                    .overlay {
-                        SpeechBubbleTail()
-                            .stroke(PipoTheme.border, lineWidth: 1)
-                    }
-                    .offset(x: 28, y: -9)
-            }
-            .padding(.top, 8)
-            .accessibilityAddTraits(.isStaticText)
+        var path = Path()
+        path.move(to: CGPoint(x: left + radius, y: top))
+        path.addLine(to: CGPoint(x: left + 33, y: top))
+        path.addLine(to: CGPoint(x: left + 44, y: rect.minY))
+        path.addLine(to: CGPoint(x: left + 55, y: top))
+        path.addLine(to: CGPoint(x: right - radius, y: top))
+        path.addQuadCurve(
+            to: CGPoint(x: right, y: top + radius),
+            control: CGPoint(x: right, y: top)
+        )
+        path.addLine(to: CGPoint(x: right, y: bottom - radius))
+        path.addQuadCurve(
+            to: CGPoint(x: right - radius, y: bottom),
+            control: CGPoint(x: right, y: bottom)
+        )
+        path.addLine(to: CGPoint(x: left + radius, y: bottom))
+        path.addQuadCurve(
+            to: CGPoint(x: left, y: bottom - radius),
+            control: CGPoint(x: left, y: bottom)
+        )
+        path.addLine(to: CGPoint(x: left, y: top + radius))
+        path.addQuadCurve(
+            to: CGPoint(x: left + radius, y: top),
+            control: CGPoint(x: left, y: top)
+        )
+        path.closeSubpath()
+        return path
     }
 }
 
-private struct SpeechBubbleTail: Shape {
-    func path(in rect: CGRect) -> Path {
-        Path { path in
-            path.move(to: CGPoint(x: 0, y: rect.maxY))
-            path.addLine(to: CGPoint(x: rect.midX, y: 0))
-            path.addLine(to: CGPoint(x: rect.maxX, y: rect.maxY))
-            path.closeSubpath()
+@MainActor
+struct SpeechBubbleView: View {
+    let text: String
+    var response: String? = nil
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            Text(text)
+                .font(.system(.headline, design: .rounded, weight: .semibold))
+                .foregroundStyle(PipoTheme.ink)
+                .multilineTextAlignment(.leading)
+                .fixedSize(horizontal: false, vertical: true)
+
+            if let response, !response.isEmpty {
+                Text(response)
+                    .font(.subheadline.weight(.medium))
+                    .foregroundStyle(PipoTheme.deepPink)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .accessibilityLabel("Pipo says: \\(response)")
+                    .transition(.opacity)
+            }
         }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(.horizontal, 18)
+        .padding(.top, 26)
+        .padding(.bottom, 17)
+        .background {
+            PipoSpeechBubbleShape()
+                .fill(.white)
+        }
+        .overlay {
+            PipoSpeechBubbleShape()
+                .stroke(PipoTheme.border, lineWidth: 1)
+        }
+        .fixedSize(horizontal: false, vertical: true)
+        .accessibilityIdentifier("pipo.onboarding.speech")
     }
 }
 
