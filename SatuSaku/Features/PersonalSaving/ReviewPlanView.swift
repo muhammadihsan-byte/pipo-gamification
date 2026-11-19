@@ -4,9 +4,9 @@ import SwiftUI
 @MainActor
 struct ReviewPlanView: View {
     let plan: PersonalGoalPlan
-    let onBack: () -> Void
     let onCreated: () -> Void
 
+    @Environment(\.dismiss) private var dismiss
     @Environment(\.modelContext) private var modelContext
     @Environment(SubscriptionManager.self) private var subscriptionManager
     @Environment(AuthStateManager.self) private var authStateManager
@@ -14,6 +14,7 @@ struct ReviewPlanView: View {
     @Query private var profiles: [UserProfile]
 
     @State private var isPaywallPresented = false
+    @State private var isCreatingGoal = false
     @State private var errorMessage: String?
 
     var body: some View {
@@ -48,6 +49,7 @@ struct ReviewPlanView: View {
 
             Section {
                 Button("Confirm and create goal", action: confirmCreation)
+                    .disabled(isCreatingGoal)
                     .frame(maxWidth: .infinity, alignment: .center)
             }
         }
@@ -55,7 +57,7 @@ struct ReviewPlanView: View {
         .navigationBarTitleDisplayMode(.inline)
         .toolbar {
             ToolbarItem(placement: .cancellationAction) {
-                Button("Edit", action: onBack)
+                Button("Edit") { dismiss() }
             }
         }
         .onAppear(perform: syncEntitlements)
@@ -96,7 +98,7 @@ struct ReviewPlanView: View {
     }
 
     private var activePersonalGoalCount: Int {
-        goals.filter { !$0.isGroupGoal }.count
+        goals.filter { $0.isOwned(by: authStateManager.userID) && !$0.isGroupGoal }.count
     }
 
     private var currentProfile: UserProfile? {
@@ -104,6 +106,11 @@ struct ReviewPlanView: View {
     }
 
     private func confirmCreation() {
+        guard !isCreatingGoal else { return }
+        guard let userID = authStateManager.userID else {
+            errorMessage = "Sign in before creating a saving goal."
+            return
+        }
         guard subscriptionManager.canCreateGoal(
             isGroup: false,
             activeCount: activePersonalGoalCount
@@ -112,8 +119,10 @@ struct ReviewPlanView: View {
             return
         }
 
+        isCreatingGoal = true
+        defer { isCreatingGoal = false }
         let existingProfile = currentProfile
-        let profile = existingProfile ?? UserProfile(userID: authStateManager.userID)
+        let profile = existingProfile ?? UserProfile(userID: userID)
         let previousCount = profile.activePersonalGoalsCount
         let previousUserID = profile.userID
         let goal = PersonalGoal(
@@ -122,14 +131,15 @@ struct ReviewPlanView: View {
             targetAmount: plan.targetAmount,
             startDate: plan.startDate,
             targetDate: plan.targetDate,
-            rhythm: plan.rhythm
+            rhythm: plan.rhythm,
+            userID: userID
         )
         goal.subItems = plan.breakdown.compactMap { item in
             guard let amount = parsedBreakdownAmount(item.amount) else { return nil }
             return SubItem(title: item.title, amount: amount)
         }
 
-        profile.userID = authStateManager.userID
+        profile.userID = userID
         profile.activePersonalGoalsCount = activePersonalGoalCount + 1
         modelContext.insert(goal)
         if existingProfile == nil {
@@ -151,10 +161,12 @@ struct ReviewPlanView: View {
     }
 
     private func syncEntitlements() {
+        guard let userID = authStateManager.userID else { return }
         let profile = currentProfile
         subscriptionManager.updateEntitlements(
             purchasedPersonalSlots: profile?.purchasedPersonalSlots ?? 0,
-            purchasedGroupSlots: profile?.purchasedGroupSlots ?? 0
+            purchasedGroupSlots: profile?.purchasedGroupSlots ?? 0,
+            for: userID
         )
     }
 

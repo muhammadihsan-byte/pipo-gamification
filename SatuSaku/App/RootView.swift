@@ -11,6 +11,7 @@ struct RootView: View {
     @State private var storeKitManager: StoreKitManager
     @State private var supabaseService: SupabaseService?
     @State private var noticeMessage: String?
+    @State private var isAuthenticating = false
     @AppStorage("hasCompletedOnboarding") private var hasCompletedOnboarding = false
     @State private var onboardingCompletion: OnboardingCompletion?
     @State private var isPrefillingOnboardingGoal = false
@@ -49,7 +50,6 @@ struct RootView: View {
                     destination(for: route)
                 }
         }
-        .toolbar(.hidden, for: .navigationBar)
         .environment(navigationManager)
         .environment(authStateManager)
         .environment(subscriptionManager)
@@ -60,6 +60,7 @@ struct RootView: View {
             await supabaseService.observeAuthStateChanges(using: authStateManager)
         }
         .task {
+            subscriptionManager.switchAccount(to: authStateManager.userID)
             if authStateManager.userID == nil {
                 clearWidgetSnapshot()
             }
@@ -94,6 +95,8 @@ struct RootView: View {
             }
         }
         .onChange(of: authStateManager.userID) { _, userID in
+            subscriptionManager.switchAccount(to: userID)
+            clearWidgetSnapshot()
             guard let userID else { return }
             let transactions = localTransactions.filter { $0.userID == userID }
             Task {
@@ -163,7 +166,7 @@ struct RootView: View {
             )
         }
         .alert(
-            "Satu Saku",
+            "Pipo",
             isPresented: Binding(
                 get: { noticeMessage != nil },
                 set: { if !$0 { noticeMessage = nil } }
@@ -204,10 +207,12 @@ struct RootView: View {
                 hasCompletedOnboarding = true
             }
         )
+        .toolbar(.hidden, for: .navigationBar)
     }
 
     private var authenticationView: some View {
         AuthView(
+            isSubmitting: isAuthenticating,
             onSubmit: authenticate,
             onAppleSignIn: {
                 beginOAuthSignIn(provider: .apple)
@@ -219,6 +224,7 @@ struct RootView: View {
                 noticeMessage = "Password reset is not configured yet."
             }
         )
+        .toolbar(.hidden, for: .navigationBar)
     }
 
     private var dashboardView: some View {
@@ -258,12 +264,15 @@ struct RootView: View {
     }
 
     private func authenticate(_ credentials: AuthCredentials) {
+        guard !isAuthenticating else { return }
         guard let supabaseService else {
             noticeMessage = supabaseConfigurationError ?? "Supabase is not configured."
             return
         }
 
-        Task {
+        isAuthenticating = true
+        Task { @MainActor in
+            defer { isAuthenticating = false }
             do {
                 if credentials.isSignUp {
                     let needsConfirmation = try await supabaseService.signUp(

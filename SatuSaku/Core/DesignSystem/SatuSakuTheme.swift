@@ -13,6 +13,24 @@ enum SatuSakuTheme {
     static let deepPink = Color(red: 0.82, green: 0.16, blue: 0.31)
 }
 
+enum PipoColors {
+    static let accentPrimary = Color(red: 255 / 255, green: 101 / 255, blue: 132 / 255)
+    static let accentStrong = Color(red: 229 / 255, green: 69 / 255, blue: 105 / 255)
+    static let accentSoft = Color(red: 255 / 255, green: 241 / 255, blue: 244 / 255)
+    static let accentBorder = Color(red: 254 / 255, green: 205 / 255, blue: 206 / 255)
+
+    static let backgroundBase = Color.white
+    static let backgroundSubtle = Color(red: 248 / 255, green: 250 / 255, blue: 252 / 255)
+    static let surfaceMuted = Color(red: 241 / 255, green: 245 / 255, blue: 249 / 255)
+    static let borderDefault = Color(red: 226 / 255, green: 232 / 255, blue: 240 / 255)
+
+    static let textStrong = Color(red: 15 / 255, green: 23 / 255, blue: 42 / 255)
+    static let textPrimary = Color(red: 30 / 255, green: 41 / 255, blue: 59 / 255)
+    static let textSecondary = Color(red: 71 / 255, green: 85 / 255, blue: 105 / 255)
+    static let textSubtle = Color(red: 100 / 255, green: 116 / 255, blue: 139 / 255)
+    static let textMuted = Color(red: 148 / 255, green: 163 / 255, blue: 184 / 255)
+}
+
 @MainActor
 struct TicketCard<Content: View>: View {
     private let content: Content

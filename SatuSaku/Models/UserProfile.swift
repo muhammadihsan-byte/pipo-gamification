@@ -48,9 +48,7 @@ final class UserProfile {
     }
 
     static func existing(for userID: UUID?, in profiles: [UserProfile]) -> UserProfile? {
-        if let userID, let profile = profiles.first(where: { $0.userID == userID }) {
-            return profile
-        }
-        return profiles.first(where: { $0.userID == nil })
+        guard let userID else { return nil }
+        return profiles.first(where: { $0.userID == userID })
     }
 }

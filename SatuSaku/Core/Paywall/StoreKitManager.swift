@@ -203,18 +203,16 @@ final class StoreKitManager {
         let profiles = try modelContext.fetch(FetchDescriptor<UserProfile>())
         var profile = UserProfile.existing(for: userID, in: profiles)
         if let profile {
-            if profile.userID == nil {
-                profile.userID = userID
-                try modelContext.save()
-            }
             subscriptionManager.updateEntitlements(
                 purchasedPersonalSlots: profile.purchasedPersonalSlots,
-                purchasedGroupSlots: profile.purchasedGroupSlots
+                purchasedGroupSlots: profile.purchasedGroupSlots,
+                for: userID
             )
         } else {
             subscriptionManager.updateEntitlements(
                 purchasedPersonalSlots: 0,
-                purchasedGroupSlots: 0
+                purchasedGroupSlots: 0,
+                for: userID
             )
         }
 
@@ -250,7 +248,8 @@ final class StoreKitManager {
         }
         subscriptionManager.updateEntitlements(
             purchasedPersonalSlots: personalSlots,
-            purchasedGroupSlots: groupSlots
+            purchasedGroupSlots: groupSlots,
+            for: userID
         )
 
         let mergedProfile = slotBalance(for: profile, userID: userID)
@@ -278,7 +277,8 @@ final class StoreKitManager {
         if profile.processedStoreKitTransactionIDs.contains(transactionIDString) {
             subscriptionManager.updateEntitlements(
                 purchasedPersonalSlots: profile.purchasedPersonalSlots,
-                purchasedGroupSlots: profile.purchasedGroupSlots
+                purchasedGroupSlots: profile.purchasedGroupSlots,
+                for: userID
             )
             return false
         }
@@ -310,7 +310,8 @@ final class StoreKitManager {
 
         subscriptionManager.updateEntitlements(
             purchasedPersonalSlots: profile.purchasedPersonalSlots,
-            purchasedGroupSlots: profile.purchasedGroupSlots
+            purchasedGroupSlots: profile.purchasedGroupSlots,
+            for: userID
         )
         scheduleProfileSync(slotBalance(for: profile, userID: userID))
         return true

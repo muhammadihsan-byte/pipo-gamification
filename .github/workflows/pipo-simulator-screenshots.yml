@@ -1,0 +1,230 @@
+name: Pipo iOS Simulator Screenshots
+
+on:
+  pull_request:
+    types: [labeled]
+
+permissions:
+  contents: read
+
+jobs:
+  simulator-screenshots:
+    if: github.event.label.name == 'pipo-preview'
+    runs-on: macos-15-intel
+    timeout-minutes: 45
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Discover Xcode and installed simulators
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p evidence
+          if test -d /Applications/Xcode_16.4.app; then
+            sudo xcode-select -s /Applications/Xcode_16.4.app
+          elif test -d /Applications/Xcode.app/Contents/Developer; then
+            sudo xcode-select -s /Applications/Xcode.app/Contents/Developer
+          else
+            echo "No known Xcode installation found"
+            ls -la /Applications | tee evidence/applications.txt
+            exit 1
+          fi
+          xcodebuild -version | tee evidence/xcode.txt
+          uname -m | tee evidence/runner-architecture.txt
+          if [ "$(uname -m)" != "x86_64" ]; then
+            echo "Expected Intel runner for architecture A/B test" >&2
+            exit 1
+          fi
+          xcrun simctl list runtimes available | tee evidence/runtimes.txt
+          xcrun simctl list devices available -j > evidence/devices.json
+
+      - name: Select available iPhone sizes
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import json
+          import os
+
+          data = json.load(open("evidence/devices.json"))
+          devices = []
+          for runtime, items in data["devices"].items():
+              if "iOS" not in runtime:
+                  continue
+              for item in items:
+                  name = item["name"]
+                  if item.get("availabilityError") is None and name.startswith("iPhone"):
+                      devices.append({
+                          "runtime": runtime,
+                          "name": name,
+                          "udid": item["udid"],
+                      })
+
+          if not devices:
+              raise SystemExit("No available iPhone simulators found")
+
+          selected = next(
+              (d for d in devices if d["name"] == "iPhone 16" and "iOS-18-5" in d["runtime"]),
+              None,
+          )
+          if selected is None:
+              raise SystemExit("iPhone 16 / iOS 18.5 is not installed; stopping without trying another device")
+
+          lines = [
+              f"TEST_UDID={selected['udid']}",
+              f"TEST_NAME={selected['name']}",
+              f"TEST_RUNTIME={selected['runtime']}",
+          ]
+
+          with open(os.environ["GITHUB_ENV"], "a") as env:
+              env.write("\n".join(lines) + "\n")
+
+          with open("evidence/simulators.txt", "w") as report:
+              report.write(f"Test: {selected['name']} — {selected['runtime']} — {selected['udid']}\n")
+
+          print("\n".join(lines))
+          PY
+
+      - name: Build Pipo for iOS Simulator
+        shell: bash
+        run: |
+          set -euo pipefail
+          xcodebuild \
+            -project SatuSaku.xcodeproj \
+            -scheme SatuSaku \
+            -configuration Debug \
+            -derivedDataPath /tmp/PipoDerivedData \
+            -destination 'generic/platform=iOS Simulator' \
+            CODE_SIGNING_ALLOWED=NO \
+            CODE_SIGNING_REQUIRED=NO \
+            build 2>&1 | tee evidence/build.log
+          test -d /tmp/PipoDerivedData/Build/Products/Debug-iphonesimulator/SatuSaku.app
+          /usr/libexec/PlistBuddy -c 'Print :CFBundleIdentifier' \
+            /tmp/PipoDerivedData/Build/Products/Debug-iphonesimulator/SatuSaku.app/Info.plist \
+            | tee evidence/bundle-id.txt
+
+      - name: Boot simulators and capture app screenshots
+        shell: bash
+        run: |
+          set -euo pipefail
+          APP_PATH=/tmp/PipoDerivedData/Build/Products/Debug-iphonesimulator/SatuSaku.app
+          BUNDLE_ID=$(cat evidence/bundle-id.txt)
+          UDID="$TEST_UDID"
+          DEVICE_NAME="$TEST_NAME"
+          SAFE_NAME=$(printf '%s' "$DEVICE_NAME" | tr ' /' '__')
+          OUT="evidence/test-$SAFE_NAME"
+          mkdir -p "$OUT"
+
+          echo "Booting $DEVICE_NAME ($UDID)" | tee "$OUT/boot.txt"
+          xcrun simctl boot "$UDID" 2>&1 | tee "$OUT/boot.log" || true
+
+          # Bound the first-boot wait so one unhealthy simulator does not block the runner.
+          if ! python3 - "$UDID" "$OUT/bootstatus.log" <<'PY'
+          import subprocess
+          import sys
+
+          udid, log_path = sys.argv[1:]
+          with open(log_path, "w") as logfile:
+              try:
+                  result = subprocess.run(
+                      ["xcrun", "simctl", "bootstatus", udid, "-b"],
+                      stdout=logfile,
+                      stderr=subprocess.STDOUT,
+                      timeout=150,
+                      check=False,
+                  )
+              except subprocess.TimeoutExpired:
+                  print("bootstatus timed out after 150 seconds", file=logfile)
+                  sys.exit(124)
+          sys.exit(result.returncode)
+          PY
+          then
+            cat "$OUT/bootstatus.log"
+            echo "bootstatus failed or timed out: xcrun simctl bootstatus $UDID -b"
+            exit 1
+          fi
+
+          if ! xcrun simctl install "$UDID" "$APP_PATH" 2>&1 | tee "$OUT/install.log"; then
+            echo "install failed: xcrun simctl install $UDID $APP_PATH"
+            exit 1
+          fi
+          echo "Install succeeded: $BUNDLE_ID"
+
+          capture_screen() {
+            local ARGUMENT="$1"
+            local SCREEN_NAME="$2"
+            local SCREEN_DIR="$OUT/$SCREEN_NAME"
+            mkdir -p "$SCREEN_DIR"
+
+            xcrun simctl terminate "$UDID" "$BUNDLE_ID" 2>/dev/null || true
+            sleep 1
+
+            local LAUNCH_OUTPUT
+            if [ -n "$ARGUMENT" ]; then
+              LAUNCH_OUTPUT=$(xcrun simctl launch --stdout="$SCREEN_DIR/launch.stdout.log" --stderr="$SCREEN_DIR/launch.stderr.log" "$UDID" "$BUNDLE_ID" "$ARGUMENT" 2>&1)
+            else
+              LAUNCH_OUTPUT=$(xcrun simctl launch --stdout="$SCREEN_DIR/launch.stdout.log" --stderr="$SCREEN_DIR/launch.stderr.log" "$UDID" "$BUNDLE_ID" 2>&1)
+            fi
+            echo "$LAUNCH_OUTPUT" | tee "$SCREEN_DIR/launch.txt"
+
+            local PID
+            PID=$(echo "$LAUNCH_OUTPUT" | awk '{print $NF}')
+            if ! [[ "$PID" =~ ^[0-9]+$ ]]; then
+              echo "launch failed: xcrun simctl launch did not return a numeric PID"
+              xcrun simctl spawn "$UDID" log show --last 2m --style compact |
+                tail -120 > "$SCREEN_DIR/launch-log.txt" || true
+              exit 1
+            fi
+
+            sleep 8
+            xcrun simctl spawn "$UDID" ps -ax -o pid=,comm= > "$SCREEN_DIR/processes.txt" 2>&1
+            if ! grep -q "SatuSaku" "$SCREEN_DIR/processes.txt"; then
+              echo "process verification failed: SatuSaku is not running"
+              exit 1
+            fi
+            echo "Confirmed app process: $PID" | tee "$SCREEN_DIR/process.txt"
+
+            local PNG="$SCREEN_DIR/${SCREEN_NAME}-${SAFE_NAME}.png"
+            if ! xcrun simctl io "$UDID" screenshot "$PNG" 2>&1 | tee "$SCREEN_DIR/screenshot-command.log"; then
+              echo "screenshot failed: xcrun simctl io $UDID screenshot $PNG"
+              exit 1
+            fi
+            if [ ! -s "$PNG" ]; then
+              echo "screenshot failed: PNG file is empty or missing"
+              exit 1
+            fi
+            file "$PNG" | tee "$SCREEN_DIR/screenshot.txt"
+            sips -g pixelWidth -g pixelHeight "$PNG" | tee "$SCREEN_DIR/resolution.txt"
+          }
+
+          capture_screen "-pipoHomeDemo" "launch-home"
+          capture_screen "-pipoButtonDemo" "button-demo"
+
+          xcrun simctl terminate "$UDID" "$BUNDLE_ID" 2>/dev/null || true
+          xcrun simctl shutdown "$UDID"
+
+      - name: Summarize simulator evidence
+        if: always()
+        shell: bash
+        run: |
+          set -euo pipefail
+          echo "## Pipo simulator evidence" >> "$GITHUB_STEP_SUMMARY"
+          echo "" >> "$GITHUB_STEP_SUMMARY"
+          cat evidence/xcode.txt >> "$GITHUB_STEP_SUMMARY"
+          echo "" >> "$GITHUB_STEP_SUMMARY"
+          cat evidence/simulators.txt >> "$GITHUB_STEP_SUMMARY"
+          echo "" >> "$GITHUB_STEP_SUMMARY"
+          echo "Run: $GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID" >> "$GITHUB_STEP_SUMMARY"
+          echo "Artifacts: $GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID#artifacts" >> "$GITHUB_STEP_SUMMARY"
+          find evidence -type f -name '*.png' -exec ls -lh {} \; || true
+
+      - name: Upload simulator screenshots and diagnostics
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: pipo-ios-simulator-screenshots
+          path: evidence/
+          if-no-files-found: warn
+          retention-days: 14

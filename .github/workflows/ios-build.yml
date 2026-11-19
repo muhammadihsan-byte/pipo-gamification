@@ -4,12 +4,15 @@ on:
   push:
     branches:
       - main
+      - feat/pipo-primary-button-colors
   pull_request:
     branches:
       - main
 
 jobs:
   build-and-test:
+    # Preserve the original CI job; avoid starting it during the one-off feature-branch push.
+    if: github.event_name != 'push' || github.ref != 'refs/heads/feat/pipo-primary-button-colors'
     runs-on: macos-14
     steps:
       - name: Checkout repository
@@ -28,3 +31,93 @@ jobs:
             -destination 'platform=iOS Simulator,name=iPhone 15,OS=latest' \
             CODE_SIGNING_REQUIRED=NO \
             build test
+
+  account-data-validation:
+    # Run only for the explicitly named commit; future pushes will not repeat this test.
+    if: >-
+      github.event_name == 'push' && github.ref == 'refs/heads/feat/pipo-primary-button-colors' && github.event.head_commit.message == 'ci: one-time Pipo account ownership validation'
+    runs-on: macos-15-intel
+    timeout-minutes: 30
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Verify Xcode and installed iPhone runtime
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p validation
+          if test -d /Applications/Xcode_16.4.app; then
+            sudo xcode-select -s /Applications/Xcode_16.4.app
+          fi
+          xcodebuild -version | tee validation/xcode.txt
+          uname -m | tee validation/architecture.txt
+          xcrun simctl list devices available | tee validation/simulators.txt
+          if ! grep -q 'iPhone 16 (' validation/simulators.txt; then
+            echo 'Required iPhone 16 simulator is unavailable' >&2
+            exit 1
+          fi
+
+      - name: Build app and ownership tests without launching simulator
+        shell: bash
+        run: |
+          set -euo pipefail
+          xcodebuild \
+            -project SatuSaku.xcodeproj \
+            -scheme SatuSaku \
+            -configuration Debug \
+            -derivedDataPath /tmp/PipoValidationData \
+            -destination 'platform=iOS Simulator,name=iPhone 16,OS=18.5' \
+            -parallel-testing-enabled NO \
+            CODE_SIGNING_ALLOWED=NO \
+            CODE_SIGNING_REQUIRED=NO \
+            build-for-testing > validation/build.log 2>&1 || {
+              tail -n 100 validation/build.log
+              exit 1
+            }
+          tail -n 40 validation/build.log
+
+      - name: Run focused ownership and account-switch tests
+        shell: bash
+        run: |
+          set -euo pipefail
+          xcodebuild \
+            -project SatuSaku.xcodeproj \
+            -scheme SatuSaku \
+            -configuration Debug \
+            -derivedDataPath /tmp/PipoValidationData \
+            -destination 'platform=iOS Simulator,name=iPhone 16,OS=18.5' \
+            -parallel-testing-enabled NO \
+            '-only-testing:SatuSakuTests/PersonalGoalTests' \
+            '-only-testing:SatuSakuTests/SubscriptionManagerTests' \
+            '-only-testing:SatuSakuTests/StoreKitManagerTests' \
+            '-only-testing:SatuSakuTests/AuthStateManagerTests' \
+            CODE_SIGNING_ALLOWED=NO \
+            CODE_SIGNING_REQUIRED=NO \
+            test-without-building > validation/tests.log 2>&1 || {
+              tail -n 120 validation/tests.log
+              exit 1
+            }
+          tail -n 60 validation/tests.log
+
+      - name: Save concise validation diagnostics
+        if: always()
+        shell: bash
+        run: |
+          mkdir -p validation
+          for log in build tests; do
+            if test -f "validation/$log.log"; then
+              tail -n 160 "validation/$log.log" > "validation/$log-tail.log"
+              rm "validation/$log.log"
+            fi
+          done
+          echo "No screenshot workflow or simulator screenshot capture was executed." > validation/README.txt
+
+      - name: Upload validation diagnostics
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: pipo-account-isolation-validation
+          path: validation/
+          if-no-files-found: warn
+          retention-days: 7

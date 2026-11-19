@@ -28,6 +28,15 @@ struct DashboardView: View {
     )?
     @State private var mascotState: PipoMascotState = .idle
 
+    private var ownedGoals: [PersonalGoal] {
+        goals.filter { $0.isOwned(by: authStateManager.userID) }
+    }
+
+    private var ownedTransactions: [SavingTransaction] {
+        guard let userID = authStateManager.userID else { return [] }
+        return transactions.filter { $0.userID == userID }
+    }
+
     init(
         onCreateGoal: @escaping () -> Void,
         onSavingCompleted: @escaping (SavingTransaction, PersonalGoal, Int, Int) -> Void = {
@@ -49,10 +58,10 @@ struct DashboardView: View {
                         .font(.title3.bold())
                         .foregroundStyle(SatuSakuTheme.ink)
 
-                    if goals.isEmpty {
+                    if ownedGoals.isEmpty {
                         emptyGoalsCard
                     } else {
-                        ForEach(goals) { goal in
+                        ForEach(ownedGoals) { goal in
                             goalCard(goal)
                         }
                     }
@@ -72,6 +81,11 @@ struct DashboardView: View {
             openPendingDepositRequest()
         }
         .onChange(of: authStateManager.userID) { _, _ in
+            // Prevent a pending deposit sheet from surviving a change of account.
+            isShowingSaveConfirmation = false
+            goalToRecord = nil
+            savingAmount = ""
+            completedSavingReward = nil
             updateWidgetSnapshot()
         }
         .sheet(isPresented: $isShowingSaveConfirmation, onDismiss: clearPendingSaving) {
@@ -79,7 +93,7 @@ struct DashboardView: View {
                 .presentationDetents([.medium])
         }
         .alert(
-            "Satu Saku",
+            "Pipo",
             isPresented: Binding(
                 get: { saveErrorMessage != nil },
                 set: { if !$0 { saveErrorMessage = nil } }
@@ -96,7 +110,7 @@ struct DashboardView: View {
     private var welcomeHeader: some View {
         HStack(spacing: 12) {
             VStack(alignment: .leading, spacing: 6) {
-                Text("Satu Saku")
+                Text("Pipo")
                     .font(.largeTitle.bold())
                     .foregroundStyle(SatuSakuTheme.ink)
                 Text("Sedikit demi sedikit, jadi bukit.")
@@ -224,10 +238,17 @@ struct DashboardView: View {
     }
 
     private func confirmSaving() {
-        guard let goal = goalToRecord, let amount = parsedSavingAmount else { return }
+        guard let userID = authStateManager.userID,
+              let goal = goalToRecord,
+              goal.isOwned(by: userID),
+              let amount = parsedSavingAmount else {
+            saveErrorMessage = "Sign in to the account that owns this goal before recording savings."
+            isShowingSaveConfirmation = false
+            return
+        }
 
-        let existingProfile = UserProfile.existing(for: authStateManager.userID, in: profiles)
-        let profile = existingProfile ?? UserProfile(userID: authStateManager.userID)
+        let existingProfile = UserProfile.existing(for: userID, in: profiles)
+        let profile = existingProfile ?? UserProfile(userID: userID)
         let previousCurrentAmount = goal.currentAmount
         let previousTotalXP = profile.totalXP
         let previousCurrentLevel = profile.currentLevel
@@ -237,13 +258,13 @@ struct DashboardView: View {
         let transaction: SavingTransaction
 
         do {
-            profile.userID = authStateManager.userID
+            profile.userID = userID
             transaction = try GamificationManager().recordSaving(
                 amount: amount,
                 goal: goal,
                 profile: profile
             )
-            transaction.userID = authStateManager.userID
+            transaction.userID = userID
         } catch {
             profile.userID = previousUserID
             goal.currentAmount = previousCurrentAmount
@@ -291,7 +312,7 @@ struct DashboardView: View {
 
     private func openPendingDepositRequest() {
         guard let goalID = navigationManager.consumeDepositRequest() else { return }
-        guard let goal = goals.first(where: {
+        guard let goal = ownedGoals.first(where: {
             $0.id == goalID && !$0.isGroupGoal && $0.currentAmount < $0.targetAmount
         }) else {
             saveErrorMessage = "That personal goal is no longer active."
@@ -305,13 +326,13 @@ struct DashboardView: View {
 
     private func updateWidgetSnapshot(latestTransaction: SavingTransaction? = nil) {
         let profile = UserProfile.existing(for: authStateManager.userID, in: profiles)
-        let goal = goals.first {
+        let goal = ownedGoals.first {
             !$0.isGroupGoal && $0.currentAmount < $0.targetAmount
         }
         let lastSavingDate = goal.flatMap { goal in
             [
                 latestTransaction.flatMap { $0.goalId == goal.id ? $0 : nil },
-                transactions.first(where: { $0.goalId == goal.id })
+                ownedTransactions.first(where: { $0.goalId == goal.id })
             ]
                 .compactMap { $0?.date }
                 .max()

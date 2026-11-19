@@ -15,6 +15,7 @@ struct AuthView: View {
     @State private var isPasswordVisible = false
     @State private var validationMessage: String?
 
+    private let isSubmitting: Bool
     private let onSubmit: (AuthCredentials) -> Void
     private let onAppleSignIn: () -> Void
     private let onGoogleSignIn: () -> Void
@@ -22,12 +23,14 @@ struct AuthView: View {
 
     init(
         initialEmail: String = "",
+        isSubmitting: Bool = false,
         onSubmit: @escaping (AuthCredentials) -> Void,
         onAppleSignIn: @escaping () -> Void,
         onGoogleSignIn: @escaping () -> Void,
         onForgotPassword: @escaping () -> Void
     ) {
         _email = State(initialValue: initialEmail)
+        self.isSubmitting = isSubmitting
         self.onSubmit = onSubmit
         self.onAppleSignIn = onAppleSignIn
         self.onGoogleSignIn = onGoogleSignIn
@@ -40,10 +43,13 @@ struct AuthView: View {
                 brandHeader
                 heroArtwork
                 signInModePicker
+                    .disabled(isSubmitting)
                 credentialsForm
+                    .disabled(isSubmitting)
                 submitButton
                 providerDivider
                 providerButtons
+                    .disabled(isSubmitting)
             }
             .padding(.horizontal, 24)
             .padding(.top, 12)
@@ -56,7 +62,7 @@ struct AuthView: View {
     private var brandHeader: some View {
         HStack {
             HStack(spacing: 0) {
-                Text("satusaku")
+                Text("pipo")
                     .font(.system(size: 20, weight: .bold, design: .rounded))
                     .foregroundStyle(SatuSakuTheme.ink)
                 Text(".")
@@ -185,7 +191,12 @@ struct AuthView: View {
     }
 
     private var submitButton: some View {
-        Button {
+        PipoPrimaryButton(
+            isSignUp ? "CREATE ACCOUNT" : "SIGN IN NOW",
+            isLoading: isSubmitting,
+            loadingTitle: isSignUp ? "CREATING ACCOUNT…" : "SIGNING IN…"
+        ) {
+            guard !isSubmitting else { return }
             let trimmedEmail = email.trimmingCharacters(in: .whitespacesAndNewlines)
             guard !trimmedEmail.isEmpty, !password.isEmpty else {
                 validationMessage = "Enter your email and password."
@@ -199,10 +210,7 @@ struct AuthView: View {
                     isSignUp: isSignUp
                 )
             )
-        } label: {
-            Text(isSignUp ? "CREATE ACCOUNT" : "SIGN IN NOW")
         }
-        .buttonStyle(PrimaryActionButtonStyle())
     }
 
     private var providerDivider: some View {
