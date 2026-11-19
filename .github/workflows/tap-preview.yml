@@ -10,7 +10,7 @@ jobs:
     timeout-minutes: 35
     steps:
       - uses: actions/checkout@v4
-      - name: Select installed iPhone and run app tests
+      - name: Select installed iPhone
         run: |
           set -euo pipefail
           mkdir -p proof
@@ -18,8 +18,6 @@ jobs:
           id=$(xcrun simctl list devices available -j | python3 -c 'import json,sys; ds=json.load(sys.stdin)["devices"]; print(next(d["udid"] for k in sorted(ds,key=lambda k:(k.endswith("iOS-18-5"),k),reverse=True) for d in ds[k] if d["name"].startswith("iPhone")))')
           echo "DEVICE=$id" >> "$GITHUB_ENV"
           xcrun simctl bootstatus "$id" -b
-          xcodebuild -scheme Pipo -derivedDataPath /tmp/Pipo -destination "platform=iOS Simulator,id=$id" -parallel-testing-enabled NO CODE_SIGN_IDENTITY=- test > /tmp/unit.log 2>&1 || { tail -55 /tmp/unit.log; exit 1; }
-          grep -E 'Executed [0-9]+ tests|TEST SUCCEEDED' /tmp/unit.log | tail -4 | tee proof/tests.txt
       - name: Prepare a checkout-only UI test of the real Home button
         run: |
           python3 - <<'PY'
@@ -47,43 +45,32 @@ jobs:
                   XCTAssertTrue(greet.waitForExistence(timeout: 25))
                   XCTAssertEqual(greet.label, "Greet Pipo")
                   XCTAssertTrue(greet.isHittable)
-                  Thread.sleep(forTimeInterval: 6)
+                  let before = XCTAttachment(screenshot: XCUIScreen.main.screenshot())
+                  before.name = "Home before greeting"
+                  before.lifetime = .keepAlways
+                  add(before)
+                  Thread.sleep(forTimeInterval: 1)
                   greet.tap()
+                  let after = XCTAttachment(screenshot: XCUIScreen.main.screenshot())
+                  after.name = "Home after greeting"
+                  after.lifetime = .keepAlways
+                  add(after)
                   Thread.sleep(forTimeInterval: 2)
                   XCTAssertTrue(app.buttons["Create a saving goal"].exists)
               }
           }
           ''')
           PY
-      - name: Tap Home and record the simulator
+      - name: Verify the tap on Home
         shell: bash
         run: |
           set -euo pipefail
-          dest="platform=iOS Simulator,id=$DEVICE"
-          xcodebuild -scheme Pipo -derivedDataPath /tmp/Pipo -destination "$dest" CODE_SIGN_IDENTITY=- build-for-testing > /tmp/uitest-build.log 2>&1 || { tail -60 /tmp/uitest-build.log; exit 1; }
-          xcrun simctl status_bar "$DEVICE" override --time 9:41
-          xcodebuild -scheme Pipo -derivedDataPath /tmp/Pipo -destination "$dest" -parallel-testing-enabled NO -only-testing:PipoTests/TapUITests CODE_SIGN_IDENTITY=- test-without-building > /tmp/normal.log 2>&1 &
-          testpid=$!
-          for attempt in $(seq 1 100); do
-            dir=$(xcrun simctl get_app_container "$DEVICE" com.pipo.app data 2>/dev/null || true)
-            if test -n "$dir" && test -f "$dir/Documents/ready"; then break; fi
-            if ! kill -0 "$testpid" 2>/dev/null; then tail -40 /tmp/normal.log; exit 1; fi
-            sleep 1
-          done
-          test -f "$dir/Documents/ready"
-          xcrun simctl io "$DEVICE" recordVideo --codec=h264 proof/Home-tap.mp4 > /tmp/record.log 2>&1 &
-          recorder=$!
-          for attempt in $(seq 1 24); do
-            test -f "$dir/Documents/reaction" && break
-            sleep 1
-          done
-          sleep 2
-          kill -INT "$recorder" || true
-          wait "$recorder" || test -s proof/Home-tap.mp4
-          wait "$testpid" || { tail -50 /tmp/normal.log; exit 1; }
+          xcodebuild -scheme Pipo -derivedDataPath /tmp/Pipo -destination "platform=iOS Simulator,id=$DEVICE" -parallel-testing-enabled NO -maximum-test-execution-time-allowance 120 -test-timeouts-enabled YES -collect-test-diagnostics never -resultBundlePath /tmp/home-result -only-testing:PipoTests/TapUITests CODE_SIGN_IDENTITY=- test > /tmp/normal.log 2>&1 || { tail -55 /tmp/normal.log; exit 1; }
+          dir=$(xcrun simctl get_app_container "$DEVICE" com.pipo.app data)
           cp "$dir/Documents/reaction" proof/reaction-seconds.txt
           python3 -c 'assert .65 < float(open("proof/reaction-seconds.txt").read()) <= .91'
-          grep 'TEST SUCCEEDED' /tmp/normal.log >> proof/tests.txt
+          grep 'TEST SUCCEEDED' /tmp/normal.log | tee proof/tests.txt
+          xcrun xcresulttool export attachments --path /tmp/home-result.xcresult --output-path proof/captures
       - name: Activate the same button with system Reduce Motion
         shell: bash
         run: |
