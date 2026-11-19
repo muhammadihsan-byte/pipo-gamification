@@ -60,6 +60,7 @@ struct RootView: View {
             await supabaseService.observeAuthStateChanges(using: authStateManager)
         }
         .task {
+            subscriptionManager.switchAccount(to: authStateManager.userID)
             if authStateManager.userID == nil {
                 clearWidgetSnapshot()
             }
@@ -94,6 +95,8 @@ struct RootView: View {
             }
         }
         .onChange(of: authStateManager.userID) { _, userID in
+            subscriptionManager.switchAccount(to: userID)
+            clearWidgetSnapshot()
             guard let userID else { return }
             let transactions = localTransactions.filter { $0.userID == userID }
             Task {
