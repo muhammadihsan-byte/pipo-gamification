@@ -1,3 +1,4 @@
+import SwiftData
 import XCTest
 @testable import SatuSaku
 
@@ -38,6 +39,29 @@ final class PersonalGoalTests: XCTestCase {
         XCTAssertFalse(firstGoal.isOwned(by: nil))
         XCTAssertTrue(secondGoal.isOwned(by: secondUser))
         XCTAssertFalse(secondGoal.isOwned(by: firstUser))
+    }
+
+    @MainActor
+    func testGoalOwnerPersistsInSwiftData() throws {
+        let container = try ModelContainer(
+            for: PersonalGoal.self, SubItem.self,
+            configurations: ModelConfiguration(isStoredInMemoryOnly: true)
+        )
+        let context = container.mainContext
+        let owner = UUID()
+        let goal = PersonalGoal(
+            title: "Bali",
+            category: .trip,
+            targetAmount: 1_500,
+            targetDate: .now,
+            userID: owner
+        )
+        context.insert(goal)
+        try context.save()
+
+        let persistedGoal = try XCTUnwrap(context.fetch(FetchDescriptor<PersonalGoal>()).first)
+        XCTAssertEqual(persistedGoal.userID, owner)
+        XCTAssertTrue(persistedGoal.isOwned(by: owner))
     }
 
     func testLegacyGoalIsPreservedButNotAutomaticallyClaimed() {
