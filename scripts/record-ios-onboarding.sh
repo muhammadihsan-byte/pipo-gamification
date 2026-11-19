@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# One controlled Simulator run records both onboarding choices and V4 motion.
+# One controlled Simulator run records authenticated personalization and optional widget with V4 motion.
 # Builds the UI test target only once; no sign-in, payment, or TestFlight steps.
 set -euo pipefail
 
@@ -8,7 +8,7 @@ set -euo pipefail
 
 mkdir -p validation/videos validation/ui-test-logs
 derived="$RUNNER_TEMP/PipoOnboardingDerivedData"
-output="validation/videos/Pipo-Onboarding-Personal-and-Group.mp4"
+output="validation/videos/Pipo-Post-Login-Onboarding.mp4"
 recording_pid=""
 
 stop_recording() {
@@ -28,7 +28,7 @@ xcodebuild \
   -destination "id=$SIMULATOR_UDID" \
   -derivedDataPath "$derived" \
   -parallel-testing-enabled NO \
-  -only-testing:PipoUITests/PipoUIRecordingTests/testOnboardingPersonalAndGroupPreview \
+  -only-testing:PipoUITests/PipoUIRecordingTests/testPostLoginPersonalizationAndWidgetPreview \
   CODE_SIGNING_ALLOWED=NO \
   CODE_SIGNING_REQUIRED=NO \
   build-for-testing 2>&1 | tee validation/ui-test-logs/onboarding-build.log
@@ -43,7 +43,7 @@ xcrun simctl boot "$SIMULATOR_UDID" 2>/dev/null || true
 xcrun simctl bootstatus "$SIMULATOR_UDID" -b
 xcrun simctl status_bar "$SIMULATOR_UDID" override --time "9:41" --batteryState charged --batteryLevel 100 || true
 
-echo "Recording both onboarding choices in one Simulator session..."
+echo "Recording post-login onboarding and returning-account skip in one Simulator session..."
 xcrun simctl io "$SIMULATOR_UDID" recordVideo --codec=h264 --force "$output" \
   >validation/ui-test-logs/onboarding-recorder.log 2>&1 &
 recording_pid=$!
@@ -58,7 +58,7 @@ xcodebuild \
   -xctestrun "$xctestrun" \
   -destination "id=$SIMULATOR_UDID" \
   -parallel-testing-enabled NO \
-  -only-testing:PipoUITests/PipoUIRecordingTests/testOnboardingPersonalAndGroupPreview \
+  -only-testing:PipoUITests/PipoUIRecordingTests/testPostLoginPersonalizationAndWidgetPreview \
   -resultBundlePath "$RUNNER_TEMP/PipoTestResults.xcresult" \
   CODE_SIGNING_ALLOWED=NO \
   CODE_SIGNING_REQUIRED=NO \
@@ -88,4 +88,4 @@ print(f"Validated onboarding MP4: {os.path.getsize(path)} bytes")
 PY
 
 shasum -a 256 "$output" >validation/videos/SHA256SUMS
-echo "Personal and Group onboarding preview test passed. One MP4 is available."
+echo "Post-login personalization and widget onboarding test passed. One MP4 is available."
