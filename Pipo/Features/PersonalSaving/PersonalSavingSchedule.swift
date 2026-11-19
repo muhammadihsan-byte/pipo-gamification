@@ -160,3 +160,53 @@ enum PersonalPlanFormatting {
         return day.formatted(style) + suffix
     }
 }
+
+struct GoalBreakdownDraft: Identifiable, Sendable {
+    let id: UUID
+    var title: String
+    var amount: String
+
+    init(id: UUID = UUID(), title: String = "", amount: String = "") {
+        self.id = id
+        self.title = title
+        self.amount = amount
+    }
+
+    var cleanTitle: String { title.trimmingCharacters(in: .whitespacesAndNewlines) }
+    var rupiah: Int? { PersonalPlanFormatting.parseRupiah(amount) }
+}
+
+extension Collection where Element == GoalBreakdownDraft {
+    var validBreakdownTotal: Int? {
+        var total = 0
+        for row in self {
+            guard !row.cleanTitle.isEmpty, let amount = row.rupiah else { return nil }
+            let (sum, overflow) = total.addingReportingOverflow(amount)
+            guard !overflow, Double(exactly: sum) != nil else { return nil }
+            total = sum
+        }
+        return total
+    }
+}
+
+struct SavingDateEntry {
+    var day: String
+    var month: String
+    var year: String
+
+    init(_ date: Date, calendar: Calendar) {
+        let parts = calendar.dateComponents([.day, .month, .year], from: date)
+        day = String(format: "%02d", parts.day ?? 1)
+        month = String(format: "%02d", parts.month ?? 1)
+        year = String(parts.year ?? 1)
+    }
+
+    func date(in calendar: Calendar) -> Date? {
+        guard let d = Int(day), let m = Int(month), let y = Int(year),
+              (1...31).contains(d), (1...12).contains(m), (1...9999).contains(y) else { return nil }
+        let parts = DateComponents(year: y, month: m, day: d)
+        guard let date = calendar.date(from: parts),
+              calendar.dateComponents([.year, .month, .day], from: date) == parts else { return nil }
+        return date
+    }
+}

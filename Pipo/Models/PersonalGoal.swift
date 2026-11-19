@@ -62,6 +62,10 @@ final class PersonalGoal {
     var targetDate: Date
     var rhythm: SavingRhythm
     var preferredSavingDay: Int?
+    var plannedContributionOverride: Int?
+    var groupDetails: Data?
+    @Attribute(.externalStorage) var goalPhoto: Data?
+    @Attribute(.externalStorage) var groupPhoto: Data?
     var isGroupGoal: Bool
     var createdAt: Date
 

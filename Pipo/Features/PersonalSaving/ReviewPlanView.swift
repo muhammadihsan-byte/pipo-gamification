@@ -14,6 +14,7 @@ struct ReviewPlanView: View {
     @Query private var goals: [PersonalGoal]
     @Query private var profiles: [UserProfile]
 
+    @State private var saving = false
     @State private var createdGoalID: UUID?
     @State private var isPaywallPresented = false
     @State private var errorMessage: String?
@@ -28,7 +29,12 @@ struct ReviewPlanView: View {
                 .font(.caption)
                 .foregroundStyle(PersonalPlanStyle.muted)
         } footer: {
-            PersonalPlanActions(back: onBack, title: "Start saving plan", action: confirmCreation)
+            PersonalPlanActions(back: onBack, title: saving ? "Saving…" : "Start saving plan",
+                                dimmed: saving, action: { saving = true })
+        }
+        .disabled(saving || createdGoalID != nil)
+        .task(id: saving) {
+            if saving { confirmCreation() }
         }
         .accessibilityHidden(createdGoalID != nil)
         .overlay {
@@ -116,9 +122,9 @@ struct ReviewPlanView: View {
             cardHeading("Saving rhythm", step: .rhythm)
             summaryRow("Frequency", value: PersonalPlanFormatting.rhythmLabel(plan.rhythm, day: plan.preferredSavingDay))
             if let schedule = plan.schedule {
-                summaryRow("Planned amount", value: money(schedule.amount))
+                summaryRow("Planned amount", value: money(plan.contributionOverride ?? schedule.amount))
                 summaryRow("First planned save", value: dateLabel(schedule.firstDate))
-                Text(scheduleDetails(schedule))
+                Text(scheduleDetails(schedule, override: plan.contributionOverride))
                     .font(.caption)
                     .foregroundStyle(PersonalPlanStyle.muted)
             } else {
@@ -134,8 +140,8 @@ struct ReviewPlanView: View {
 
     private func confirmation(goalID: UUID) -> some View {
         PersonalPlanDialog {
-            PipoMascotView(state: .celebrating)
-                .frame(width: 108, height: 108)
+            PipoMascotView(companion: .celebration)
+                .frame(width: 94, height: 99)
                 .accessibilityHidden(true)
 
             Text("Your plan is ready!")
@@ -152,7 +158,7 @@ struct ReviewPlanView: View {
                     .font(.title3.bold())
                     .foregroundStyle(PersonalPlanStyle.berry)
                 if let schedule = plan.schedule {
-                    Text(money(schedule.amount) + plan.rhythm.unitLabel)
+                    Text(money(plan.contributionOverride ?? schedule.amount) + plan.rhythm.unitLabel)
                     Text("First planned save: \(dateLabel(schedule.firstDate))")
                 } else {
                     Text("Flexible · save when you can")
@@ -180,7 +186,7 @@ struct ReviewPlanView: View {
     }
 
     private func editButton(_ field: String, step: PersonalPlanStep) -> some View {
-        Button("Edit") { onEdit(step) }
+        Button { onEdit(step) } label: { Text("Edit").frame(minWidth: 44, minHeight: 44) }
             .buttonStyle(.plain)
             .font(.caption.bold())
             .foregroundStyle(PersonalPlanStyle.berry)
@@ -209,6 +215,7 @@ struct ReviewPlanView: View {
     }
 
     private func confirmCreation() {
+        defer { saving = false }
         guard createdGoalID == nil else { return }
         let activeCount = activePersonalGoalCount
         guard subscriptionManager.canCreateGoal(isGroup: false, activeCount: activeCount) else {
@@ -225,6 +232,7 @@ struct ReviewPlanView: View {
             targetAmount: plan.targetAmount, startDate: plan.startDate, targetDate: plan.targetDate,
             rhythm: plan.rhythm, preferredSavingDay: plan.preferredSavingDay
         )
+        goal.plannedContributionOverride = plan.contributionOverride
         goal.subItems = plan.breakdown.compactMap { item in
             guard let amount = item.rupiah else { return nil }
             return SubItem(title: item.cleanTitle, amount: Double(amount))
@@ -332,6 +340,9 @@ struct PersonalGoalDetailView: View {
                         .accessibilityLabel("Saving progress")
                     LabeledContent("Target", value: money(goal.targetAmount))
                     LabeledContent("Target date", value: dateLabel(goal.targetDate))
+                    if let override = goal.plannedContributionOverride {
+                        LabeledContent("Planned contribution", value: money(override) + goal.rhythm.unitLabel)
+                    }
                     LabeledContent("Saving rhythm", value: PersonalPlanFormatting.rhythmLabel(goal.rhythm, day: goal.preferredSavingDay))
                 }
                 .font(.subheadline)
@@ -372,7 +383,10 @@ func scheduleTitle(_ schedule: PersonalSavingSchedule, rhythm: SavingRhythm) -> 
     return "\(schedule.count) \(rhythm.periodLabel)"
 }
 
-func scheduleDetails(_ schedule: PersonalSavingSchedule) -> String {
+func scheduleDetails(_ schedule: PersonalSavingSchedule, override: Int? = nil) -> String {
+    if let override {
+        return "\(schedule.count) planned contributions at \(money(override)) each, from \(dateLabel(schedule.firstDate)) to \(dateLabel(schedule.lastDate))."
+    }
     let amount = money(schedule.amount)
     let timeline = schedule.count == 1
         ? "Make one planned contribution on \(dateLabel(schedule.firstDate))."

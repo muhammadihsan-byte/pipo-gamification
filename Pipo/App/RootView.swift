@@ -10,6 +10,7 @@ struct RootView: View {
     @State private var subscriptionManager: SubscriptionManager
     @State private var storeKitManager: StoreKitManager
     @State private var supabaseService: SupabaseService?
+    @State private var choosingPlan = false
     @State private var noticeMessage: String?
     @AppStorage("hasCompletedOnboarding") private var hasCompletedOnboarding = false
     @State private var onboardingCompletion: OnboardingCompletion?
@@ -224,7 +225,7 @@ struct RootView: View {
     private var dashboardView: some View {
         DashboardView(
             onCreateGoal: {
-                navigationManager.navigate(to: .createGoal)
+                choosingPlan = true
             },
             onSavingCompleted: { transaction, goal, xpEarned, streakDays in
                 navigationManager.transactionDidComplete(
@@ -255,6 +256,11 @@ struct RootView: View {
                 }
             }
         )
+        .confirmationDialog("Choose a saving plan", isPresented: $choosingPlan, titleVisibility: .visible) {
+            Button("Personal saving") { navigationManager.navigate(to: .createGoal) }
+            Button("Group saving") { navigationManager.navigate(to: .createGroupPlan) }
+            Button("Cancel", role: .cancel) {}
+        }
     }
 
     private func authenticate(_ credentials: AuthCredentials) {
@@ -315,15 +321,6 @@ struct RootView: View {
         }
     }
 
-    private var groupSavingReview: GroupSavingReviewData {
-        var review = MockData.groupSavingReview
-        if let plannedContributionAmount = navigationManager.plannedContributionAmount {
-            review.rhythm = "\(navigationManager.selectedRhythm.title) · on the \(navigationManager.preferredDepositDay)"
-            review.plannedContributionAmount = plannedContributionAmount
-        }
-        return review
-    }
-
     @ViewBuilder
     private func destination(for route: Route) -> some View {
         switch route {
@@ -358,40 +355,8 @@ struct RootView: View {
             PersonalGoalDetailView(goalID: goalID, onBack: navigationManager.pop) {
                 navigationManager.requestDeposit(goalID: goalID)
             }
-        case .savingRhythm:
-            SavingRhythmView(
-                goalTitle: MockData.savingGoalTitle,
-                targetAmount: MockData.savingGoalTarget,
-                plannedStartDate: MockData.savingStartDate,
-                targetDate: MockData.savingTargetDate,
-                selectedRhythm: navigationManager.selectedRhythm,
-                preferredDepositDay: navigationManager.preferredDepositDay,
-                onBack: {
-                    navigationManager.pop()
-                },
-                onEditContribution: {
-                    noticeMessage = "Edit the target amount in the previous goal setup step."
-                },
-                onContinue: { rhythm, depositDay, contributionAmount in
-                    navigationManager.selectedRhythm = rhythm
-                    navigationManager.preferredDepositDay = depositDay
-                    navigationManager.plannedContributionAmount = contributionAmount
-                    navigationManager.navigate(to: .reviewGroupSaving)
-                }
-            )
-        case .reviewGroupSaving:
-            ReviewGroupSavingView(
-                review: groupSavingReview,
-                onBack: {
-                    navigationManager.pop()
-                },
-                onEdit: { _ in
-                    navigationManager.pop()
-                },
-                onCreate: {
-                    navigationManager.popToRoot()
-                }
-            )
+        case .createGroupPlan, .savingRhythm, .reviewGroupSaving:
+            CreateGroupPlanView(onBack: navigationManager.pop, onDashboard: navigationManager.popToRoot)
         case .milestoneCelebration:
             ConsistencyMilestoneView(
                 xpEarned: navigationManager.milestoneXPEarned,
@@ -410,6 +375,9 @@ struct RootView: View {
         if completion.isPlusSelected {
             navigationManager.navigate(to: .paywall(isGroup: completion.isGroupSaving))
             onboardingCompletion = nil
+        } else if completion.isGroupSaving {
+            onboardingCompletion = nil
+            navigationManager.navigate(to: .createGroupPlan)
         } else if completion.goalCategory != nil, completion.goalTitle != nil {
             isPrefillingOnboardingGoal = true
             navigationManager.navigate(to: .createGoal)
@@ -427,10 +395,8 @@ struct RootView_Previews: PreviewProvider {
                 .previewDisplayName("Sign In")
             RootView(initialAuthState: .authenticated)
                 .previewDisplayName("Dashboard")
-            RootView(initialAuthState: .authenticated, initialRoute: .savingRhythm)
-                .previewDisplayName("Saving Rhythm")
-            RootView(initialAuthState: .authenticated, initialRoute: .reviewGroupSaving)
-                .previewDisplayName("Group Review")
+            RootView(initialAuthState: .authenticated, initialRoute: .createGroupPlan)
+                .previewDisplayName("Group Saving")
             RootView(initialAuthState: .authenticated, initialRoute: .milestoneCelebration)
                 .previewDisplayName("Milestone")
         }

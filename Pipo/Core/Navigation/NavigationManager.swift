@@ -5,6 +5,7 @@ enum Route: Hashable, Sendable {
     case auth
     case dashboard
     case createGoal
+    case createGroupPlan
     case personalGoal(UUID)
     case savingRhythm
     case reviewGroupSaving
