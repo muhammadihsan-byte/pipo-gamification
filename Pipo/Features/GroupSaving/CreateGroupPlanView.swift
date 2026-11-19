@@ -20,6 +20,36 @@ struct CreateGroupPlanView: View {
     @State private var touchedName = false
     @Environment(AuthStateManager.self) private var auth
 
+    /// Optional first-run defaults; regular Group Saving callers remain unchanged.
+    init(
+        onBack: @escaping () -> Void,
+        onDashboard: @escaping () -> Void,
+        initialTitle: String? = nil,
+        initialCategory: GoalCategory? = nil,
+        initialRhythm: SavingRhythm? = nil
+    ) {
+        self.onBack = onBack
+        self.onDashboard = onDashboard
+        var initialDraft = GroupPlanDraft()
+        if let initialTitle { initialDraft.title = initialTitle }
+        if let initialRhythm { initialDraft.rhythm = initialRhythm }
+
+        if let initialCategory {
+            switch initialCategory {
+            case .trip: initialDraft.category = .travel
+            case .gadget: initialDraft.category = .gadget
+            case .house: initialDraft.category = .home
+            case .gift: initialDraft.category = .event
+            case .other where initialTitle == "Emergency Fund":
+                initialDraft.category = .emergency
+            default:
+                initialDraft.category = .other
+                initialDraft.customCategory = initialTitle ?? "Other"
+            }
+        }
+        _draft = State(initialValue: initialDraft)
+    }
+
     var body: some View {
         if navigation.step == .review, let review = draft.review(creatorID: auth.userID) {
             ReviewGroupSavingView(review: review, onBack: back, onEdit: edit, onCreate: { navigation.didSave() })
