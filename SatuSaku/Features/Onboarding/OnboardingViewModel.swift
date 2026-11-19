@@ -93,7 +93,7 @@ enum OnboardingSavingMode: String, CaseIterable, Identifiable {
     var title: String {
         switch self {
         case .personal: "Personal Plan"
-        case .group: "Group Saving (Satusaku)"
+        case .group: "Group Saving"
         }
     }
 
