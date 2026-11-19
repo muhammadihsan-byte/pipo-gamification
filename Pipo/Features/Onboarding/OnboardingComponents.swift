@@ -154,9 +154,10 @@ private struct PipoSpeechBubbleShape: Shape {
 
         var path = Path()
         path.move(to: CGPoint(x: left + radius, y: top))
-        path.addLine(to: CGPoint(x: left + 33, y: top))
-        path.addLine(to: CGPoint(x: left + 44, y: rect.minY))
-        path.addLine(to: CGPoint(x: left + 55, y: top))
+        // Aim the tail toward the centered V4 mascot, not the left gutter.
+        path.addLine(to: CGPoint(x: rect.midX - 11, y: top))
+        path.addLine(to: CGPoint(x: rect.midX, y: rect.minY))
+        path.addLine(to: CGPoint(x: rect.midX + 11, y: top))
         path.addLine(to: CGPoint(x: right - radius, y: top))
         path.addQuadCurve(
             to: CGPoint(x: right, y: top + radius),
