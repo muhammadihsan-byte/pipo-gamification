@@ -111,6 +111,7 @@ struct CreateGroupPlanView: View {
                 PersonalPlanFieldLabel(title: "Goal name", status: "Required")
                 TextField("Give your goal a name", text: $draft.title)
                     .focused($nameFocused).accessibilityLabel("Goal name")
+                    .onSubmit { nameFocused = false }
                     .personalPlanField(invalid: touchedName && draft.title.trimmed.isEmpty)
                 if touchedName && draft.title.trimmed.isEmpty { feedback("Enter a goal name to continue.") }
                 hint("Your saving purpose can be different from your group name.")
@@ -133,6 +134,7 @@ struct CreateGroupPlanView: View {
                             draft.category = category
                             categoryOpen = false
                         }
+                        .accessibilityIdentifier("pipo.qa.group.category.\(category.rawValue)")
                     }
                 }
                 if draft.category == .other {
