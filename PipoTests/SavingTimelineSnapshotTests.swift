@@ -12,18 +12,15 @@ final class SavingTimelineSnapshotTests: XCTestCase {
                 let height: CGFloat = width == 390 ? 852 : 760
                 let view = SavingTimelineSnapshotFixture(isGroup: isGroup)
                     .frame(width: width, height: height)
-                let renderer = ImageRenderer(content: view)
-                renderer.proposedSize = ProposedViewSize(width: width, height: height)
-                renderer.scale = 1
-
                 let name = "\(isGroup ? "Group" : "Personal")-Timeline-\(Int(width))pt"
-                guard let screenshot = renderer.uiImage else {
+                guard let screenshot = renderInWindow(view, size: CGSize(width: width, height: height)) else {
                     XCTFail("\(name) did not render")
                     continue
                 }
 
                 XCTAssertEqual(screenshot.size.width, width, accuracy: 1)
                 XCTAssertEqual(screenshot.size.height, height, accuracy: 1)
+                XCTAssertTrue(hasRenderedBodyContent(screenshot), "\(name) contains no visible content above the footer")
 
                 let attachment = XCTAttachment(image: screenshot)
                 attachment.name = name
@@ -31,6 +28,61 @@ final class SavingTimelineSnapshotTests: XCTestCase {
                 add(attachment)
             }
         }
+    }
+    /// Render SwiftUI inside a real UIWindow; ImageRenderer omits ScrollView body content.
+    private func renderInWindow<Content: View>(_ content: Content, size: CGSize) -> UIImage? {
+        guard let scene = UIApplication.shared.connectedScenes
+            .compactMap({ $0 as? UIWindowScene }).first else { return nil }
+        let previousKeyWindow = scene.windows.first(where: { $0.isKeyWindow })
+        let controller = UIHostingController(rootView: content)
+        let window = UIWindow(windowScene: scene)
+        window.frame = CGRect(origin: .zero, size: size)
+        window.rootViewController = controller
+        window.makeKeyAndVisible()
+        defer {
+            window.isHidden = true
+            previousKeyWindow?.makeKeyAndVisible()
+        }
+        controller.view.frame = window.bounds
+        controller.view.setNeedsLayout()
+        controller.view.layoutIfNeeded()
+        RunLoop.main.run(until: Date().addingTimeInterval(0.2))
+        return UIGraphicsImageRenderer(size: size).image { context in
+            if !window.drawHierarchy(in: window.bounds, afterScreenUpdates: true) {
+                window.layer.render(in: context.cgContext)
+            }
+        }
+    }
+
+    /// Fail visibly blank screenshots even if image dimensions and XCTest attachment export pass.
+    private func hasRenderedBodyContent(_ image: UIImage) -> Bool {
+        guard let cg = image.cgImage else { return false }
+        let width = cg.width
+        let height = cg.height
+        let bytesPerRow = width * 4
+        var pixels = [UInt8](repeating: 255, count: bytesPerRow * height)
+        let didDraw = pixels.withUnsafeMutableBytes { buffer -> Bool in
+            guard let context = CGContext(
+                data: buffer.baseAddress,
+                width: width, height: height, bitsPerComponent: 8,
+                bytesPerRow: bytesPerRow, space: CGColorSpaceCreateDeviceRGB(),
+                bitmapInfo: CGBitmapInfo.byteOrder32Big.rawValue | CGImageAlphaInfo.premultipliedLast.rawValue
+            ) else { return false }
+            context.draw(cg, in: CGRect(x: 0, y: 0, width: width, height: height))
+            return true
+        }
+        guard didDraw else { return false }
+        var contrastingSamples = 0
+        for y in stride(from: 120, to: max(120, height - 120), by: 4) {
+            for x in stride(from: 12, to: max(12, width - 12), by: 4) {
+                let index = y * bytesPerRow + x * 4
+                if pixels[index] < 220 || pixels[index + 1] < 220 || pixels[index + 2] < 220 {
+                    contrastingSamples += 1
+                    if contrastingSamples > 30 { return true }
+                }
+            }
+        }
+        return false
     }
 }
 
