@@ -15,6 +15,7 @@ struct PipoApp: App {
         let args = ProcessInfo.processInfo.arguments
         let qaInMemory = args.contains("-pipo-visual-qa")
             || args.contains("-pipo-onboarding-qa")
+            || args.contains("-pipo-onboarding-qa-returning")
         #else
         let qaInMemory = false
         #endif
@@ -34,7 +35,8 @@ struct PipoApp: App {
         WindowGroup {
             #if DEBUG
             if ProcessInfo.processInfo.arguments.contains("-pipo-visual-qa")
-                || ProcessInfo.processInfo.arguments.contains("-pipo-onboarding-qa") {
+                || ProcessInfo.processInfo.arguments.contains("-pipo-onboarding-qa")
+                || ProcessInfo.processInfo.arguments.contains("-pipo-onboarding-qa-returning") {
                 RootView(initialAuthState: .authenticated)
             } else {
                 RootView()
