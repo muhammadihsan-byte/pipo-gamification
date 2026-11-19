@@ -53,6 +53,23 @@ struct PersonalPlanPage<Content: View, Footer: View>: View {
     @ViewBuilder var footer: () -> Footer
 
     var body: some View {
+        SavingPlanPage(flowTitle: "Personal saving plan", stepNumber: step.rawValue,
+                       count: PersonalPlanStep.allCases.count, stepTitle: step.title,
+                       onBack: onBack, content: content, footer: footer)
+    }
+}
+
+struct SavingPlanPage<Content: View, Footer: View>: View {
+    let flowTitle: String
+    let stepNumber: Int
+    let count: Int
+    let stepTitle: String
+    var ready = false
+    let onBack: () -> Void
+    @ViewBuilder var content: () -> Content
+    @ViewBuilder var footer: () -> Footer
+
+    var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 20) {
                 header
@@ -98,33 +115,34 @@ struct PersonalPlanPage<Content: View, Footer: View>: View {
                 .buttonStyle(.plain)
                 .accessibilityLabel("Back")
 
-                Text("Personal saving plan")
+                Text(flowTitle)
                     .font(.subheadline.bold())
                 Spacer(minLength: 8)
-                Text("\(step.rawValue) of \(PersonalPlanStep.allCases.count)")
+                Text(ready ? "Ready" : "\(stepNumber) of \(count)")
                     .font(.caption.weight(.medium))
                     .foregroundStyle(PersonalPlanStyle.muted)
-                    .accessibilityLabel("Step \(step.rawValue) of \(PersonalPlanStep.allCases.count)")
+                    .accessibilityLabel(ready ? "Ready" : "Step \(stepNumber) of \(count)")
             }
 
             HStack(spacing: 6) {
-                ForEach(PersonalPlanStep.allCases) { bar in
+                ForEach(1..<(count + 1), id: \.self) { bar in
                     Capsule()
                         .fill(progressColor(for: bar))
                         .frame(height: 5)
                 }
             }
             .accessibilityHidden(true)
+            .opacity(ready ? 0 : 1)
 
-            Text(step.title)
+            Text(stepTitle)
                 .font(.caption.bold())
                 .foregroundStyle(PersonalPlanStyle.muted)
         }
     }
 
-    private func progressColor(for bar: PersonalPlanStep) -> Color {
-        if bar == step { return PersonalPlanStyle.pink }
-        if bar.rawValue < step.rawValue { return PersonalPlanStyle.green }
+    private func progressColor(for bar: Int) -> Color {
+        if bar == stepNumber { return PersonalPlanStyle.pink }
+        if bar < stepNumber { return PersonalPlanStyle.green }
         return PersonalPlanStyle.border
     }
 }
@@ -176,9 +194,7 @@ struct PersonalPlanIntro: View {
                     ))
                     .id(step)
             } else if step == .rhythm {
-                Image(systemName: "target")
-                    .font(.system(size: size * 0.75, weight: .medium))
-                    .foregroundStyle(PersonalPlanStyle.pink)
+                Image("PlanTargetHeart").resizable().scaledToFit()
             }
         }
         .frame(width: size, height: size)
@@ -196,16 +212,18 @@ struct PersonalPlanActions: View {
     var body: some View {
         HStack(spacing: 12) {
             if showsBack {
-                Button("Back", action: back)
-                    .buttonStyle(.plain)
+                Button(action: back) { Text("Back")
                     .font(.subheadline.bold())
                     .foregroundStyle(PersonalPlanStyle.muted)
                     .padding(.horizontal, 24)
                     .frame(minHeight: 48)
                     .background(PersonalPlanStyle.surface, in: RoundedRectangle(cornerRadius: 12))
+                }
+                .buttonStyle(.plain)
             }
             Button(title, action: action)
                 .buttonStyle(PersonalPlanPrimaryStyle(dimmed: dimmed))
+                .disabled(dimmed)
         }
     }
 }
@@ -298,7 +316,7 @@ struct PersonalPlanChoice: View {
                 Spacer(minLength: 0)
             }
             .foregroundStyle(selected ? PersonalPlanStyle.berry : PersonalPlanStyle.ink)
-            .personalPlanField(height: 42, selected: selected)
+            .personalPlanField(height: 44, selected: selected)
         }
         .buttonStyle(.plain)
         .accessibilityAddTraits(selected ? .isSelected : [])
@@ -323,5 +341,75 @@ extension View {
                     )
             }
             .contentShape(RoundedRectangle(cornerRadius: 12))
+    }
+}
+
+struct RupiahInput: View {
+    let label: String
+    @Binding var text: String
+    var placeholder = "0"
+
+    var body: some View {
+        HStack {
+            Text("Rp")
+            TextField(placeholder, text: $text)
+                .keyboardType(.numberPad)
+                .accessibilityLabel(label)
+                .formatRupiahOnBlur($text)
+        }
+        .font(.subheadline)
+        .personalPlanField(invalid: !text.isEmpty && PersonalPlanFormatting.parseRupiah(text) == nil)
+    }
+}
+
+private struct RupiahFormatOnBlur: ViewModifier {
+    @Binding var text: String
+    @FocusState private var editing: Bool
+
+    func body(content: Content) -> some View {
+        content.focused($editing).onChange(of: editing) { _, focused in
+            if !focused, let amount = PersonalPlanFormatting.parseRupiah(text) {
+                text = PersonalPlanFormatting.digits(amount)
+            }
+        }
+    }
+}
+
+extension View {
+    func formatRupiahOnBlur(_ text: Binding<String>) -> some View {
+        modifier(RupiahFormatOnBlur(text: text))
+    }
+}
+
+struct SavingDayGrid: View {
+    let title: String
+    let days: [Int]
+    @Binding var selection: Int
+    let label: (Int) -> String
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            Text(title).font(.subheadline.bold())
+            LazyVGrid(columns: [GridItem(.adaptive(minimum: 44), spacing: 4)], spacing: 4) {
+                ForEach(days, id: \.self) { day in
+                    let selected = selection == day
+                    Button {
+                        selection = day
+                    } label: {
+                        Text(label(day))
+                            .font(.caption.weight(.medium))
+                            .foregroundStyle(selected ? .white : PersonalPlanStyle.ink)
+                            .minimumScaleFactor(0.75)
+                            .frame(maxWidth: .infinity, minHeight: 44)
+                            .background(
+                                selected ? PersonalPlanStyle.pink : PersonalPlanStyle.surface,
+                                in: RoundedRectangle(cornerRadius: 9)
+                            )
+                    }
+                    .buttonStyle(.plain)
+                    .accessibilityAddTraits(selected ? .isSelected : [])
+                }
+            }
+        }
     }
 }

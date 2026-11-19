@@ -1,20 +1,5 @@
 import SwiftUI
 
-struct GoalBreakdownDraft: Identifiable {
-    let id: UUID
-    var title: String
-    var amount: String
-
-    init(id: UUID = UUID(), title: String = "", amount: String = "") {
-        self.id = id
-        self.title = title
-        self.amount = amount
-    }
-
-    var cleanTitle: String { title.trimmingCharacters(in: .whitespacesAndNewlines) }
-    var rupiah: Int? { PersonalPlanFormatting.parseRupiah(amount) }
-}
-
 struct PersonalGoalPlan {
     let title: String
     let category: GoalCategory
@@ -25,6 +10,7 @@ struct PersonalGoalPlan {
     let rhythm: SavingRhythm
     var customCategory: String? = nil
     var preferredSavingDay: Int? = nil
+    var contributionOverride: Int? = nil
 
     var categoryTitle: String { customCategory ?? category.title }
 
@@ -70,6 +56,7 @@ struct CreateGoalView: View {
     @State private var calendarMonth: Date
     @State private var durationMonths = 9
     @State private var rhythm: SavingRhythm
+    @State private var contributionOverride = ""
     @State private var monthDay: Int
     @State private var weekday: Int
     @State private var showBreakdownDialog = false
@@ -147,7 +134,7 @@ struct CreateGoalView: View {
             back: goBack,
             showsBack: step != .goal || isEditingFromReview,
             title: isEditingFromReview && plan != nil ? "Back to review" : "Continue",
-            dimmed: !stepIsValid,
+            dimmed: !stepIsValid && !(step == .target && breakdownMismatch != nil),
             action: advance
         )
     }
@@ -233,7 +220,7 @@ struct CreateGoalView: View {
                                 .font(.caption.weight(.medium))
                                 .foregroundStyle(option == category ? PersonalPlanStyle.berry : PersonalPlanStyle.ink)
                                 .padding(.horizontal, 10)
-                                .frame(minHeight: 34)
+                                .frame(minHeight: 44)
                                 .background(
                                     option == category ? PersonalPlanStyle.blush : .clear,
                                     in: RoundedRectangle(cornerRadius: 8)
@@ -259,13 +246,13 @@ struct CreateGoalView: View {
                         .textInputAutocapitalization(.sentences)
                         .font(.caption.weight(.medium))
                         .personalPlanField(invalid: showValidation && cleanCategory.isEmpty)
-                    if showValidation && cleanCategory.isEmpty {
+                    if cleanCategory.isEmpty {
                         validationMessage("Enter a category for your goal.")
                     }
                 }
             } else {
                 PersonalPlanNote(
-                    title: "Make it yours",
+                    title: "A goal that’s yours",
                     message: "Pick something that matters to you. You can change the plan before you start."
                 )
             }
@@ -279,12 +266,13 @@ struct CreateGoalView: View {
                 HStack(spacing: 3) {
                     Text("Rp")
                     TextField("0", text: $targetAmount)
+                        .formatRupiahOnBlur($targetAmount)
                         .keyboardType(.numberPad)
                         .accessibilityLabel("Target amount in rupiah")
                 }
                 .font(.caption.weight(.medium))
                 .personalPlanField(invalid: showValidation && targetRupiah == nil)
-                if showValidation && targetRupiah == nil {
+                if (showValidation || !targetAmount.isEmpty) && targetRupiah == nil {
                     validationMessage("Enter a target greater than Rp0.")
                 }
             }
@@ -301,7 +289,7 @@ struct CreateGoalView: View {
                             .frame(maxWidth: .infinity, alignment: .leading)
                         Text("Amount (Rp)")
                             .frame(width: 105, alignment: .leading)
-                        Color.clear.frame(width: 24, height: 1)
+                        Color.clear.frame(width: 44, height: 1)
                     }
                     .font(.caption.weight(.semibold))
                     .foregroundStyle(PersonalPlanStyle.muted)
@@ -313,6 +301,7 @@ struct CreateGoalView: View {
                             .accessibilityLabel("Breakdown item name")
                             .personalPlanField(height: 44, invalid: showValidation && item.cleanTitle.isEmpty)
                         TextField("0", text: $item.amount)
+                            .formatRupiahOnBlur($item.amount)
                             .keyboardType(.numberPad)
                             .accessibilityLabel("Amount in rupiah for \(item.cleanTitle.isEmpty ? "this item" : item.cleanTitle)")
                             .personalPlanField(height: 44, invalid: (showValidation && item.rupiah == nil) || breakdownMismatch != nil)
@@ -324,7 +313,7 @@ struct CreateGoalView: View {
                             Image(systemName: "minus.circle")
                                 .font(.body.weight(.medium))
                                 .foregroundStyle(PersonalPlanStyle.muted)
-                                .frame(width: 24, height: 44)
+                                .frame(width: 44, height: 44)
                         }
                         .buttonStyle(.plain)
                         .accessibilityLabel("Remove breakdown item")
@@ -338,7 +327,7 @@ struct CreateGoalView: View {
                     Label("Add row", systemImage: "plus")
                         .font(.caption.bold())
                         .foregroundStyle(PersonalPlanStyle.berry)
-                        .frame(maxWidth: .infinity, minHeight: 38)
+                        .frame(maxWidth: .infinity, minHeight: 44)
                         .contentShape(Rectangle())
                         .overlay {
                             RoundedRectangle(cornerRadius: 12)
@@ -347,7 +336,7 @@ struct CreateGoalView: View {
                 }
                 .buttonStyle(.plain)
 
-                if showValidation, !breakdown.isEmpty, breakdownTotal == nil {
+                if !breakdown.isEmpty, breakdownTotal == nil {
                     validationMessage("Enter a name and a positive amount for every item, or remove the empty rows.")
                 }
                 if let total = breakdownTotal, !breakdown.isEmpty {
@@ -443,7 +432,7 @@ struct CreateGoalView: View {
                         .font(.caption)
                         .foregroundStyle(PersonalPlanStyle.muted)
                 }
-            } else if showValidation {
+            } else {
                 validationMessage("Enter a valid date after today.")
             }
         }
@@ -498,12 +487,12 @@ struct CreateGoalView: View {
                 .background(PersonalPlanStyle.surface, in: RoundedRectangle(cornerRadius: 16))
             } else {
                 if rhythm == .monthly {
-                    dayPicker(title: "Preferred saving date", days: Array(1...31), selection: $monthDay) { String($0) }
+                    SavingDayGrid(title: "Preferred saving date", days: Array(1...31), selection: $monthDay) { String($0) }
                     Text("For shorter months, Pipo uses the last day of the month.")
                         .font(.caption)
                         .foregroundStyle(PersonalPlanStyle.muted)
                 } else if rhythm == .weekly || rhythm == .biWeekly {
-                    dayPicker(title: "Preferred saving day", days: [2, 3, 4, 5, 6, 7, 1], selection: $weekday) {
+                    SavingDayGrid(title: "Preferred saving day", days: [2, 3, 4, 5, 6, 7, 1], selection: $weekday) {
                         calendar.shortWeekdaySymbols[$0 - 1]
                     }
                 }
@@ -511,16 +500,20 @@ struct CreateGoalView: View {
                 if let schedule {
                     VStack(alignment: .leading, spacing: 8) {
                         PersonalPlanFieldLabel(title: "Planned contribution")
-                        Text(money(schedule.amount) + rhythm.unitLabel)
-                            .font(.caption.weight(.medium))
-                            .personalPlanField()
-                        Text("Pipo recalculates this amount when you change your target or schedule.")
+                        RupiahInput(label: "Planned contribution", text: $contributionOverride,
+                                    placeholder: PersonalPlanFormatting.digits(schedule.amount))
+                        if !contributionOverride.isEmpty {
+                            Button("Use suggested amount") { contributionOverride = "" }
+                                .frame(minHeight: 44)
+                            if enteredContribution == nil { validationMessage("Enter a positive amount in rupiah.") }
+                        }
+                        Text("Leave this blank to use the suggested amount of \(money(schedule.amount))\(rhythm.unitLabel).")
                             .font(.caption)
                             .foregroundStyle(PersonalPlanStyle.berry)
                     }
                     PersonalPlanNote(
                         title: scheduleTitle(schedule, rhythm: rhythm),
-                        message: scheduleDetails(schedule)
+                        message: scheduleDetails(schedule, override: enteredContribution)
                     )
                 } else {
                     validationMessage("There’s no saving date before your target. Choose another rhythm, saving day, or target date.")
@@ -533,50 +526,14 @@ struct CreateGoalView: View {
         PersonalPlanChoice(title: option.title, selected: rhythm == option) { rhythm = option }
     }
 
-    private func dayPicker(
-        title: String,
-        days: [Int],
-        selection: Binding<Int>,
-        label: @escaping (Int) -> String
-    ) -> some View {
-        VStack(alignment: .leading, spacing: 12) {
-            Text(title).font(.subheadline.bold())
-            LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: 6), count: 7), spacing: 6) {
-                ForEach(days, id: \.self) { day in
-                    let selected = selection.wrappedValue == day
-                    Button {
-                        selection.wrappedValue = day
-                    } label: {
-                        Text(label(day))
-                            .font(.caption.weight(.medium))
-                            .foregroundStyle(selected ? .white : PersonalPlanStyle.ink)
-                            .minimumScaleFactor(0.75)
-                            .frame(maxWidth: .infinity, minHeight: days.count == 7 ? 38 : 30)
-                            .background(
-                                selected ? PersonalPlanStyle.pink : PersonalPlanStyle.surface,
-                                in: RoundedRectangle(cornerRadius: 9)
-                            )
-                    }
-                    .buttonStyle(.plain)
-                    .accessibilityAddTraits(selected ? .isSelected : [])
-                }
-            }
-        }
-    }
-
     private var cleanTitle: String { title.trimmingCharacters(in: .whitespacesAndNewlines) }
     private var cleanCategory: String { customCategory.trimmingCharacters(in: .whitespacesAndNewlines) }
     private var targetRupiah: Int? { PersonalPlanFormatting.parseRupiah(targetAmount) }
 
-    private var breakdownTotal: Int? {
-        var total = 0
-        for item in breakdown {
-            guard !item.cleanTitle.isEmpty, let amount = item.rupiah else { return nil }
-            let (sum, overflow) = total.addingReportingOverflow(amount)
-            guard !overflow else { return nil }
-            total = sum
-        }
-        return total
+    private var breakdownTotal: Int? { breakdown.validBreakdownTotal }
+    private var enteredContribution: Int? { PersonalPlanFormatting.parseRupiah(contributionOverride) }
+    private var validRhythm: Bool {
+        rhythm == .flexible || (schedule != nil && (contributionOverride.isEmpty || enteredContribution != nil))
     }
 
     private var breakdownMismatch: (total: Int, target: Int, difference: Int, direction: String)? {
@@ -633,7 +590,7 @@ struct CreateGoalView: View {
             let targetRupiah,
             breakdown.isEmpty || breakdownTotal == targetRupiah,
             let targetDate,
-            rhythm == .flexible || schedule != nil
+            validRhythm
         else {
             return nil
         }
@@ -641,7 +598,8 @@ struct CreateGoalView: View {
             title: cleanTitle, category: category, targetAmount: Double(targetRupiah),
             breakdown: breakdown, startDate: startDate, targetDate: targetDate, rhythm: rhythm,
             customCategory: category == .other ? cleanCategory : nil,
-            preferredSavingDay: preferredSavingDay
+            preferredSavingDay: preferredSavingDay,
+            contributionOverride: rhythm == .flexible ? nil : enteredContribution
         )
     }
 
@@ -650,7 +608,7 @@ struct CreateGoalView: View {
         case .goal: !cleanTitle.isEmpty && (category != .other || !cleanCategory.isEmpty)
         case .target: targetRupiah != nil && (breakdown.isEmpty || breakdownTotal == targetRupiah)
         case .timeline: targetDate != nil
-        case .rhythm: rhythm == .flexible || schedule != nil
+        case .rhythm: validRhythm
         case .review: plan != nil
         }
     }
@@ -667,7 +625,7 @@ struct CreateGoalView: View {
 
     private var stepSubtitle: String {
         switch step {
-        case .goal: "Hi, I’m Pipo! Let’s give your next goal a name."
+        case .goal: "Hi, I’m Pipo! Let’s give your next goal a little direction."
         case .target: "Set a target amount for \(cleanTitle)."
         case .timeline: "Pick a date or set a timeline for \(cleanTitle)."
         case .rhythm: "Choose how often you want to save for \(cleanTitle)."
@@ -728,7 +686,7 @@ struct CreateGoalView: View {
     }
 }
 
-private struct PersonalPlanCalendar: View {
+struct PersonalPlanCalendar: View {
     @Binding var month: Date
     let selected: Date?
     let minimumDate: Date
@@ -784,7 +742,7 @@ private struct PersonalPlanCalendar: View {
             Image(systemName: symbol)
                 .font(.caption.weight(.bold))
                 .foregroundStyle(PersonalPlanStyle.muted)
-                .frame(width: 34, height: 28)
+                .frame(width: 44, height: 44)
         }
         .buttonStyle(.plain)
         .accessibilityLabel(label)
@@ -797,7 +755,7 @@ private struct PersonalPlanCalendar: View {
         } label: {
             Text(String(day))
                 .foregroundStyle(isSelected ? .white : PersonalPlanStyle.ink.opacity(date <= minimumDate ? 0.4 : 1))
-                .frame(maxWidth: .infinity, minHeight: 30)
+                .frame(maxWidth: .infinity, minHeight: 44)
                 .background(isSelected ? PersonalPlanStyle.pink : .clear, in: RoundedRectangle(cornerRadius: 9))
                 .contentShape(Rectangle())
         }
