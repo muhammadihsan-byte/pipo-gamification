@@ -42,6 +42,7 @@
 		00000000000000000000001A /* GroupSavingManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = 000000000000000000000128 /* GroupSavingManager.swift */; };
 		00000000000000000000001B /* GroupSavingManagerTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 000000000000000000000129 /* GroupSavingManagerTests.swift */; };
 		5341564500000000000000B3 /* GroupPlanJourneyTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5341564500000000000000D3 /* GroupPlanJourneyTests.swift */; };
+		9CA1E0000000000000000021 /* SavingTimelineSnapshotTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9CA1E0000000000000000022 /* SavingTimelineSnapshotTests.swift */; };
 		0BA9C96E17E50FEC4485564A /* SupabaseServiceTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 27631892C68B8BF7E1BFBCD2 /* SupabaseServiceTests.swift */; };
 		374F65BF8A10D4071478164D /* RiveRuntime in Frameworks */ = {isa = PBXBuildFile; productRef = B9EB5CF9294E23998F6BCE27 /* RiveRuntime */; };
 		60435F130DABB711F96348C0 /* Supabase in Frameworks */ = {isa = PBXBuildFile; productRef = 30C881C1610D667FE7117C13 /* Supabase */; };
@@ -114,6 +115,7 @@
 		000000000000000000000128 /* GroupSavingManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GroupSavingManager.swift; sourceTree = "<group>"; };
 		000000000000000000000129 /* GroupSavingManagerTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GroupSavingManagerTests.swift; sourceTree = "<group>"; };
 		5341564500000000000000D3 /* GroupPlanJourneyTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GroupPlanJourneyTests.swift; sourceTree = "<group>"; };
+		9CA1E0000000000000000022 /* SavingTimelineSnapshotTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SavingTimelineSnapshotTests.swift; sourceTree = "<group>"; };
 		27631892C68B8BF7E1BFBCD2 /* SupabaseServiceTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = SupabaseServiceTests.swift; sourceTree = "<group>"; };
 		73F534FD87463117278104F2 /* Info.plist */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
 		B965CFFB5D820A94B7CAD1B8 /* SupabaseService.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = SupabaseService.swift; sourceTree = "<group>"; };
@@ -308,6 +310,7 @@
 				000000000000000000000126 /* SubscriptionManagerTests.swift */,
 				000000000000000000000129 /* GroupSavingManagerTests.swift */,
 				5341564500000000000000D3 /* GroupPlanJourneyTests.swift */,
+				9CA1E0000000000000000022 /* SavingTimelineSnapshotTests.swift */,
 				27631892C68B8BF7E1BFBCD2 /* SupabaseServiceTests.swift */,
 				A0E9701C8A63461E9AF00103 /* StoreKitManagerTests.swift */,
 			);
@@ -599,6 +602,7 @@
 				000000000000000000000018 /* SubscriptionManagerTests.swift in Sources */,
 				00000000000000000000001B /* GroupSavingManagerTests.swift in Sources */,
 				5341564500000000000000B3 /* GroupPlanJourneyTests.swift in Sources */,
+				9CA1E0000000000000000021 /* SavingTimelineSnapshotTests.swift in Sources */,
 				0BA9C96E17E50FEC4485564A /* SupabaseServiceTests.swift in Sources */,
 				A0E9701C8A63461E9AF00104 /* StoreKitManagerTests.swift in Sources */,
 			);
