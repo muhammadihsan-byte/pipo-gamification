@@ -34,7 +34,8 @@ jobs:
 
   account-data-validation:
     # Run only for the explicitly named commit; future pushes will not repeat this test.
-    if: github.event_name == 'push' && github.ref == 'refs/heads/feat/pipo-primary-button-colors' && github.event.head_commit.message == 'ci: one-time Pipo account ownership validation'
+    if: >-
+      github.event_name == 'push' && github.ref == 'refs/heads/feat/pipo-primary-button-colors' && github.event.head_commit.message == 'ci: one-time Pipo account ownership validation'
     runs-on: macos-15-intel
     timeout-minutes: 30
     steps:
