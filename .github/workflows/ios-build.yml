@@ -166,8 +166,7 @@ jobs:
           (github.event_name == 'push') ||
           (github.event_name == 'pull_request' &&
            github.head_ref != 'feat/pipo-ui-video-qa' &&
-           github.head_ref != 'feat/pipo-onboarding-v4-interactions' &&
-           github.head_ref != 'feat/pipo-first-home-experience')
+           github.head_ref != 'feat/pipo-onboarding-v4-interactions')
         shell: bash
         run: |
           set -euo pipefail
@@ -198,9 +197,7 @@ jobs:
       - name: Record V4 onboarding and both choice previews in one MP4
         if: >-
           (github.event_name == 'workflow_dispatch' && inputs.validation_mode == 'onboarding-qa') ||
-          (github.event_name == 'pull_request' &&
-           (github.head_ref == 'feat/pipo-onboarding-v4-interactions' ||
-            github.head_ref == 'feat/pipo-first-home-experience'))
+          (github.event_name == 'pull_request' && github.head_ref == 'feat/pipo-onboarding-v4-interactions')
         shell: bash
         run: |
           set -euo pipefail
