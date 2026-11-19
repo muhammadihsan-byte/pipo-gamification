@@ -5,7 +5,10 @@ import UserNotifications
 @MainActor
 struct OnboardingContainerView: View {
     @State private var viewModel = OnboardingViewModel()
-    @State private var mascotBounce = false
+    @State private var mascotReaction: OnboardingPipoReaction = .acknowledge
+    @State private var mascotReactionID = 0
+    @State private var mascotReply: String?
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @State private var hasAnimatedSplash = false
     @State private var notificationError: String?
     @State private var isShowingWidgetInstructions = false
@@ -18,7 +21,8 @@ struct OnboardingContainerView: View {
             if viewModel.step.showsProgress {
                 OnboardingHeaderView(
                     progress: viewModel.step.progress,
-                    mascotBounce: mascotBounce
+                    reaction: mascotReaction,
+                    reactionID: mascotReactionID
                 )
                     .padding(.bottom, 14)
             }
@@ -26,8 +30,17 @@ struct OnboardingContainerView: View {
             ScrollView {
                 VStack(spacing: 20) {
                     if viewModel.step.showsProgress {
-                        SpeechBubbleView(text: viewModel.question)
-                            .padding(.horizontal, 24)
+                        VStack(alignment: .leading, spacing: 7) {
+                            SpeechBubbleView(text: viewModel.question)
+                            if let mascotReply {
+                                Text(mascotReply)
+                                    .font(.footnote.weight(.medium))
+                                    .foregroundStyle(PipoTheme.green)
+                                    .transition(.opacity)
+                                    .accessibilityLabel("Pipo says: \(mascotReply)")
+                            }
+                        }
+                        .padding(.horizontal, 24)
                     }
                     stepContent
                         .padding(.horizontal, 24)
@@ -51,6 +64,13 @@ struct OnboardingContainerView: View {
         }
         .preferredColorScheme(.light)
         .animation(.spring(response: 0.42, dampingFraction: 0.86), value: viewModel.step)
+        .onChange(of: viewModel.step) { _, step in
+            mascotReply = nil
+            mascotReaction = step == .reinforcement || step == .vision ? .celebrate : .acknowledge
+            if step == .reinforcement || step == .vision {
+                mascotReactionID += 1
+            }
+        }
         .task(id: viewModel.step) {
             guard viewModel.step == .splash || viewModel.step == .loading else { return }
             let delay: UInt64 = viewModel.step == .splash ? 1_500_000_000 : 1_800_000_000
@@ -121,36 +141,30 @@ struct OnboardingContainerView: View {
     private var splashContent: some View {
         VStack(spacing: 18) {
             Spacer(minLength: 18)
-            PipoMascotView(state: .celebrating)
+            OnboardingPipoView(height: 210, reaction: mascotReaction, reactionID: mascotReactionID)
                 .frame(width: 210, height: 210)
-                .scaleEffect(hasAnimatedSplash ? 1 : 0.72)
-                .animation(.spring(response: 0.72, dampingFraction: 0.48), value: hasAnimatedSplash)
+                .scaleEffect(reduceMotion || hasAnimatedSplash ? 1 : 0.72)
+                .animation(reduceMotion ? nil : .spring(response: 0.72, dampingFraction: 0.48), value: hasAnimatedSplash)
             Text("Pipo")
                 .font(.system(size: 32, weight: .bold, design: .rounded))
                 .foregroundStyle(PipoTheme.ink)
-                .opacity(hasAnimatedSplash ? 1 : 0)
-                .offset(y: hasAnimatedSplash ? 0 : 10)
-                .animation(.easeOut(duration: 0.7).delay(0.25), value: hasAnimatedSplash)
+                .opacity(reduceMotion || hasAnimatedSplash ? 1 : 0)
+                .offset(y: reduceMotion || hasAnimatedSplash ? 0 : 10)
+                .animation(reduceMotion ? nil : .easeOut(duration: 0.7).delay(0.25), value: hasAnimatedSplash)
             Text("A little saving, a lot of possibility.")
                 .font(.subheadline)
                 .foregroundStyle(PipoTheme.muted)
             Spacer(minLength: 18)
         }
         .frame(maxWidth: .infinity, minHeight: 390)
-        .contentShape(Rectangle())
-        .onTapGesture {
-            guard viewModel.step == .splash else { return }
-            withAnimation(.spring()) { advance() }
-        }
     }
 
     private var welcomeContent: some View {
         VStack(spacing: 18) {
-            PipoMascotView(state: .idle)
-                .frame(height: 245)
-                .frame(maxWidth: .infinity)
-                .scaleEffect(mascotBounce ? 1.03 : 1)
-                .animation(.spring(response: 0.35, dampingFraction: 0.48), value: mascotBounce)
+            OnboardingPipoView(height: 245, reaction: mascotReaction, reactionID: mascotReactionID)
+            Text("Tap Pipo to say hi")
+                .font(.caption)
+                .foregroundStyle(PipoTheme.muted)
             Text("Save together.\nReach your goals.")
                 .font(.system(size: 32, weight: .bold, design: .rounded))
                 .multilineTextAlignment(.center)
@@ -160,21 +174,14 @@ struct OnboardingContainerView: View {
 
     private var mascotIntroContent: some View {
         VStack(spacing: 18) {
-            mascotIllustration(state: .happy, height: 250)
-                .overlay(alignment: .topTrailing) {
-                    Text("👋")
-                        .font(.system(size: 42))
-                        .offset(x: -34, y: 28)
-                        .accessibilityHidden(true)
-                }
+            mascotIllustration(height: 250)
             SpeechBubbleView(text: "Hi there! I'm Pipo!")
         }
     }
 
     private var expectationsContent: some View {
         VStack(spacing: 18) {
-            mascotIllustration(state: .idle, height: 230)
-                .rotationEffect(.degrees(-4))
+            mascotIllustration(height: 230)
             SpeechBubbleView(text: "Just 4 quick questions before we build your first saving plan!")
         }
     }
@@ -219,15 +226,7 @@ struct OnboardingContainerView: View {
 
     private var loadingContent: some View {
         VStack(spacing: 18) {
-            mascotIllustration(state: .celebrating, height: 220)
-                .overlay(alignment: .bottomTrailing) {
-                    Text("🐷")
-                        .font(.system(size: 54))
-                        .padding(10)
-                        .background(.white, in: Circle())
-                        .overlay { Circle().strokeBorder(PipoTheme.palePink, lineWidth: 2) }
-                        .offset(x: -16, y: -5)
-                }
+            mascotIllustration(height: 220)
             Text(viewModel.loadingTitle)
                 .font(.headline.weight(.heavy))
                 .tracking(1)
@@ -311,7 +310,7 @@ struct OnboardingContainerView: View {
 
     private var reinforcementContent: some View {
         VStack(spacing: 18) {
-            mascotIllustration(state: .celebrating, height: 265)
+            mascotIllustration(height: 265)
                 .overlay(alignment: .topTrailing) {
                     Text("✨")
                         .font(.system(size: 36))
@@ -327,13 +326,7 @@ struct OnboardingContainerView: View {
 
     private var notificationContent: some View {
         VStack(spacing: 20) {
-            mascotIllustration(state: .happy, height: 200)
-                .overlay(alignment: .topTrailing) {
-                    Text("👍")
-                        .font(.system(size: 38))
-                        .offset(x: -30, y: 28)
-                        .accessibilityHidden(true)
-                }
+            mascotIllustration(height: 200)
             VStack(alignment: .leading, spacing: 12) {
                 Label("Pipo", systemImage: "app.fill")
                     .font(.caption.weight(.bold))
@@ -409,7 +402,7 @@ struct OnboardingContainerView: View {
                 RoundedRectangle(cornerRadius: 18)
                     .fill(PipoTheme.mint)
                     .frame(width: 90, height: 104)
-                PipoMascotView(state: .happy)
+                PipoMascotView(companion: .reassurance)
                     .frame(width: 90, height: 92)
                     .offset(x: 3, y: 6)
             }
@@ -445,13 +438,7 @@ struct OnboardingContainerView: View {
 
     private var visionContent: some View {
         VStack(spacing: 12) {
-            mascotIllustration(state: .celebrating, height: 205)
-                .overlay(alignment: .topTrailing) {
-                    Text("🏅")
-                        .font(.system(size: 44))
-                        .offset(x: -34, y: 26)
-                        .accessibilityHidden(true)
-                }
+            mascotIllustration(height: 205)
             visionRow(symbol: "🔥", title: "Build an unbreakable streak", subtitle: "Daily or weekly check-ins")
             visionRow(symbol: "💰", title: "Hit your first milestone", subtitle: "Smart automated breakdowns")
             visionRow(symbol: "🏆", title: "Unlock Pipo badges & rewards", subtitle: "Celebrate every deposit")
@@ -552,12 +539,8 @@ struct OnboardingContainerView: View {
         .opacity(isDisabled ? 0.5 : 1)
     }
 
-    private func mascotIllustration(state: PipoMascotState, height: CGFloat) -> some View {
-        PipoMascotView(state: state)
-            .frame(height: height)
-            .frame(maxWidth: .infinity)
-            .offset(y: mascotBounce ? -5 : 0)
-            .animation(.spring(response: 0.35, dampingFraction: 0.48), value: mascotBounce)
+    private func mascotIllustration(height: CGFloat) -> some View {
+        OnboardingPipoView(height: height, reaction: mascotReaction, reactionID: mascotReactionID)
     }
 
     private func rhythmCard(
@@ -609,9 +592,34 @@ struct OnboardingContainerView: View {
 
     private func optionTapped(_ selection: () -> Void) {
         UIImpactFeedbackGenerator(style: .light).impactOccurred()
-        withAnimation(.spring(response: 0.35, dampingFraction: 0.48)) {
-            mascotBounce.toggle()
+        withAnimation(.spring(response: 0.35, dampingFraction: 0.78)) {
             selection()
+            switch viewModel.step {
+            case .goal:
+                mascotReaction = .acknowledge
+                mascotReply = "That sounds worth saving for."
+            case .savingMode:
+                mascotReaction = .acknowledge
+                mascotReply = viewModel.savingMode == .group
+                    ? "Saving together? I'm in."
+                    : "Your goal, your pace."
+            case .habit:
+                mascotReaction = .reassure
+                mascotReply = "Every starting point counts."
+            case .motivation:
+                mascotReaction = .reassure
+                mascotReply = "I'm listening."
+            case .rhythm:
+                mascotReaction = .celebrate
+                mascotReply = "We'll find your rhythm."
+            case .plan:
+                mascotReaction = .acknowledge
+                mascotReply = "Your choice."
+            default:
+                mascotReaction = .acknowledge
+                mascotReply = nil
+            }
+            mascotReactionID += 1
         }
     }
 
