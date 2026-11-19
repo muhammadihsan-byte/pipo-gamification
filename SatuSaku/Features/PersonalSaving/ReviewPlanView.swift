@@ -4,9 +4,9 @@ import SwiftUI
 @MainActor
 struct ReviewPlanView: View {
     let plan: PersonalGoalPlan
-    let onBack: () -> Void
     let onCreated: () -> Void
 
+    @Environment(\.dismiss) private var dismiss
     @Environment(\.modelContext) private var modelContext
     @Environment(SubscriptionManager.self) private var subscriptionManager
     @Environment(AuthStateManager.self) private var authStateManager
@@ -14,6 +14,7 @@ struct ReviewPlanView: View {
     @Query private var profiles: [UserProfile]
 
     @State private var isPaywallPresented = false
+    @State private var isCreatingGoal = false
     @State private var errorMessage: String?
 
     var body: some View {
@@ -48,6 +49,7 @@ struct ReviewPlanView: View {
 
             Section {
                 Button("Confirm and create goal", action: confirmCreation)
+                    .disabled(isCreatingGoal)
                     .frame(maxWidth: .infinity, alignment: .center)
             }
         }
@@ -55,7 +57,7 @@ struct ReviewPlanView: View {
         .navigationBarTitleDisplayMode(.inline)
         .toolbar {
             ToolbarItem(placement: .cancellationAction) {
-                Button("Edit", action: onBack)
+                Button("Edit") { dismiss() }
             }
         }
         .onAppear(perform: syncEntitlements)
@@ -104,6 +106,7 @@ struct ReviewPlanView: View {
     }
 
     private func confirmCreation() {
+        guard !isCreatingGoal else { return }
         guard subscriptionManager.canCreateGoal(
             isGroup: false,
             activeCount: activePersonalGoalCount
@@ -112,6 +115,8 @@ struct ReviewPlanView: View {
             return
         }
 
+        isCreatingGoal = true
+        defer { isCreatingGoal = false }
         let existingProfile = currentProfile
         let profile = existingProfile ?? UserProfile(userID: authStateManager.userID)
         let previousCount = profile.activePersonalGoalsCount
