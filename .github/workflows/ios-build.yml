@@ -5,7 +5,9 @@ on:
     branches:
       - main
     types:
+      - opened
       - ready_for_review
+      - reopened
       - synchronize
   workflow_dispatch:
   push:
@@ -44,51 +46,100 @@ jobs:
           fi
           xcodebuild -version | tee xcode-version.txt
 
-      - name: Select an installed iOS simulator
+      - name: Detect canonical Xcode project
+        shell: bash
+        run: |
+          set -euo pipefail
+          if test -d Pipo.xcodeproj; then
+            XCODE_PROJECT="Pipo.xcodeproj"
+            XCODE_SCHEME="Pipo"
+          elif test -d SatuSaku.xcodeproj; then
+            XCODE_PROJECT="SatuSaku.xcodeproj"
+            XCODE_SCHEME="SatuSaku"
+          else
+            echo "Neither Pipo.xcodeproj nor SatuSaku.xcodeproj is available." >&2
+            exit 1
+          fi
+          {
+            echo "XCODE_PROJECT=$XCODE_PROJECT"
+            echo "XCODE_SCHEME=$XCODE_SCHEME"
+          } >> "$GITHUB_ENV"
+          echo "Using project $XCODE_PROJECT with scheme $XCODE_SCHEME"
+
+      - name: Select a compatible installed iOS simulator
         shell: bash
         run: |
           set -euo pipefail
           mkdir -p validation
-          xcrun simctl list runtimes | tee validation/runtimes.txt
-          AVAILABLE_RUNTIME="$(grep -E 'iOS .*com.apple.CoreSimulator.SimRuntime.iOS-' validation/runtimes.txt | grep -v unavailable | head -n1 || true)"
-          if test -z "$AVAILABLE_RUNTIME"; then
-            echo "No available iOS simulator runtime is installed; refusing to provision one." >&2
-            exit 1
-          fi
+          xcrun simctl list runtimes available -j > validation/runtimes.json
+          xcrun simctl list devices available -j > validation/devices.json
+          python3 - <<'PY'
+          import json
+          import os
+          import sys
 
-          xcrun simctl list devices available | tee validation/devices.txt
-          DEVICE_LINE=""
-          for preferred in "iPhone 15" "iPhone 16" "iPhone 14" "iPhone 13"; do
-            DEVICE_LINE="$(grep -m1 "${preferred} (" validation/devices.txt || true)"
-            test -n "$DEVICE_LINE" && break
-          done
-          if test -z "$DEVICE_LINE"; then
-            DEVICE_LINE="$(grep -m1 -E 'iPhone [^()]+' validation/devices.txt || true)"
-          fi
-          if test -z "$DEVICE_LINE"; then
-            echo "No available iPhone simulator was found; refusing to create or install one." >&2
-            exit 1
-          fi
+          with open("validation/runtimes.json") as file:
+              runtimes = json.load(file).get("runtimes", [])
+          with open("validation/devices.json") as file:
+              devices_by_runtime = json.load(file).get("devices", {})
 
-          SIMULATOR_NAME="$(printf '%s\n' "$DEVICE_LINE" | sed -E 's/[[:space:]]+\([0-9A-Fa-f-]{36}\).*$//' | sed -E 's/^[[:space:]-]+//')"
-          SIMULATOR_UDID="$(printf '%s\n' "$DEVICE_LINE" | sed -nE 's/.*\(([0-9A-Fa-f-]{36})\).*/\1/p')"
-          if test -z "$SIMULATOR_NAME" || test -z "$SIMULATOR_UDID"; then
-            echo "Unable to parse the selected simulator: $DEVICE_LINE" >&2
-            exit 1
-          fi
-          {
-            echo "SIMULATOR_NAME=$SIMULATOR_NAME"
-            echo "SIMULATOR_UDID=$SIMULATOR_UDID"
-          } >> "$GITHUB_ENV"
-          echo "Using existing simulator: $SIMULATOR_NAME ($SIMULATOR_UDID)"
+          available_runtimes = {
+              runtime["identifier"]
+              for runtime in runtimes
+              if (
+                  runtime.get("isAvailable")
+                  and runtime.get("name", "").startswith("iOS ")
+                  and ".iOS-" in runtime.get("identifier", "")
+              )
+          }
+          if not available_runtimes:
+              raise SystemExit(
+                  "No available iOS simulator runtime is installed; "
+                  "refusing to provision one."
+              )
+
+          preferred_names = ("iPhone 15", "iPhone 16", "iPhone 14", "iPhone 13")
+          candidates = []
+          for runtime_id, devices in devices_by_runtime.items():
+              if runtime_id not in available_runtimes:
+                  continue
+              for device in devices:
+                  if (
+                      device.get("isAvailable")
+                      and not device.get("availabilityError")
+                      and device.get("name", "").startswith("iPhone")
+                  ):
+                      preference = next(
+                          (
+                              index
+                              for index, name in enumerate(preferred_names)
+                              if device["name"] == name
+                          ),
+                          len(preferred_names),
+                      )
+                      candidates.append((preference, device["name"], runtime_id, device["udid"]))
+
+          if not candidates:
+              raise SystemExit(
+                  "No available iPhone simulator matches an installed iOS runtime; "
+                  "refusing to create or install one."
+              )
+
+          _, name, runtime_id, udid = sorted(candidates)[0]
+          with open(os.environ["GITHUB_ENV"], "a") as env:
+              env.write(f"SIMULATOR_NAME={name}\n")
+              env.write(f"SIMULATOR_RUNTIME_ID={runtime_id}\n")
+              env.write(f"SIMULATOR_UDID={udid}\n")
+          print(f"Using existing simulator: {name} ({udid}) on {runtime_id}")
+          PY
 
       - name: Build and test for iOS Simulator
         shell: bash
         run: |
           set -euo pipefail
           xcodebuild \
-            -project SatuSaku.xcodeproj \
-            -scheme SatuSaku \
+            -project "$XCODE_PROJECT" \
+            -scheme "$XCODE_SCHEME" \
             -destination "id=$SIMULATOR_UDID" \
             -derivedDataPath "$RUNNER_TEMP/PipoDerivedData" \
             -resultBundlePath "$RUNNER_TEMP/PipoTestResults.xcresult" \
