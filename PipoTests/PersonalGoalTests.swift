@@ -686,3 +686,127 @@ extension PersonalGoalTests {
         )
     }
 }
+
+extension PersonalGoalTests {
+    @MainActor
+    func testIssue42OfflineJournalSurvivesReopenAndScopesByAccount() throws {
+        let directory = FileManager.default.temporaryDirectory
+            .appendingPathComponent("pipo-moneyout-qa-\(UUID().uuidString)")
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let owner = UUID(), another = UUID()
+        let request = try SavingMoneyOutRPCRequest(
+            requestID: UUID(), goalID: UUID(), amount: 80_000,
+            note: "Train", preference: "keep_date"
+        )
+        let writer = MoneyOutIntentJournal(directory: directory)
+        let staged = try writer.stage(request, ownerID: owner)
+        XCTAssertEqual(staged.state, .staged)
+        XCTAssertEqual(try writer.all(for: another).count, 0)
+
+        // Reconstruct from disk as after a process restart or loss of network.
+        let reopened = MoneyOutIntentJournal(directory: directory)
+        XCTAssertEqual(try reopened.all(for: owner).count, 1)
+        XCTAssertEqual(try reopened.all(for: owner).first?.request.requestID,
+                       request.requestID)
+        XCTAssertEqual(try reopened.stage(request, ownerID: owner).createdAt,
+                       staged.createdAt)
+        XCTAssertEqual(try reopened.all(for: owner).count, 1)
+
+        let conflict = try SavingMoneyOutRPCRequest(
+            requestID: request.requestID, goalID: request.goalID,
+            amount: 90_000, note: "Train", preference: "keep_date"
+        )
+        XCTAssertThrowsError(try reopened.stage(conflict, ownerID: owner)) {
+            XCTAssertEqual($0 as? MoneyOutJournalError, .idempotencyConflict)
+        }
+        XCTAssertEqual(try reopened.all(for: another).count, 0)
+    }
+
+    @MainActor
+    func testIssue42OfflineJournalRequiresVerifiedReceiptAndReadback() throws {
+        let directory = FileManager.default.temporaryDirectory
+            .appendingPathComponent("pipo-moneyout-qa-\(UUID().uuidString)")
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let owner = UUID()
+        let request = try SavingMoneyOutRPCRequest(
+            requestID: UUID(), goalID: UUID(), amount: 50_000,
+            note: "Taxi", preference: "keep_amount"
+        )
+        let journal = MoneyOutIntentJournal(directory: directory)
+        try journal.stage(request, ownerID: owner)
+        let receipt = SavingMoneyOutRPCReceipt(
+            id: request.requestID, goalID: request.goalID,
+            userID: owner, kind: "money_out", amount: 50_000,
+            preference: "keep_amount", note: "Taxi"
+        )
+        let invalidReceipt = SavingMoneyOutRPCReceipt(
+            id: request.requestID, goalID: request.goalID,
+            userID: UUID(), kind: "money_out", amount: 50_000,
+            preference: "keep_amount", note: "Taxi"
+        )
+        XCTAssertThrowsError(try journal.acknowledge(
+            requestID: request.requestID,
+            receipt: invalidReceipt, ownerID: owner
+        ))
+        XCTAssertEqual(try journal.all(for: owner).first?.state, .staged)
+        try journal.acknowledge(
+            requestID: request.requestID, receipt: receipt, ownerID: owner
+        )
+        XCTAssertEqual(try MoneyOutIntentJournal(directory: directory)
+            .all(for: owner).first?.state, .acknowledged)
+
+        let emptyCloud = SavingLedgerCloudSnapshotEnvelope(
+            goalID: request.goalID, userID: owner,
+            contributions: [], adjustments: []
+        )
+        XCTAssertThrowsError(try journal.finishVerifiedReadback(
+            requestID: request.requestID, cloud: emptyCloud, ownerID: owner
+        ))
+        XCTAssertEqual(try journal.all(for: owner).count, 1)
+        let snapshotCloud = SavingLedgerCloudSnapshotEnvelope(
+            goalID: request.goalID, userID: owner,
+            contributions: [SavingLedgerCloudContribution(
+                id: UUID(), goalID: request.goalID, userID: owner,
+                amount: 100_000, xpEarned: 300,
+                date: "2026-11-20T00:00:00Z"
+            )],
+            adjustments: [SavingLedgerCloudAdjustment(
+                id: request.requestID, goalID: request.goalID,
+                userID: owner, kind: "money_out", amount: 50_000,
+                correctsEventID: nil, createdAt: "2026-11-20T00:10:00.000Z"
+            )]
+        )
+        let snapshot = try journal.finishVerifiedReadback(
+            requestID: request.requestID, cloud: snapshotCloud,
+            ownerID: owner
+        )
+        XCTAssertEqual(snapshot.netRecorded, 50_000)
+        XCTAssertEqual(snapshot.earnedXP, 300)
+        XCTAssertTrue(try journal.all(for: owner).isEmpty)
+    }
+
+    @MainActor
+    func testIssue42OfflineJournalRejectsCorruptionInsteadOfLosingIntent() throws {
+        let directory = FileManager.default.temporaryDirectory
+            .appendingPathComponent("pipo-moneyout-qa-\(UUID().uuidString)")
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let owner = UUID()
+        try FileManager.default.createDirectory(
+            at: directory, withIntermediateDirectories: true
+        )
+        try Data("bad JSON".utf8).write(
+            to: directory.appendingPathComponent(
+                owner.uuidString.lowercased() + ".json"
+            )
+        )
+        let journal = MoneyOutIntentJournal(directory: directory)
+        XCTAssertThrowsError(try journal.all(for: owner)) {
+            XCTAssertEqual($0 as? MoneyOutJournalError, .invalidJournal)
+        }
+        let request = try SavingMoneyOutRPCRequest(
+            requestID: UUID(), goalID: UUID(), amount: 1000,
+            note: nil, preference: "keep_date"
+        )
+        XCTAssertThrowsError(try journal.stage(request, ownerID: owner))
+    }
+}
