@@ -52,6 +52,7 @@ struct PipoMascotView: View {
     @State private var inViewport = false
     @State private var appeared = false
     @State private var tapID = 0
+    @State private var didPresentJoy = false
     @State private var lastTap: ContinuousClock.Instant?
 
     private var canPlay: Bool {
@@ -79,6 +80,19 @@ struct PipoMascotView: View {
                     .disabled(!canPlay)
                     .accessibilityLabel("Greet Pipo")
                     .accessibilityIdentifier("pipo.greet")
+                } else if companion == .celebration {
+                    Image("PipoV4Joy")
+                        .resizable()
+                        .scaledToFit()
+                        .scaleEffect(reduceMotion ? 1 : (didPresentJoy ? 1 : 0.94))
+                        .onAppear {
+                            guard !reduceMotion else { return }
+                            didPresentJoy = false
+                            withAnimation(.spring(response: 0.5, dampingFraction: 0.75)) {
+                                didPresentJoy = true
+                            }
+                        }
+                        .accessibilityLabel("Pipo celebrating a recorded saving")
                 } else {
                     neutralStill.accessibilityLabel("Pipo")
                 }
