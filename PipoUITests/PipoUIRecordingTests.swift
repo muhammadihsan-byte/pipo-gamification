@@ -228,7 +228,13 @@ final class PipoUIRecordingTests: XCTestCase {
         attachOnboardingScreen("P0 - Recovery entry and no social provider")
         app.terminate()
 
-        launchFromDashboard()
+        // A dedicated Debug-only account fixture avoids depending on a
+        // previous test having completed onboarding. It also starts with
+        // *zero* goals in an in-memory store, without a real Auth session.
+        app.launchArguments = ["-pipo-account-qa"]
+        app.launch()
+        XCTAssertTrue(app.staticTexts["Your first saving goal"].waitForExistence(timeout: 25),
+                      "A new account without goals must reach the dashboard")
         tapButton("pipo.dashboard.tab.profile")
         XCTAssertTrue(app.staticTexts["Your space"].waitForExistence(timeout: 15))
         XCTAssertTrue(app.buttons["pipo.profile.signOut"].exists,
