@@ -31,16 +31,19 @@ struct PipoMascotView: View {
     private let state: PipoMascotState
     private let companion: CompanionState?
     private let isPresented: Bool
+    private let onTap: (() -> Void)?
 
     init(state: PipoMascotState) {
         self.state = state
         companion = nil
         isPresented = true
+        onTap = nil
     }
 
-    init(companion: CompanionState, isPresented: Bool = true) {
+    init(companion: CompanionState, isPresented: Bool = true, onTap: (() -> Void)? = nil) {
         self.companion = companion
         self.isPresented = isPresented
+        self.onTap = onTap
         state = .idle
     }
 
@@ -49,6 +52,7 @@ struct PipoMascotView: View {
     @State private var inViewport = false
     @State private var appeared = false
     @State private var tapID = 0
+    @State private var didPresentJoy = false
     @State private var lastTap: ContinuousClock.Instant?
 
     private var canPlay: Bool {
@@ -76,6 +80,19 @@ struct PipoMascotView: View {
                     .disabled(!canPlay)
                     .accessibilityLabel("Greet Pipo")
                     .accessibilityIdentifier("pipo.greet")
+                } else if companion == .celebration {
+                    Image("PipoV4Joy")
+                        .resizable()
+                        .scaledToFit()
+                        .scaleEffect(reduceMotion ? 1 : (didPresentJoy ? 1 : 0.94))
+                        .onAppear {
+                            guard !reduceMotion else { return }
+                            didPresentJoy = false
+                            withAnimation(.spring(response: 0.5, dampingFraction: 0.75)) {
+                                didPresentJoy = true
+                            }
+                        }
+                        .accessibilityLabel("Pipo celebrating a recorded saving")
                 } else {
                     neutralStill.accessibilityLabel("Pipo")
                 }
@@ -103,6 +120,7 @@ struct PipoMascotView: View {
         let now = ContinuousClock.now
         guard canPlay, lastTap.map({ $0.duration(to: now) >= .milliseconds(900) }) ?? true else { return }
         lastTap = now
+        onTap?()
         if reduceMotion {
             UIImpactFeedbackGenerator(style: .light).impactOccurred()
         } else {

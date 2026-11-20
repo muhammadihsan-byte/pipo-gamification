@@ -9,6 +9,7 @@ on:
       - opened
       - ready_for_review
       - reopened
+      - synchronize
   workflow_dispatch:
     inputs:
       validation_mode:
@@ -181,6 +182,36 @@ jobs:
             CODE_SIGNING_REQUIRED=NO \
             build test 2>&1 | tee validation/xcodebuild.log
 
+      - name: Dashboard B — one controlled native iOS visual QA recording
+        if: github.event_name == 'pull_request' && github.head_ref == 'feat/pipo-dashboard-b'
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p validation
+          # Reuse the existing installed simulator and compiled build products.
+          xcrun simctl boot "$SIMULATOR_UDID" || true
+          xcrun simctl bootstatus "$SIMULATOR_UDID" -b
+          xcrun simctl io "$SIMULATOR_UDID" recordVideo --codec=h264 \
+            validation/pipo-dashboard-b-qa.mp4 > validation/dashboard-recording.log 2>&1 &
+          VIDEO_PID=$!
+          sleep 2
+          set +e
+          xcodebuild \
+            -project "$XCODE_PROJECT" \
+            -scheme "$XCODE_SCHEME" \
+            -destination "id=$SIMULATOR_UDID" \
+            -derivedDataPath "$RUNNER_TEMP/PipoDerivedData" \
+            -resultBundlePath "$RUNNER_TEMP/PipoDashboardResults.xcresult" \
+            -only-testing:PipoUITests/PipoUIRecordingTests/testReturningDashboardB \
+            CODE_SIGNING_ALLOWED=NO \
+            CODE_SIGNING_REQUIRED=NO \
+            test 2>&1 | tee validation/dashboard-b-qa.log
+          TEST_RESULT=$?
+          set -e
+          kill -INT "$VIDEO_PID" 2>/dev/null || true
+          wait "$VIDEO_PID" 2>/dev/null || true
+          exit "$TEST_RESULT"
+
       - name: Record native Saving journeys
         if: >-
           (github.event_name == 'workflow_dispatch' && inputs.validation_mode == 'visual-qa') ||
@@ -208,12 +239,15 @@ jobs:
         if: always()
         shell: bash
         run: |
-          if test -d "$RUNNER_TEMP/PipoTestResults.xcresult"; then
-            mkdir -p validation/visual-qa
-            xcrun xcresulttool export attachments \
-              --path "$RUNNER_TEMP/PipoTestResults.xcresult" \
-              --output-path validation/visual-qa || echo "Attachment export unavailable; xcresult is retained."
-          fi
+          for bundle in "$RUNNER_TEMP/PipoTestResults.xcresult" "$RUNNER_TEMP/PipoDashboardResults.xcresult"; do
+            if test -d "$bundle"; then
+              name="$(basename "$bundle" .xcresult)"
+              mkdir -p "validation/visual-qa/$name"
+              xcrun xcresulttool export attachments \
+                --path "$bundle" \
+                --output-path "validation/visual-qa/$name" || echo "Attachment export unavailable for $name."
+            fi
+          done
 
       - name: Upload iOS validation results
         if: always()
@@ -224,5 +258,6 @@ jobs:
             validation/
             xcode-version.txt
             ${{ runner.temp }}/PipoTestResults.xcresult
+            ${{ runner.temp }}/PipoDashboardResults.xcresult
           if-no-files-found: warn
           retention-days: 7
