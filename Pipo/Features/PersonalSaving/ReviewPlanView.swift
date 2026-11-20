@@ -373,8 +373,9 @@ struct PersonalGoalDetailView: View {
                 PipoMoneyOutReviewSheet(
                     availableAmount: goal.currentAmount,
                     targetAmount: goal.targetAmount,
-                    currentPlannedAmount: goal.plannedContributionOverride
-                        ?? (goal.rhythm == .flexible ? nil : (Int(goal.targetAmount) > 0 ? max(1, Int(goal.targetAmount) / 20) : nil)),
+                    xpEarned: UserProfile.existing(
+                        for: authStateManager.userID, in: profiles
+                    )?.totalXP ?? 0,
                     onClose: { showingMoneyOutPreview = false }
                 )
             }
@@ -545,7 +546,7 @@ func scheduleDetails(_ schedule: PersonalSavingSchedule, override: Int? = nil) -
 private struct PipoMoneyOutReviewSheet: View {
     let availableAmount: Double
     let targetAmount: Double
-    let currentPlannedAmount: Int?
+    let xpEarned: Int
     let onClose: () -> Void
 
     @State private var amountText = ""
@@ -555,19 +556,6 @@ private struct PipoMoneyOutReviewSheet: View {
 
     private var validAmount: Double? {
         PipoMoneyOutPreview.amount(from: amountText, available: availableAmount)
-    }
-
-    private var preview: MoneyOutFinancialPreview? {
-        guard let validAmount,
-              let available = Int(exactly: availableAmount),
-              let target = Int(exactly: targetAmount),
-              let takenOut = Int(exactly: validAmount),
-              let perPeriod = currentPlannedAmount, perPeriod > 0
-        else { return nil }
-        return try? MoneyOutFinancialPreview.calculate(
-            netRecorded: available, target: target, moneyTakenOut: takenOut,
-            futurePeriods: 20, currentPerPeriod: perPeriod
-        )
     }
 
     var body: some View {
@@ -586,18 +574,15 @@ private struct PipoMoneyOutReviewSheet: View {
                         PipoFinancialImpactDCard(
                             before: availableAmount,
                             amountUsed: validAmount,
-                            xpEarnedSoFar: 0
+                            xpEarnedSoFar: xpEarned
                         )
-                        // 20 periods is a test fixture, not a real schedule.
-                        // Never show a fabricated future date or suggestion.
+                        // No future estimates without an actual revised schedule.
                         PipoSavingDecisionsDCard(
                             selection: $route,
                             suggestedAmount: nil,
                             laterDate: nil
                         )
-                        Text(preview == nil
-                             ? "A valid future schedule is required before these options can be estimated."
-                             : "This review is a preview only. Your recorded savings have not changed.")
+                        Text("A validated future schedule and server-side ledger are required before confirming either option.")
                             .font(.footnote)
                             .foregroundStyle(PipoTheme.muted)
                         Button("Saving changes isn't available yet") {}
