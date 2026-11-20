@@ -101,7 +101,7 @@ create or replace function public.correct_money_out(
 )
 returns public.saving_adjustments
 language plpgsql security definer set search_path = ''
-as $
+as $money_out_body$
 declare
     v_owner uuid;
     v_original public.saving_adjustments%rowtype;
@@ -175,7 +175,7 @@ begin
     returning * into v_event;
     return v_event;
 end;
-$;
+$money_out_body$;
 revoke all on function public.correct_money_out(uuid,uuid,numeric,text) from public,anon;
 grant execute on function public.correct_money_out(uuid,uuid,numeric,text) to authenticated;
 
