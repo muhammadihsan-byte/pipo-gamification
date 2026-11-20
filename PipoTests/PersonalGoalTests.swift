@@ -663,3 +663,26 @@ extension PersonalGoalTests {
         XCTAssertThrowsError(try altered.verify(request: request, ownerID: owner))
     }
 }
+
+extension PersonalGoalTests {
+    func testIssue42AtomicCloudSnapshotEnvelopeFailsClosedOnWrongIdentity() throws {
+        let goal = UUID(), owner = UUID(), other = UUID()
+        let payload = """
+        {"goal_id":"\(goal.uuidString)","user_id":"\(owner.uuidString)",
+         "contributions":[],"adjustments":[]}
+        """.data(using: .utf8)!
+        let envelope = try JSONDecoder().decode(
+            SavingLedgerCloudSnapshotEnvelope.self, from: payload
+        )
+        XCTAssertEqual(envelope.goalID, goal)
+        XCTAssertEqual(envelope.userID, owner)
+        XCTAssertNotEqual(envelope.userID, other)
+        XCTAssertEqual(
+            try SavingCloudLedgerReconciler.reconstruct(
+                goalID: goal, ownerID: owner,
+                contributions: envelope.contributions,
+                adjustments: envelope.adjustments
+            ).netRecorded, 0
+        )
+    }
+}
