@@ -188,7 +188,9 @@ struct DashboardView: View {
             updateWidgetSnapshot()
         }
         .sheet(isPresented: $isShowingSaveConfirmation, onDismiss: clearPendingSaving) {
-            if let goalToRecord, AccountScope.owns(goalToRecord, userID: authStateManager.userID) {
+            if let goalToRecord,
+               AccountScope.owns(goalToRecord, userID: authStateManager.userID),
+               goalToRecord.canRecordSaving {
                 saveConfirmation
                     .presentationDetents([.medium])
             } else {
@@ -1130,7 +1132,7 @@ struct DashboardView: View {
                     Button("Save") {
                         confirmSaving()
                     }
-                    .disabled(parsedSavingAmount == nil || goalToRecord == nil)
+                    .disabled(parsedSavingAmount == nil || goalToRecord?.canRecordSaving != true)
                 }
             }
         }
@@ -1367,7 +1369,7 @@ enum DashboardSchedule {
         asOf now: Date,
         calendar: Calendar = .current
     ) -> Date? {
-        guard goal.progress < 1, goal.rhythm != .flexible,
+        guard goal.canRecordSaving, goal.rhythm != .flexible,
               goal.targetAmount.isFinite,
               goal.targetAmount >= 1,
               goal.targetAmount < Double(Int.max),
