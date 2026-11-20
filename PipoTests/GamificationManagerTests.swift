@@ -108,6 +108,51 @@ final class GamificationManagerTests: XCTestCase {
         XCTAssertEqual(goal.currentAmount, 0)
     }
 
+
+    func testDashboardCadenceUsesFocusedGoalPeriodsNotGlobalStreak() {
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = TimeZone(secondsFromGMT: 0)!
+        let start = makeDate(day: 1)
+        let logs = [makeDate(day: 3), makeDate(day: 9), makeDate(day: 16)]
+        XCTAssertEqual(
+            DashboardActivity.consecutivePeriods(
+                dates: logs, rhythm: .weekly,
+                startDate: start, asOf: makeDate(day: 17), calendar: calendar
+            ), 3
+        )
+        XCTAssertEqual(
+            DashboardActivity.consecutivePeriods(
+                dates: logs, rhythm: .weekly,
+                startDate: start, asOf: makeDate(day: 30), calendar: calendar
+            ), 0
+        )
+    }
+
+    func testDashboardFlexibleGoalsNeverClaimAStreak() {
+        XCTAssertEqual(
+            DashboardActivity.consecutivePeriods(
+                dates: [makeDate(day: 2), makeDate(day: 4)],
+                rhythm: .flexible,
+                startDate: makeDate(day: 1),
+                asOf: makeDate(day: 5)
+            ), 0
+        )
+    }
+
+    func testDashboardPeriodCountsMultipleSavesInOnePeriodOnce() {
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = TimeZone(secondsFromGMT: 0)!
+        XCTAssertEqual(
+            DashboardActivity.consecutivePeriods(
+                dates: [makeDate(day: 2), makeDate(day: 2).addingTimeInterval(100), makeDate(day: 3)],
+                rhythm: .daily,
+                startDate: makeDate(day: 1),
+                asOf: makeDate(day: 4),
+                calendar: calendar
+            ), 2
+        )
+    }
+
     @MainActor
     private func makeGoal() -> PersonalGoal {
         PersonalGoal(
