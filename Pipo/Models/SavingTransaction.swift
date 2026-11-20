@@ -26,3 +26,87 @@ final class SavingTransaction {
         self.userID = userID
     }
 }
+
+
+// #42: immutable cloud-adjustment projection. No SwiftData schema mutation is
+// performed while the proposed server ledger is awaiting security review.
+enum SavingAdjustmentKind: String, Codable, Sendable {
+    case moneyOut = "money_out"
+    case correction
+}
+
+struct SavingAdjustmentEvent: Equatable, Sendable {
+    let id: UUID
+    let goalID: UUID
+    let userID: UUID
+    let kind: SavingAdjustmentKind
+    /// moneyOut is a positive subtraction; correction is a signed net delta.
+    let amount: Int
+    let correctsEventID: UUID?
+    let date: Date
+}
+
+enum SavingLedgerError: Error, Equatable {
+    case unownedRecord
+    case duplicateEvent
+    case malformedEvent
+    case invalidMoney
+    case overdrawn
+}
+
+struct SavingLedgerSnapshot: Equatable {
+    let netRecorded: Int
+    let earnedXP: Int
+
+    /// Replays owned contributions and adjustments; the original saving XP
+    /// never changes when money is used elsewhere or corrected later.
+    static func reconstruct(
+        goalID: UUID,
+        ownerID: UUID,
+        savings: [SavingTransaction],
+        adjustments: [SavingAdjustmentEvent]
+    ) throws -> SavingLedgerSnapshot {
+        guard savings.allSatisfy({ $0.goalId == goalID && $0.userID == ownerID }),
+              adjustments.allSatisfy({ $0.goalID == goalID && $0.userID == ownerID })
+        else { throw SavingLedgerError.unownedRecord }
+
+        var ids = Set<UUID>()
+        var saved = 0
+        var earnedXP = 0
+        for entry in savings {
+            guard ids.insert(entry.id).inserted else { throw SavingLedgerError.duplicateEvent }
+            guard let amount = Int(exactly: entry.amount), amount > 0, entry.xpEarned >= 0
+            else { throw SavingLedgerError.invalidMoney }
+            let (next, overflow) = saved.addingReportingOverflow(amount)
+            let (xp, xpOverflow) = earnedXP.addingReportingOverflow(entry.xpEarned)
+            guard !overflow, !xpOverflow else { throw SavingLedgerError.invalidMoney }
+            saved = next
+            earnedXP = xp
+        }
+
+        let originals = Set(adjustments.filter { $0.kind == .moneyOut }.map(\.id))
+        var delta = 0
+        for entry in adjustments {
+            guard ids.insert(entry.id).inserted else { throw SavingLedgerError.duplicateEvent }
+            switch entry.kind {
+            case .moneyOut:
+                guard entry.amount > 0, entry.correctsEventID == nil
+                else { throw SavingLedgerError.malformedEvent }
+                let (next, overflow) = delta.subtractingReportingOverflow(entry.amount)
+                guard !overflow else { throw SavingLedgerError.invalidMoney }
+                delta = next
+            case .correction:
+                guard entry.amount != 0, let original = entry.correctsEventID,
+                      originals.contains(original), original != entry.id
+                else { throw SavingLedgerError.malformedEvent }
+                let (next, overflow) = delta.addingReportingOverflow(entry.amount)
+                guard !overflow else { throw SavingLedgerError.invalidMoney }
+                delta = next
+            }
+        }
+        let (net, overflow) = saved.addingReportingOverflow(delta)
+        guard !overflow else { throw SavingLedgerError.invalidMoney }
+        guard net >= 0 else { throw SavingLedgerError.overdrawn }
+        return .init(netRecorded: net, earnedXP: earnedXP)
+    }
+}
