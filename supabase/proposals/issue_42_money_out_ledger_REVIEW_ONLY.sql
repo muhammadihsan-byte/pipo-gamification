@@ -92,6 +92,96 @@ $$;
 revoke all on function public.record_money_out(uuid,uuid,numeric,text,text) from public,anon;
 grant execute on function public.record_money_out(uuid,uuid,numeric,text,text) to authenticated;
 
--- Correction support intentionally requires a separate server-validated RPC.
--- Until that operation is implemented, clients MUST NOT write correction rows.
--- This migration grants no direct INSERT/UPDATE/DELETE rights.
+-- Corrections are append-only deltas, not replacement saving events.
+-- A corrected money-out of 300 after originally recording 500 adds +200
+-- to the net recorded balance. Original XP and contribution rows are untouched.
+create or replace function public.correct_money_out(
+    p_id uuid, p_original_id uuid, p_corrected_amount numeric, p_note text
+)
+returns public.saving_adjustments
+language plpgsql security definer set search_path = ''
+as $
+declare
+    v_owner uuid;
+    v_original public.saving_adjustments%rowtype;
+    v_prior public.saving_adjustments%rowtype;
+    v_locked public.saving_goals%rowtype;
+    v_previous_corrections numeric;
+    v_old_effective numeric;
+    v_delta numeric;
+    v_contributions numeric;
+    v_out numeric;
+    v_corrections numeric;
+    v_event public.saving_adjustments%rowtype;
+begin
+    v_owner := auth.uid();
+    if v_owner is null then
+        raise exception 'Authentication required' using errcode = '28000';
+    end if;
+    if p_id is null or p_original_id is null or p_corrected_amount is null
+       or p_corrected_amount <= 0 or p_corrected_amount > 9999999999999999
+       or p_corrected_amount <> trunc(p_corrected_amount, 2)
+       or char_length(coalesce(p_note,'')) > 240 then
+        raise exception 'Invalid correction' using errcode = '22023';
+    end if;
+    select * into v_original from public.saving_adjustments
+    where id = p_original_id and user_id = v_owner and kind='money_out';
+    if not found then
+        raise exception 'Original entry unavailable' using errcode = '42501';
+    end if;
+    select * into v_locked from public.saving_goals
+    where id = v_original.goal_id and user_id = v_owner for update;
+    if not found then
+        raise exception 'Goal unavailable' using errcode = '42501';
+    end if;
+
+    select * into v_prior from public.saving_adjustments where id = p_id;
+    if found then
+        if v_prior.user_id = v_owner
+           and v_prior.goal_id = v_original.goal_id
+           and v_prior.kind = 'correction'
+           and v_prior.corrects_event_id = p_original_id
+           and v_prior.note is not distinct from nullif(btrim(p_note),'')
+           and v_original.amount -
+               coalesce((select sum(amount) from public.saving_adjustments
+                         where corrects_event_id = p_original_id
+                           and id <> p_id),0) -
+               v_prior.amount = p_corrected_amount then
+            return v_prior;
+        end if;
+        raise exception 'Conflicting correction idempotency key' using errcode = '23505';
+    end if;
+
+    select coalesce(sum(amount),0) into v_previous_corrections
+       from public.saving_adjustments
+       where corrects_event_id = p_original_id and user_id = v_owner;
+    v_old_effective := v_original.amount - v_previous_corrections;
+    v_delta := v_old_effective - p_corrected_amount;
+    if v_delta = 0 then
+        raise exception 'No correction required' using errcode = '22023';
+    end if;
+    select coalesce(sum(amount),0) into v_contributions
+      from public.saving_transactions where goal_id = v_original.goal_id
+      and user_id = v_owner;
+    select coalesce(sum(amount) filter (where kind='money_out'),0),
+           coalesce(sum(amount) filter (where kind='correction'),0)
+      into v_out,v_corrections
+      from public.saving_adjustments
+      where goal_id = v_original.goal_id and user_id = v_owner;
+    if v_contributions - v_out + v_corrections + v_delta < 0 then
+        raise exception 'Correction exceeds available balance' using errcode = '22003';
+    end if;
+    insert into public.saving_adjustments
+       (id,goal_id,user_id,kind,amount,note,corrects_event_id)
+    values (p_id,v_original.goal_id,v_owner,'correction',v_delta,
+            nullif(btrim(p_note),''),p_original_id)
+    returning * into v_event;
+    return v_event;
+end;
+$;
+revoke all on function public.correct_money_out(uuid,uuid,numeric,text) from public,anon;
+grant execute on function public.correct_money_out(uuid,uuid,numeric,text) to authenticated;
+
+-- Still a design proposal. Client direct INSERT, UPDATE, DELETE remains revoked.
+-- Security reviewer must validate correction idempotency with intervening edits,
+-- account isolation, and migrations on a disposable test project before applying.
