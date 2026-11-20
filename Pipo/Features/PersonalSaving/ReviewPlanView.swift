@@ -1,5 +1,7 @@
 import SwiftData
 import SwiftUI
+import PhotosUI
+import UIKit
 
 @MainActor
 struct ReviewPlanView: View {
@@ -323,34 +325,76 @@ struct PersonalGoalDetailView: View {
         self.recordSaving = recordSaving
     }
 
-    var body: some View {
-        ScrollView {
-            VStack(alignment: .leading, spacing: 20) {
-                Button(action: onBack) {
-                    Label("Saving goals", systemImage: "chevron.left")
-                        .font(.subheadline.bold())
-                }
-                .foregroundStyle(PipoTheme.ink)
+    @State private var selectedPhoto: PhotosPickerItem?
+    @State private var photoError: String?
+    @State private var photoRevision = 0
+    @State private var removingPhoto = false
+    @State private var isLoadingPhoto = false
 
-                if let goal = goals.first,
-                   AccountScope.owns(goal, userID: authStateManager.userID) {
-                    details(for: goal)
+    private var ownedGoal: PersonalGoal? {
+        guard let goal = goals.first,
+              AccountScope.owns(goal, userID: authStateManager.userID)
+        else { return nil }
+        return goal
+    }
+
+    var body: some View {
+        GeometryReader { geometry in
+            ScrollView {
+                if let goal = ownedGoal {
+                    VStack(alignment: .leading, spacing: 0) {
+                        PipoGoalPhotoHero(
+                            photos: goal.goalPhoto.flatMap(UIImage.init(data:)).map { [$0] } ?? [],
+                            goalTitle: goal.title,
+                            heroHeight: min(280, max(190, geometry.size.height * 0.37)),
+                            selectedPhoto: $selectedPhoto,
+                            isProcessing: isLoadingPhoto,
+                            onBack: onBack
+                        )
+                        .accessibilityElement(children: .contain)
+                        .accessibilityIdentifier("pipo.goal.photoHero")
+
+                        details(for: goal)
+                            .padding(.horizontal, 20)
+                            .padding(.top, 16)
+                            .padding(.bottom, 28)
+                    }
+                    .frame(maxWidth: 620)
+                    .frame(maxWidth: .infinity)
                 } else {
-                    ContentUnavailableView("Goal unavailable", systemImage: "target")
+                    VStack(alignment: .leading, spacing: 16) {
+                        Button("Goals", systemImage: "chevron.left", action: onBack)
+                            .frame(minHeight: 44)
+                        ContentUnavailableView("Goal unavailable", systemImage: "target")
+                    }
+                    .padding(20)
                 }
             }
-            .padding(24)
-            .frame(maxWidth: 520)
-            .frame(maxWidth: .infinity)
+            .safeAreaInset(edge: .bottom, spacing: 0) {
+                if let goal = ownedGoal, goal.canRecordSaving {
+                    Button("Record a saving", action: recordSaving)
+                        .buttonStyle(PrimaryActionButtonStyle())
+                        .accessibilityIdentifier("pipo.goal.recordSaving")
+                        .padding(.horizontal, 24)
+                        .padding(.top, 12)
+                        .padding(.bottom, 8)
+                        .background(.white)
+                }
+            }
         }
         .background(.white)
         .foregroundStyle(PipoTheme.ink)
         .toolbar(.hidden, for: .navigationBar)
+        .onChange(of: selectedPhoto) { _, item in
+            photoRevision += 1
+            guard let item else { return }
+            let revision = photoRevision
+            Task { await saveSelectedPhoto(item, revision: revision) }
+        }
         .sheet(isPresented: $showingSavingJournal) {
             NavigationStack {
                 ScrollView {
-                    if let goal = goals.first,
-                       AccountScope.owns(goal, userID: authStateManager.userID) {
+                    if let goal = ownedGoal {
                         PipoActivityHistoryDCard(
                             transactions: ownedHistory(for: goal),
                             titleForGoal: { _ in goal.title }
@@ -374,27 +418,118 @@ struct PersonalGoalDetailView: View {
         } message: {
             Text(lifecycleError ?? "")
         }
+        .alert("Photo not saved", isPresented: Binding(
+            get: { photoError != nil },
+            set: { if !$0 { photoError = nil } }
+        )) {
+            Button("OK", role: .cancel) { photoError = nil }
+        } message: {
+            Text(photoError ?? "")
+        }
+        .confirmationDialog(
+            "Remove this goal photo?",
+            isPresented: $removingPhoto,
+            titleVisibility: .visible
+        ) {
+            Button("Remove photo", role: .destructive) { removePhoto() }
+            Button("Keep photo", role: .cancel) {}
+        } message: {
+            Text("This removes the photo stored on this device. It won't change your savings.")
+        }
+    }
+
+    @MainActor
+    private func saveSelectedPhoto(_ selection: PhotosPickerItem, revision: Int) async {
+        guard let original = ownedGoal,
+              let owner = authStateManager.userID
+        else { return }
+        let goalID = original.id
+        isLoadingPhoto = true
+        defer { isLoadingPhoto = false }
+        do {
+            guard let bytes = try await selection.loadTransferable(type: Data.self)
+            else { throw PipoGoalPhotoProcessingError.unreadable }
+            let sanitized = try PipoGoalPhotoProcessing.prepare(bytes)
+            guard revision == photoRevision,
+                  authStateManager.userID == owner,
+                  let goal = ownedGoal,
+                  goal.id == goalID
+            else { return }
+            let prior = goal.goalPhoto
+            goal.goalPhoto = sanitized
+            do {
+                try modelContext.save()
+            } catch {
+                goal.goalPhoto = prior
+                throw error
+            }
+        } catch {
+            guard revision == photoRevision,
+                  authStateManager.userID == owner else { return }
+            photoError = "This photo couldn't be saved. Choose a JPG, PNG, or HEIC photo under 12 MB."
+        }
+        if revision == photoRevision { selectedPhoto = nil }
+    }
+
+    private func removePhoto() {
+        guard let goal = ownedGoal else { return }
+        let previous = goal.goalPhoto
+        goal.goalPhoto = nil
+        do {
+            try modelContext.save()
+        } catch {
+            goal.goalPhoto = previous
+            photoError = "Your previous photo is still here. Please try again."
+        }
     }
 
     private func details(for goal: PersonalGoal) -> some View {
         VStack(alignment: .leading, spacing: 18) {
-            PipoGoalFocusBCard(goal: goal)
-
-            // Only the Focus B card contains a savings progress rail.
-            // The summary below is tabular and must not duplicate that rail.
-            TicketCard {
-                VStack(alignment: .leading, spacing: 12) {
-                    LabeledContent("Status", value: goal.lifecycleState.title)
-                    LabeledContent("Saved", value: money(goal.currentAmount))
-                    LabeledContent("Target", value: money(goal.targetAmount))
-                    LabeledContent("Target date", value: dateLabel(goal.targetDate))
-                    if let override = goal.plannedContributionOverride {
-                        LabeledContent("Planned contribution", value: money(override) + goal.rhythm.unitLabel)
-                    }
-                    LabeledContent("Saving rhythm", value: PersonalPlanFormatting.rhythmLabel(goal.rhythm, day: goal.preferredSavingDay))
+            VStack(alignment: .leading, spacing: 12) {
+                HStack(alignment: .firstTextBaseline, spacing: 10) {
+                    Text(goal.title)
+                        .font(.title2.bold())
+                        .fixedSize(horizontal: false, vertical: true)
+                        .accessibilityAddTraits(.isHeader)
+                    Spacer(minLength: 4)
+                    Text("\(Int(goal.progress * 100))% logged")
+                        .font(.caption.weight(.semibold))
+                        .foregroundStyle(PipoTheme.deepPink)
+                        .lineLimit(1)
                 }
-                .font(.subheadline)
+                HStack(alignment: .firstTextBaseline, spacing: 12) {
+                    VStack(alignment: .leading, spacing: 3) {
+                        Text("Manually recorded")
+                            .font(.caption)
+                            .foregroundStyle(PipoTheme.muted)
+                        Text(money(goal.currentAmount))
+                            .font(.headline.weight(.bold))
+                            .lineLimit(1)
+                            .minimumScaleFactor(0.65)
+                            .monospacedDigit()
+                    }
+                    Spacer(minLength: 4)
+                    VStack(alignment: .trailing, spacing: 3) {
+                        Text("Target")
+                            .font(.caption)
+                            .foregroundStyle(PipoTheme.muted)
+                        Text(money(goal.targetAmount))
+                            .font(.subheadline.weight(.semibold))
+                            .lineLimit(1)
+                            .minimumScaleFactor(0.65)
+                            .monospacedDigit()
+                    }
+                }
+                ProgressView(value: goal.progress)
+                    .tint(PipoTheme.pink)
+                    .accessibilityLabel("Manually recorded saving progress")
+                    .accessibilityValue("\(Int(goal.progress * 100)) percent")
+                    .accessibilityIdentifier("pipo.goal.progress")
+                Text("Pipo doesn't hold or move your money.")
+                    .font(.caption)
+                    .foregroundStyle(PipoTheme.muted)
             }
+            .accessibilityIdentifier("pipo.goal.summary")
 
             PipoGoalProgressBCard(
                 quarterWayEarned: UserProfile.existing(
@@ -406,7 +541,29 @@ struct PersonalGoalDetailView: View {
                 }
             )
 
-            PipoInspirationCCard(goal: goal)
+            if goal.goalPhoto != nil {
+                Button("Remove goal photo") { removingPhoto = true }
+                    .font(.subheadline.weight(.medium))
+                    .foregroundStyle(PipoTheme.muted)
+                    .frame(minHeight: 44, alignment: .leading)
+                    .accessibilityIdentifier("pipo.goal.removePhoto")
+            }
+
+            VStack(alignment: .leading, spacing: 9) {
+                LabeledContent("Status", value: goal.lifecycleState.title)
+                LabeledContent("Target date", value: dateLabel(goal.targetDate))
+                if let override = goal.plannedContributionOverride {
+                    LabeledContent("Planned contribution", value: money(override) + goal.rhythm.unitLabel)
+                }
+                LabeledContent(
+                    "Saving rhythm",
+                    value: PersonalPlanFormatting.rhythmLabel(
+                        goal.rhythm, day: goal.preferredSavingDay
+                    )
+                )
+            }
+            .font(.subheadline)
+            .padding(.vertical, 4)
 
             if !goal.subItems.isEmpty {
                 PipoBudgetBreakdownCard(
@@ -427,10 +584,22 @@ struct PersonalGoalDetailView: View {
                 }
             }
 
+            HStack(alignment: .bottom, spacing: 12) {
+                Text("Pipo's here, cheering for every little save.")
+                    .font(.subheadline.weight(.medium))
+                    .foregroundStyle(PipoTheme.ink)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                PipoV4HeadCrop()
+                    .accessibilityHidden(true)
+            }
+            .padding(.horizontal, 14)
+            .padding(.vertical, 10)
+            .background(
+                Color(red: 1, green: 241.0 / 255, blue: 244.0 / 255),
+                in: RoundedRectangle(cornerRadius: 22)
+            )
+
             if goal.canRecordSaving {
-                Button("Record a saving", action: recordSaving)
-                    .buttonStyle(PrimaryActionButtonStyle())
-                    .accessibilityIdentifier("pipo.goal.recordSaving")
                 Button("Pause this goal") {
                     changeLifecycle(of: goal, to: .paused)
                 }
@@ -483,6 +652,178 @@ struct PersonalGoalDetailView: View {
         }
     }
 }
+
+
+/// Native hero uses only private goal-owned media. Never substitute the Figma
+/// Bali example image for user content. The gallery supports multiple distinct
+/// frames, but V1 persistence deliberately supplies zero or one.
+private struct PipoGoalPhotoHero: View {
+    let photos: [UIImage]
+    let goalTitle: String
+    let heroHeight: CGFloat
+    @Binding var selectedPhoto: PhotosPickerItem?
+    let isProcessing: Bool
+    let onBack: () -> Void
+    @State private var index = 0
+
+    var body: some View {
+        ZStack(alignment: .top) {
+            Group {
+                if photos.isEmpty {
+                    Rectangle()
+                        .fill(Color(red: 1, green: 241.0 / 255, blue: 244.0 / 255))
+                        .overlay {
+                            VStack(spacing: 9) {
+                                Image(systemName: "photo.on.rectangle.angled")
+                                    .font(.system(size: 30, weight: .medium))
+                                    .accessibilityHidden(true)
+                                Text("Make this goal yours")
+                                    .font(.headline)
+                                Text("Add a photo whenever you're ready")
+                                    .font(.caption)
+                            }
+                            .foregroundStyle(PipoTheme.ink)
+                        }
+                        .accessibilityLabel("No photo added for \(goalTitle)")
+                } else {
+                    TabView(selection: $index) {
+                        ForEach(photos.indices, id: \.self) { photoIndex in
+                            GeometryReader { geometry in
+                                Image(uiImage: photos[photoIndex])
+                                    .resizable()
+                                    .scaledToFill()
+                                    .frame(
+                                        width: geometry.size.width,
+                                        height: geometry.size.height
+                                    )
+                                    .clipped()
+                            }
+                            .tag(photoIndex)
+                            .accessibilityLabel(
+                                "Goal photo \(photoIndex + 1) of \(photos.count)"
+                            )
+                        }
+                    }
+                    .tabViewStyle(.page(indexDisplayMode: .never))
+                    .accessibilityIdentifier("pipo.goal.photoGallery")
+                }
+            }
+            .frame(height: heroHeight)
+            .clipped()
+
+            LinearGradient(
+                colors: [Color.black.opacity(0.55), .clear],
+                startPoint: .top,
+                endPoint: .bottom
+            )
+            .frame(height: 100)
+            .allowsHitTesting(false)
+
+            VStack {
+                HStack(spacing: 12) {
+                    Button(action: onBack) {
+                        Label("Goals", systemImage: "chevron.left")
+                            .font(.subheadline.bold())
+                            .padding(.horizontal, 12)
+                            .frame(minHeight: 44)
+                    }
+                    .accessibilityIdentifier("pipo.goal.heroBack")
+                    Spacer(minLength: 0)
+                    PhotosPicker(
+                        selection: $selectedPhoto,
+                        matching: .images,
+                        photoLibrary: .shared()
+                    ) {
+                        Label("Photos", systemImage: "photo")
+                            .font(.subheadline.bold())
+                            .padding(.horizontal, 12)
+                            .frame(minHeight: 44)
+                    }
+                    .accessibilityIdentifier("pipo.goal.photoPicker")
+                    .disabled(isProcessing)
+                }
+                .foregroundStyle(.white)
+                .buttonStyle(.plain)
+                .background {
+                    // Controls retain contrast on extremely bright imagery.
+                    Color.clear
+                }
+                .padding(.horizontal, 20)
+                .padding(.top, 9)
+
+                Spacer(minLength: 0)
+
+                if isProcessing {
+                    ProgressView("Saving photo")
+                        .tint(.white)
+                        .padding(12)
+                        .background(Color.black.opacity(0.65), in: Capsule())
+                        .padding(.bottom, 12)
+                } else if photos.count > 1 {
+                    Button {
+                        index = (index + 1) % photos.count
+                    } label: {
+                        Text("\(index + 1)/\(photos.count)")
+                            .font(.footnote.bold())
+                            .monospacedDigit()
+                            .frame(minWidth: 70, minHeight: 44)
+                    }
+                    .foregroundStyle(.white)
+                    .background(
+                        Color.black.opacity(0.64),
+                        in: Capsule()
+                    )
+                    .accessibilityLabel(
+                        "Photo \(index + 1) of \(photos.count). Show next photo"
+                    )
+                    .accessibilityIdentifier("pipo.goal.photoCounter")
+                    .padding(.bottom, 12)
+                }
+            }
+        }
+        .frame(height: heroHeight)
+        .clipped()
+        .onChange(of: photos.count) { _, count in
+            if count <= index { index = 0 }
+        }
+    }
+}
+
+/// PhotosPicker provides limited photo selection; the original source bytes
+/// and EXIF/location metadata are never persisted. File size and decoded
+/// dimensions are validated before drawing a new, clean, reduced-size JPEG.
+enum PipoGoalPhotoProcessingError: Error {
+    case unreadable
+    case tooLarge
+}
+
+@MainActor
+enum PipoGoalPhotoProcessing {
+    static func prepare(_ data: Data) throws -> Data {
+        guard !data.isEmpty, data.count <= 12 * 1024 * 1024,
+              let image = UIImage(data: data),
+              image.size.width.isFinite, image.size.height.isFinite,
+              image.size.width > 0, image.size.height > 0,
+              image.size.width * image.size.height <= 36_000_000
+        else { throw PipoGoalPhotoProcessingError.unreadable }
+        let scale = min(1, 1600 / max(image.size.width, image.size.height))
+        let newSize = CGSize(
+            width: max(1, floor(image.size.width * scale)),
+            height: max(1, floor(image.size.height * scale))
+        )
+        let format = UIGraphicsImageRendererFormat()
+        format.scale = 1
+        format.opaque = true
+        let output = UIGraphicsImageRenderer(size: newSize, format: format)
+            .jpegData(withCompressionQuality: 0.72) { _ in
+                image.draw(in: CGRect(origin: .zero, size: newSize))
+            }
+        guard !output.isEmpty, output.count <= 1_500_000
+        else { throw PipoGoalPhotoProcessingError.tooLarge }
+        return output
+    }
+}
+
 
 func money(_ amount: Int) -> String {
     PersonalPlanFormatting.rupiah(amount)

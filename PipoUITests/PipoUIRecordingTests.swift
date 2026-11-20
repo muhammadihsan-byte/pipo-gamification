@@ -277,6 +277,21 @@ final class PipoUIRecordingTests: XCTestCase {
                        "Draft-only cards must not expose real-money operations")
     }
 
+    /// #48: Figma's one-third-height photo hero remains navigable without
+    /// a sample image, and shows only one progress rail plus a sticky CTA.
+    func testIssue48GoalDetailHeroAndEmptyMediaSafety() {
+        continueAfterFailure = false
+        app.launchArguments = ["-pipo-dashboard-qa"]
+        app.launch()
+        tapButton("pipo.dashboard.focusGoal")
+        XCTAssertTrue(app.buttons["pipo.goal.heroBack"].waitForExistence(timeout: 15))
+        XCTAssertTrue(app.buttons["pipo.goal.photoPicker"].exists)
+        XCTAssertTrue(app.buttons["pipo.goal.recordSaving"].exists)
+        XCTAssertFalse(app.buttons["pipo.goal.photoCounter"].exists,
+                       "Pagination must not appear with zero photos")
+        attachOnboardingScreen("Issue 48 — Goal hero no-cover, one progress rail")
+    }
+
     /// Non-destructive P0 simulator acceptance: sign-in availability and
     /// account deletion confirmation. The fixture is DEBUG-only and has no
     /// backend Auth session. NEVER tap the destructive submit action.

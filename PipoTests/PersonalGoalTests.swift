@@ -1,4 +1,5 @@
 import Foundation
+import UIKit
 import SwiftData
 import XCTest
 @testable import Pipo
@@ -382,5 +383,71 @@ extension PersonalGoalTests {
         XCTAssertEqual(details.creatorID, owner)
         XCTAssertEqual(details.preparedMembers, ["Ari"])
         XCTAssertEqual(review.members.map(\.status), [.accepted])
+    }
+}
+
+extension PersonalGoalTests {
+    @MainActor
+    func testIssue48PhotoNormalizesWithoutChangingSavingRecords() throws {
+        let owner = UUID()
+        let goal = PersonalGoal(
+            title: "A real photo goal", category: .trip,
+            targetAmount: 1_000_000, currentAmount: 250_000,
+            targetDate: Date(timeIntervalSinceNow: 90 * 86_400),
+            ownerUserID: owner
+        )
+        // Fix the pixel density explicitly: the default renderer inherits
+        // the 3x simulator screen scale, producing a 960x1500 PNG instead.
+        let fixtureFormat = UIGraphicsImageRendererFormat()
+        fixtureFormat.scale = 1
+        let input = UIGraphicsImageRenderer(
+            size: CGSize(width: 320, height: 500),
+            format: fixtureFormat
+        ).pngData { ctx in
+            UIColor.systemTeal.setFill()
+            ctx.fill(CGRect(x: 0, y: 0, width: 320, height: 500))
+        }
+        let clean = try PipoGoalPhotoProcessing.prepare(input)
+        XCTAssertTrue(clean.starts(with: [0xFF, 0xD8]))
+        let outputImage = try XCTUnwrap(UIImage(data: clean))
+        XCTAssertEqual(outputImage.size.width, 320)
+        XCTAssertEqual(outputImage.size.height, 500)
+        goal.goalPhoto = clean
+        XCTAssertEqual(goal.currentAmount, 250_000)
+        XCTAssertEqual(goal.targetAmount, 1_000_000)
+        XCTAssertEqual(goal.progress, 0.25)
+        goal.goalPhoto = nil
+        XCTAssertNil(goal.goalPhoto)
+        XCTAssertEqual(goal.currentAmount, 250_000)
+    }
+
+
+    @MainActor
+    func testIssue48HighDensityImageIsCappedAt1600Pixels() throws {
+        let format = UIGraphicsImageRendererFormat()
+        format.scale = 3
+        let input = UIGraphicsImageRenderer(
+            size: CGSize(width: 500, height: 800), format: format
+        ).pngData { context in
+            UIColor.systemTeal.setFill()
+            context.fill(CGRect(x: 0, y: 0, width: 500, height: 800))
+        }
+        let resized = try PipoGoalPhotoProcessing.prepare(input)
+        let output = try XCTUnwrap(UIImage(data: resized))
+        XCTAssertEqual(output.size.width, 1_000)
+        XCTAssertEqual(output.size.height, 1_600)
+        XCTAssertLessThanOrEqual(resized.count, 1_500_000)
+        XCTAssertTrue(resized.starts(with: [0xFF, 0xD8]))
+    }
+
+    @MainActor
+    func testIssue48RejectsUnreadableAndOversizedPhotoData() {
+        XCTAssertThrowsError(try PipoGoalPhotoProcessing.prepare(Data()))
+        XCTAssertThrowsError(try PipoGoalPhotoProcessing.prepare(Data("not an image".utf8)))
+        XCTAssertThrowsError(
+            try PipoGoalPhotoProcessing.prepare(
+                Data(repeating: 0xFE, count: 12 * 1024 * 1024 + 1)
+            )
+        )
     }
 }
