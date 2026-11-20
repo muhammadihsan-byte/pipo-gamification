@@ -212,7 +212,7 @@ struct DashboardView: View {
                         .font(.largeTitle.bold())
                         .foregroundStyle(PipoTheme.ink)
                         .accessibilityAddTraits(.isHeader)
-                    Text(goals.isEmpty
+                    Text(ownedGoals.isEmpty
                         ? (onboardingPersonalization?.motivation?.homeGreeting ?? "Little by little, it adds up.")
                         : "Your plans, your pace.")
                         .font(.subheadline)
@@ -231,7 +231,7 @@ struct DashboardView: View {
                 .frame(width: 97, height: 105)
                 .accessibilityIdentifier("pipo.dashboard.mascot")
             }
-            if let mascotReply, !goals.isEmpty {
+            if let mascotReply, !ownedGoals.isEmpty {
                 HStack(spacing: 8) {
                     Text(mascotReply)
                         .font(.footnote.weight(.medium))

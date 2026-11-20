@@ -138,6 +138,9 @@ struct RootView: View {
         .onChange(of: authStateManager.authState) { _, authState in
             if authState == .unauthenticated {
                 navigationManager.resetAccountContext()
+                subscriptionManager.updateEntitlements(
+                    purchasedPersonalSlots: 0, purchasedGroupSlots: 0
+                )
                 clearWidgetSnapshot()
             } else {
                 navigationManager.resetAccountContext()
@@ -149,6 +152,11 @@ struct RootView: View {
             // Invalidate widget content and pending deposit/milestone routes
             // BEFORE exposing the new account's dashboard.
             navigationManager.resetAccountContext()
+            // Entitlements from account A must not remain usable by account B
+            // while B's StoreKit profile restoration is pending.
+            subscriptionManager.updateEntitlements(
+                purchasedPersonalSlots: 0, purchasedGroupSlots: 0
+            )
             updateWidgetAccount(userID)
             guard let userID else { return }
             let transactions = AccountScope.visibleTransactions(
