@@ -19,7 +19,7 @@ struct ConsistencyMilestoneView: View {
     var body: some View {
         VStack(spacing: 0) {
             VStack(spacing: 18) {
-                Text("Consistency looks good\non you!")
+                Text("That counts!\nNice work.")
                     .font(.system(size: 30, weight: .bold, design: .rounded))
                     .multilineTextAlignment(.center)
                     .foregroundStyle(PipoTheme.ink)
@@ -33,7 +33,7 @@ struct ConsistencyMilestoneView: View {
                 rewardSummary
                     .padding(.top, 4)
 
-                PipoMascotView(state: .celebrating)
+                PipoMascotView(companion: .celebration)
                     .frame(maxWidth: 340)
                     .frame(height: 300)
                     .padding(.horizontal, 8)
@@ -60,7 +60,7 @@ struct ConsistencyMilestoneView: View {
         VStack(spacing: 8) {
             Label("+\(xpEarned) XP", systemImage: "sparkles")
                 .foregroundStyle(PipoTheme.deepPink)
-            Label("\(streakDays)-day streak", systemImage: "flame.fill")
+            Label("Saving recorded", systemImage: "checkmark.seal.fill")
                 .foregroundStyle(PipoTheme.pink)
         }
         .font(.subheadline.weight(.bold))
@@ -68,7 +68,7 @@ struct ConsistencyMilestoneView: View {
         .padding(.vertical, 12)
         .background(PipoTheme.palePink, in: RoundedRectangle(cornerRadius: 16))
         .accessibilityElement(children: .combine)
-        .accessibilityLabel("\(xpEarned) XP earned. You are on a \(streakDays)-day streak.")
+        .accessibilityLabel("\(xpEarned) XP earned. Saving recorded.")
     }
 }
 
