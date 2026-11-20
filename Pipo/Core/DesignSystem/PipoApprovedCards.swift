@@ -636,3 +636,54 @@ struct PipoMoneyOutCardsQAShowcase: View {
     }
 }
 #endif
+
+
+#if DEBUG
+/// Read-only design/interaction fixture for a single remote iOS QA run.
+/// Simulates a completion solely inside this DEBUG preview; main app data,
+/// App Store build, account records and awards are never changed.
+struct PipoApprovedCardsGalleryQA: View {
+    let goal: PersonalGoal
+    let groupGoal: PersonalGoal?
+    let transactions: [SavingTransaction]
+    let earnedIDs: Set<String>
+    let onOpenCollection: () -> Void
+    let onCreateGoal: () -> Void
+    let onSeeJourney: () -> Void
+
+    private var completedExample: PersonalGoal {
+        PersonalGoal(
+            title: "Completed demo goal", category: .trip,
+            targetAmount: 1000, currentAmount: 1000,
+            targetDate: .now, ownerUserID: goal.ownerUserID
+        )
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 18) {
+            Text("APPROVED PIPO CARDS · QA ONLY")
+                .font(.headline)
+                .accessibilityAddTraits(.isHeader)
+
+            PipoGoalFocusBCard(goal: goal)
+            PipoGoalProgressBCard(
+                quarterWayEarned: earnedIDs.contains(PipoBadge.quarterWay.rawValue),
+                onOpenCollection: onOpenCollection
+            )
+            PipoMilestonesDCard(earnedIDs: earnedIDs, onOpenCollection: onOpenCollection)
+            PipoInspirationCCard(goal: goal)
+            PipoPlanOverviewBCard(goal: groupGoal ?? goal)
+
+            PipoMoneyOutCardsQAShowcase()
+
+            PipoActivityHistoryDCard(
+                transactions: transactions,
+                titleForGoal: { _ in goal.title }
+            )
+            PipoCompletionBCard(goal: completedExample, onSeeJourney: onSeeJourney)
+            PipoEmptyStateBCard(onCreate: onCreateGoal)
+        }
+        .accessibilityIdentifier("pipo.cards.allQa")
+    }
+}
+#endif
