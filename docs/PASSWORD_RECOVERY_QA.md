@@ -25,7 +25,11 @@ Keep the password-recovery email template's verified confirmation link. Verify r
 - [ ] Confirm new password works, old one fails; expired/reused links fail safely.
 - [ ] Test no-account email, wrong email, offline/invalid link and rate limits.
 - [ ] Test account A/B switching; widgets and SwiftData stay owner-scoped.
-- [ ] Confirm callback scheme registered in app target for iOS production signing.
+- [x] `pipo` callback scheme is present in the Xcode project `Info.plist` (static source verified).
+- [ ] Confirm the callback works in an Apple-signed build on a real device.
 - [ ] Confirm email templates do not redirect to a staging URL.
 
 CI passing proves Swift source builds and unit tests only. It does NOT prove email or live Supabase Auth settings work. Never claim password recovery fully accepted until these checks pass.
+
+
+**Automated but non-destructive regression:** PR #37 includes iOS simulator checks for the Forgot Password entry and account deletion confirmation, plus a live anonymous-denial probe. The real email inbox and production Auth redirect allowlist require separate dashboard/device evidence; see `docs/LIVE_AUTH_DEVICE_QA.md`.
