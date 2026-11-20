@@ -20,42 +20,45 @@ struct PaywallView: View {
             Text("One more goal slot")
                 .font(.system(size: 28, weight: .bold, design: .rounded))
                 .foregroundStyle(PipoTheme.ink)
-            Text("You’ve used your free \(isGroup ? "group" : "personal") goal slot. Add one permanent slot for $2, or cancel and keep your current plan.")
+            Text(StoreKitManager.purchasesEnabled
+                 ? "You’ve used your free \(isGroup ? "group" : "personal") goal slot. You can unlock another with an Apple-verified purchase."
+                 : "You’ve reached the free \(isGroup ? "group" : "personal") goal limit. Extra slots aren’t available yet. No payment will be taken; your existing goals are safe.")
                 .font(.body)
                 .multilineTextAlignment(.center)
                 .foregroundStyle(PipoTheme.muted)
                 .padding(.horizontal, 12)
 
-            Button {
-                purchaseGoalSlot()
-            } label: {
-                Label(purchaseButtonTitle, systemImage: "lock.open")
-                    .frame(maxWidth: .infinity)
-            }
-            .buttonStyle(PrimaryActionButtonStyle())
-            .disabled(
-                storeKitManager.isPurchasing
-                    || storeKitManager.isLoadingProduct
-                    || storeKitManager.hasPendingPurchase
-            )
+            if StoreKitManager.purchasesEnabled {
+                Button {
+                    purchaseGoalSlot()
+                } label: {
+                    Label(purchaseButtonTitle, systemImage: "lock.open")
+                        .frame(maxWidth: .infinity)
+                }
+                .buttonStyle(PrimaryActionButtonStyle())
+                .disabled(
+                    storeKitManager.isPurchasing
+                        || storeKitManager.isLoadingProduct
+                        || storeKitManager.hasPendingPurchase
+                )
 
-            if storeKitManager.isPurchasing || storeKitManager.isLoadingProduct {
-                ProgressView()
+                if storeKitManager.isPurchasing || storeKitManager.isLoadingProduct {
+                    ProgressView()
+                }
+                if let message = storeKitManager.purchaseStatusMessage {
+                    Text(message)
+                        .font(.footnote)
+                        .foregroundStyle(PipoTheme.muted)
+                        .multilineTextAlignment(.center)
+                } else if let message = storeKitManager.productError {
+                    Text(message)
+                        .font(.footnote)
+                        .foregroundStyle(PipoTheme.deepPink)
+                        .multilineTextAlignment(.center)
+                }
             }
 
-            if let message = storeKitManager.purchaseStatusMessage {
-                Text(message)
-                    .font(.footnote)
-                    .foregroundStyle(PipoTheme.muted)
-                    .multilineTextAlignment(.center)
-            } else if let message = storeKitManager.productError {
-                Text(message)
-                    .font(.footnote)
-                    .foregroundStyle(PipoTheme.deepPink)
-                    .multilineTextAlignment(.center)
-            }
-
-            Button("Cancel Plan") {
+            Button(StoreKitManager.purchasesEnabled ? "Cancel Plan" : "Back to my goals") {
                 dismiss()
             }
             .font(.subheadline.weight(.semibold))
@@ -66,7 +69,7 @@ struct PaywallView: View {
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .background(.white)
         .task {
-            if storeKitManager.slotProduct == nil {
+            if StoreKitManager.purchasesEnabled && storeKitManager.slotProduct == nil {
                 await storeKitManager.loadProduct()
             }
         }

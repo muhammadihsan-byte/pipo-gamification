@@ -9,6 +9,7 @@ enum StoreKitManagerError: LocalizedError {
     case unexpectedProduct(String)
     case missingPurchaseContext
     case transactionAccountMismatch
+    case purchasesAwaitingServerVerification
 
     var errorDescription: String? {
         switch self {
@@ -22,6 +23,8 @@ enum StoreKitManagerError: LocalizedError {
             "The pending purchase could not be matched to a goal type. Contact support before retrying."
         case .transactionAccountMismatch:
             "The purchase belongs to a different Pipo account."
+        case .purchasesAwaitingServerVerification:
+            "Additional goal slots are not available yet. No payment has been taken."
         }
     }
 }
@@ -30,6 +33,9 @@ enum StoreKitManagerError: LocalizedError {
 @Observable
 final class StoreKitManager {
     static let goalSlotProductID = "com.pipo.goalslot"
+    // Never charge for extra slots without trusted Apple verification and
+    // account-bound, reinstall-safe entitlement restoration.
+    static let purchasesEnabled = false
 
     private(set) var slotProduct: Product?
     private(set) var isLoadingProduct = false
@@ -37,7 +43,6 @@ final class StoreKitManager {
     private(set) var hasPendingPurchase = false
     private(set) var productError: String?
     private(set) var purchaseStatusMessage: String?
-    private(set) var lastSyncError: String?
     private(set) var lastCompletedTransactionID: UInt64?
 
     @ObservationIgnored private let supabaseService: SupabaseService?
@@ -61,7 +66,7 @@ final class StoreKitManager {
     }
 
     func loadProduct() async {
-        guard !isLoadingProduct else { return }
+        guard Self.purchasesEnabled, !isLoadingProduct else { return }
         isLoadingProduct = true
         defer { isLoadingProduct = false }
 
@@ -84,6 +89,9 @@ final class StoreKitManager {
         modelContext: ModelContext,
         subscriptionManager: SubscriptionManager
     ) async throws -> Bool {
+        guard Self.purchasesEnabled else {
+            throw StoreKitManagerError.purchasesAwaitingServerVerification
+        }
         guard !isPurchasing else { return false }
         guard !hasPendingPurchase else {
             purchaseStatusMessage = "Your previous purchase is still pending with Apple."
@@ -92,7 +100,6 @@ final class StoreKitManager {
 
         isPurchasing = true
         purchaseStatusMessage = nil
-        lastSyncError = nil
         defer { isPurchasing = false }
 
         setPendingPurchase(userID: userID, isGroup: isGroup)
@@ -152,6 +159,7 @@ final class StoreKitManager {
         onError: @escaping @MainActor (Error) -> Void
     ) {
         transactionUpdatesTask?.cancel()
+        guard Self.purchasesEnabled else { return }
         transactionUpdatesTask = Task { [weak self] in
             guard let self else { return }
             for await verification in Transaction.updates {
@@ -203,62 +211,47 @@ final class StoreKitManager {
     ) async throws {
         guard isCurrentAccount() else { return }
         let profiles = try modelContext.fetch(FetchDescriptor<UserProfile>())
-        var profile = UserProfile.existing(for: userID, in: profiles)
-        if let profile {
-            // Legacy unowned profiles are never assigned to the next login.
-            subscriptionManager.updateEntitlements(
-                purchasedPersonalSlots: profile.purchasedPersonalSlots,
-                purchasedGroupSlots: profile.purchasedGroupSlots
-            )
-        } else {
-            subscriptionManager.updateEntitlements(
-                purchasedPersonalSlots: 0,
-                purchasedGroupSlots: 0
-            )
-        }
+        let existing = UserProfile.existing(for: userID, in: profiles)
 
-        guard let supabaseService else { return }
-        let remoteProfile = try await supabaseService.fetchUserProfileSlots(userID: userID)
-        // The user may have signed out while the network request was in flight.
-        guard isCurrentAccount() else { return }
-        guard let remoteProfile else {
-            if let profile {
-                try await supabaseService.syncUserProfile(slotBalance(for: profile, userID: userID))
-            }
+        guard let supabaseService else {
+            // Offline QA fixtures only. Not authoritative cloud restoration.
+            subscriptionManager.updateEntitlements(
+                purchasedPersonalSlots: existing?.purchasedPersonalSlots ?? 0,
+                purchasedGroupSlots: existing?.purchasedGroupSlots ?? 0
+            )
             return
         }
 
-        var didCreateProfile = false
-        if profile == nil {
-            let newProfile = UserProfile(userID: userID)
-            modelContext.insert(newProfile)
-            profile = newProfile
-            didCreateProfile = true
-        }
-        guard let profile else { return }
+        // A modified client's local counts are NOT Apple purchase evidence.
+        // Never use max(local,remote) for server-authoritative balances.
+        subscriptionManager.updateEntitlements(
+            purchasedPersonalSlots: 0, purchasedGroupSlots: 0
+        )
+        let serverProfile = try await supabaseService.fetchUserProfileSlots(userID: userID)
+        guard isCurrentAccount() else { return }
 
-        let personalSlots = max(profile.purchasedPersonalSlots, remoteProfile.purchasedPersonalSlots)
-        let groupSlots = max(profile.purchasedGroupSlots, remoteProfile.purchasedGroupSlots)
-        let needsSave = didCreateProfile
-            || profile.userID != userID
-            || profile.purchasedPersonalSlots != personalSlots
-            || profile.purchasedGroupSlots != groupSlots
-        profile.userID = userID
-        profile.purchasedPersonalSlots = personalSlots
-        profile.purchasedGroupSlots = groupSlots
-        if needsSave {
+        let personal = serverProfile?.purchasedPersonalSlots ?? 0
+        let group = serverProfile?.purchasedGroupSlots ?? 0
+        if let existing {
+            let changed = existing.purchasedPersonalSlots != personal
+                || existing.purchasedGroupSlots != group
+            existing.purchasedPersonalSlots = personal
+            existing.purchasedGroupSlots = group
+            if changed { try modelContext.save() }
+        } else if serverProfile != nil {
+            let profile = UserProfile(
+                userID: userID,
+                purchasedPersonalSlots: personal,
+                purchasedGroupSlots: group
+            )
+            modelContext.insert(profile)
             try modelContext.save()
         }
-        subscriptionManager.updateEntitlements(
-            purchasedPersonalSlots: personalSlots,
-            purchasedGroupSlots: groupSlots
-        )
-
         guard isCurrentAccount() else { return }
-        let mergedProfile = slotBalance(for: profile, userID: userID)
-        if mergedProfile != remoteProfile {
-            try await supabaseService.syncUserProfile(mergedProfile)
-        }
+        subscriptionManager.updateEntitlements(
+            purchasedPersonalSlots: personal, purchasedGroupSlots: group
+        )
+        // No client mutation of Supabase public.user_profiles.
     }
 
     func recordVerifiedSlotPurchase(
@@ -314,7 +307,8 @@ final class StoreKitManager {
             purchasedPersonalSlots: profile.purchasedPersonalSlots,
             purchasedGroupSlots: profile.purchasedGroupSlots
         )
-        scheduleProfileSync(slotBalance(for: profile, userID: userID))
+        // Local transaction ID deduplication is retained for StoreKit tests.
+        // Real purchases must be verified by a trusted backend first.
         return true
     }
 
@@ -348,28 +342,6 @@ final class StoreKitManager {
             return false
         }
         return profile.processedStoreKitTransactionIDs.contains(String(transactionID))
-    }
-
-    private func slotBalance(
-        for profile: UserProfile,
-        userID: UUID
-    ) -> UserProfileSlotBalancePayload {
-        UserProfileSlotBalancePayload(
-            userID: userID,
-            purchasedPersonalSlots: profile.purchasedPersonalSlots,
-            purchasedGroupSlots: profile.purchasedGroupSlots
-        )
-    }
-
-    private func scheduleProfileSync(_ profile: UserProfileSlotBalancePayload) {
-        guard let supabaseService else { return }
-        Task { [weak self] in
-            do {
-                try await supabaseService.syncUserProfile(profile)
-            } catch {
-                self?.lastSyncError = error.localizedDescription
-            }
-        }
     }
 
     private var pendingPurchaseContext: (userID: UUID, isGroup: Bool)? {

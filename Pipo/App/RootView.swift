@@ -15,6 +15,7 @@ struct RootView: View {
     @State private var hasFinishedOnboardingQA = false
     @State private var completedOnboardingAccountID: UUID?
     @Environment(\.modelContext) private var modelContext
+    @Environment(\.scenePhase) private var scenePhase
     @Query private var localTransactions: [SavingTransaction]
     @Query private var localGoals: [PersonalGoal]
 
@@ -165,9 +166,8 @@ struct RootView: View {
             )
             updateWidgetAccount(userID)
             guard let userID else { return }
-            let transactions = AccountScope.visibleTransactions(
-                localTransactions, goals: localGoals, userID: userID
-            )
+            // Do not wait for StoreKit before retrying local-only goal sync.
+            enqueuePersonalSavingsSync(for: userID)
             Task {
                 guard authStateManager.userID == userID else { return }
                 do {
@@ -178,23 +178,16 @@ struct RootView: View {
                         isCurrentAccount: { authStateManager.userID == userID }
                     )
                 } catch {
-                    noticeMessage = "Purchased slots could not sync: \(error.localizedDescription)"
-                }
-
-                guard authStateManager.userID == userID,
-                      let supabaseService,
-                      !transactions.isEmpty else { return }
-                do {
-                    try await supabaseService.syncTransactions(transactions)
-                } catch {
                     guard authStateManager.userID == userID else { return }
-                    noticeMessage = "Signed in, but local savings could not sync: \(error.localizedDescription)"
+                    noticeMessage = "Purchased slots could not be verified: \(error.localizedDescription)"
                 }
             }
         }
-        .onChange(of: storeKitManager.lastSyncError) { _, error in
-            if let error {
-                noticeMessage = "Purchased slots were saved locally, but profile sync failed: \(error)"
+        .onChange(of: scenePhase) { _, phase in
+            // A failed offline write remains local; retry on foreground,
+            // without inventing a successful server sync or a timer.
+            if phase == .active, let userID = authStateManager.userID {
+                enqueuePersonalSavingsSync(for: userID, showFailure: false)
             }
         }
         .onOpenURL { url in
@@ -328,29 +321,19 @@ struct RootView: View {
                     streakDays: streakDays,
                     badgeTitles: badges.map(\.title)
                 )
-                guard let supabaseService else { return }
+                // Group plans are not shared or sent to other people yet.
+                // Only personal goals have deployed cloud ownership rules.
+                guard !goal.isGroupGoal, let supabaseService else { return }
                 Task {
                     guard authStateManager.userID == userID else { return }
                     do {
-                        try await supabaseService.syncTransactions([transaction])
-                    } catch {
-                        guard authStateManager.userID == userID else { return }
-                        noticeMessage = "Saved locally, but transaction sync failed: \(error.localizedDescription)"
-                        return
-                    }
-
-                    guard authStateManager.userID == userID, goal.isGroupGoal else {
-                        return
-                    }
-                    do {
-                        try await supabaseService.broadcastGroupGoalProgress(
-                            goalID: goal.id,
-                            currentAmount: goal.currentAmount,
-                            targetAmount: goal.targetAmount
+                        try await supabaseService.syncPersonalSavings(
+                            goals: [goal], transactions: [transaction],
+                            authenticatedUserID: userID
                         )
                     } catch {
                         guard authStateManager.userID == userID else { return }
-                        noticeMessage = "Transaction synced, but group progress could not update: \(error.localizedDescription)"
+                        noticeMessage = "Saved on this device, but cloud backup failed: \(error.localizedDescription)"
                     }
                 }
             }
@@ -388,6 +371,42 @@ struct RootView: View {
                 }
             } catch {
                 noticeMessage = error.localizedDescription
+            }
+        }
+    }
+
+    private func enqueuePersonalSavingsSync(
+        for userID: UUID, showFailure: Bool = true
+    ) {
+        guard authStateManager.authState == .authenticated,
+              authStateManager.userID == userID,
+              let supabaseService else { return }
+
+        // Never fetch another user's goals, group-only drafts, or
+        // quarantined ownerless records into a network batch.
+        let allGoals = (try? modelContext.fetch(FetchDescriptor<PersonalGoal>())) ?? localGoals
+        let allTransactions = (try? modelContext.fetch(FetchDescriptor<SavingTransaction>()))
+            ?? localTransactions
+        let personalGoals = AccountScope.visibleGoals(allGoals, userID: userID)
+            .filter { !$0.isGroupGoal }
+        let personalGoalIDs = Set(personalGoals.map(\.id))
+        let ownedTransactions = AccountScope.visibleTransactions(
+            allTransactions, goals: allGoals, userID: userID
+        ).filter { personalGoalIDs.contains($0.goalId) }
+        guard !personalGoals.isEmpty else { return }
+
+        Task {
+            guard authStateManager.userID == userID else { return }
+            do {
+                try await supabaseService.syncPersonalSavings(
+                    goals: personalGoals, transactions: ownedTransactions,
+                    authenticatedUserID: userID
+                )
+            } catch {
+                guard authStateManager.userID == userID else { return }
+                if showFailure {
+                    noticeMessage = "Saved on this device, but cloud backup failed: \(error.localizedDescription)"
+                }
             }
         }
     }
@@ -440,6 +459,11 @@ struct RootView: View {
                 onCreated: { goalID in
                     navigationManager.popToRoot()
                     navigationManager.navigate(to: .personalGoal(goalID))
+                    if let userID = authStateManager.userID {
+                        // Fetch from SwiftData, not @Query's potentially stale
+                        // post-save snapshot, so newly created plans are queued.
+                        enqueuePersonalSavingsSync(for: userID)
+                    }
                 }
             )
         case .personalGoal(let goalID):
