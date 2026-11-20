@@ -430,3 +430,28 @@ extension PersonalGoalTests {
         ))
     }
 }
+
+ 
+extension PersonalGoalTests {
+    func testIssue42CorrectionRetainsPastXPAndReconstructsNet() throws {
+        let oldXP = 900
+        let result = try MoneyOutCorrectionPreview.calculate(
+            currentNetRecorded: 1_000_000, originalMoneyOut: 500_000,
+            correctedMoneyOut: 300_000
+        )
+        XCTAssertEqual(result.correctedNetRecorded, 1_200_000)
+        XCTAssertEqual(result.adjustmentDelta, 200_000)
+        XCTAssertEqual(oldXP, 900, "A correction cannot award or erase XP")
+    }
+
+    func testIssue42CorrectionRejectsOverdrawAndZero() {
+        XCTAssertThrowsError(try MoneyOutCorrectionPreview.calculate(
+            currentNetRecorded: 100_000, originalMoneyOut: 50_000,
+            correctedMoneyOut: 200_000
+        ))
+        XCTAssertThrowsError(try MoneyOutCorrectionPreview.calculate(
+            currentNetRecorded: 100_000, originalMoneyOut: 50_000,
+            correctedMoneyOut: 0
+        ))
+    }
+}
