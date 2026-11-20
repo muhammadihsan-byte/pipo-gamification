@@ -152,6 +152,7 @@ struct RootView: View {
             // Invalidate widget content and pending deposit/milestone routes
             // BEFORE exposing the new account's dashboard.
             navigationManager.resetAccountContext()
+            noticeMessage = nil
             // Entitlements from account A must not remain usable by account B
             // while B's StoreKit profile restoration is pending.
             subscriptionManager.updateEntitlements(

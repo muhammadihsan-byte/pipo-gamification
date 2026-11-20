@@ -50,6 +50,8 @@ final class NavigationManager {
         isMilestonePresented = false
         milestoneXPEarned = GamificationManager.xpPerSaving
         milestoneStreakDays = 0
+        selectedRhythm = .monthly
+        preferredDepositDay = 25
         plannedContributionAmount = nil
     }
 
