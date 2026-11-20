@@ -602,3 +602,64 @@ extension PersonalGoalTests {
         XCTAssertEqual(snapshot.earnedXP, 300)
     }
 }
+
+extension PersonalGoalTests {
+    func testIssue42MoneyOutRPCRequestUsesStableIdempotencyIDAndExpectedKeys() throws {
+        let requestID = UUID(), goalID = UUID()
+        let request = try SavingMoneyOutRPCRequest(
+            requestID: requestID, goalID: goalID, amount: 500_000,
+            note: "  Used for school  ", preference: "keep_date"
+        )
+        let payload = try JSONSerialization.jsonObject(
+            with: JSONEncoder().encode(request)
+        ) as! [String: Any]
+        XCTAssertEqual(payload["p_id"] as? String, requestID.uuidString)
+        XCTAssertEqual(payload["p_goal_id"] as? String, goalID.uuidString)
+        XCTAssertEqual(payload["p_amount"] as? Int, 500_000)
+        XCTAssertEqual(payload["p_note"] as? String, "Used for school")
+        XCTAssertEqual(payload["p_preference"] as? String, "keep_date")
+        XCTAssertEqual(request.requestID, requestID, "Use the same UUID after retry")
+    }
+
+    func testIssue42MoneyOutRPCRejectsOverdrawShapedInputsBeforeNetwork() {
+        let goalID = UUID()
+        for amount in [0, -100, 10_000_000_000_000_000] {
+            XCTAssertThrowsError(try SavingMoneyOutRPCRequest(
+                requestID: UUID(), goalID: goalID, amount: amount,
+                note: nil, preference: "keep_amount"
+            ))
+        }
+        XCTAssertThrowsError(try SavingMoneyOutRPCRequest(
+            requestID: UUID(), goalID: goalID, amount: 100,
+            note: String(repeating: "x", count: 241),
+            preference: "keep_amount"
+        ))
+        XCTAssertThrowsError(try SavingMoneyOutRPCRequest(
+            requestID: UUID(), goalID: goalID, amount: 100,
+            note: nil, preference: "other"
+        ))
+    }
+
+    func testIssue42MoneyOutRPCRejectsForgedOrConflictingServerReceipt() throws {
+        let owner = UUID()
+        let request = try SavingMoneyOutRPCRequest(
+            requestID: UUID(), goalID: UUID(), amount: 500_000,
+            note: "Coffee", preference: "keep_date"
+        )
+        let accepted = SavingMoneyOutRPCReceipt(
+            id: request.requestID, goalID: request.goalID, userID: owner,
+            kind: "money_out", amount: 500_000,
+            preference: "keep_date", note: "Coffee"
+        )
+        XCTAssertNoThrow(try accepted.verify(request: request, ownerID: owner))
+        XCTAssertThrowsError(try accepted.verify(
+            request: request, ownerID: UUID()
+        ))
+        let altered = SavingMoneyOutRPCReceipt(
+            id: request.requestID, goalID: request.goalID, userID: owner,
+            kind: "money_out", amount: 600_000,
+            preference: "keep_date", note: "Coffee"
+        )
+        XCTAssertThrowsError(try altered.verify(request: request, ownerID: owner))
+    }
+}
