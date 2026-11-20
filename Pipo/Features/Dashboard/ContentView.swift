@@ -1029,48 +1029,14 @@ struct DashboardView: View {
     }
 
     private func nextDepositDate(for goal: PersonalGoal, lastSavingDate: Date?) -> Date? {
-        let cadence: (component: Calendar.Component, value: Int)
-        switch goal.rhythm {
-        case .daily:
-            cadence = (.day, 1)
-        case .weekly:
-            cadence = (.day, 7)
-        case .biWeekly:
-            cadence = (.day, 14)
-        case .monthly:
-            cadence = (.month, 1)
-        case .flexible:
-            return nil
+        guard let next = DashboardSchedule.nextDate(for: goal, asOf: .now) else { return nil }
+        // A contribution on the scheduled day counts for that planned period.
+        // Extra early contributions do not silently move the selected weekday.
+        if let lastSavingDate, Calendar.current.isDate(lastSavingDate, inSameDayAs: next) {
+            let followingDay = Calendar.current.date(byAdding: .day, value: 1, to: next) ?? next
+            return DashboardSchedule.nextDate(for: goal, asOf: followingDay)
         }
-
-        let calendar = Calendar.current
-        var nextDate: Date
-        if let lastSavingDate {
-            guard let date = calendar.date(
-                byAdding: cadence.component,
-                value: cadence.value,
-                to: lastSavingDate
-            ) else {
-                return nil
-            }
-            nextDate = date
-        } else {
-            nextDate = goal.startDate
-        }
-
-        let today = calendar.startOfDay(for: .now)
-        while nextDate < today {
-            guard let date = calendar.date(
-                byAdding: cadence.component,
-                value: cadence.value,
-                to: nextDate
-            ) else {
-                return nil
-            }
-            nextDate = date
-        }
-
-        return nextDate <= goal.targetDate ? nextDate : nil
+        return next
     }
 
     private func clearPendingSaving() {
@@ -1150,5 +1116,61 @@ enum DashboardActivity {
         case .flexible:
             return 0
         }
+    }
+}
+
+
+/// A date derived from the user's selected saving rhythm and preferred day,
+/// not from the date of the last (possibly extra) contribution.
+enum DashboardSchedule {
+    static func nextDate(
+        for goal: PersonalGoal,
+        asOf now: Date,
+        calendar: Calendar = .current
+    ) -> Date? {
+        guard goal.progress < 1, goal.rhythm != .flexible,
+              goal.targetAmount.isFinite,
+              goal.targetAmount >= 1,
+              goal.targetAmount < Double(Int.max),
+              let schedule = PersonalSavingSchedule(
+                  targetAmount: Int(goal.targetAmount),
+                  startDate: goal.startDate,
+                  targetDate: goal.targetDate,
+                  rhythm: goal.rhythm,
+                  preferredDay: goal.preferredSavingDay,
+                  calendar: calendar
+              )
+        else { return nil }
+
+        let today = calendar.startOfDay(for: now)
+        let first = calendar.startOfDay(for: schedule.firstDate)
+        if first >= today { return first }
+
+        let next: Date?
+        switch goal.rhythm {
+        case .daily, .weekly, .biWeekly:
+            let step = goal.rhythm == .daily ? 1 : (goal.rhythm == .weekly ? 7 : 14)
+            let passedDays = calendar.dateComponents([.day], from: first, to: today).day ?? 0
+            let periodsAhead = (passedDays + step - 1) / step
+            next = calendar.date(byAdding: .day, value: periodsAhead * step, to: first)
+        case .monthly:
+            guard let firstMonth = calendar.dateInterval(of: .month, for: first)?.start,
+                  let todayMonth = calendar.dateInterval(of: .month, for: today)?.start
+            else { return nil }
+            let elapsed = max(0, calendar.dateComponents([.month], from: firstMonth, to: todayMonth).month ?? 0)
+            let preferred = goal.preferredSavingDay ?? calendar.component(.day, from: goal.startDate)
+            func candidate(inMonth offset: Int) -> Date? {
+                guard let month = calendar.date(byAdding: .month, value: offset, to: firstMonth),
+                      let days = calendar.range(of: .day, in: .month, for: month)
+                else { return nil }
+                return calendar.date(byAdding: .day, value: min(preferred, days.count) - 1, to: month)
+            }
+            let thisMonth = candidate(inMonth: elapsed)
+            next = (thisMonth ?? first) >= today ? thisMonth : candidate(inMonth: elapsed + 1)
+        case .flexible:
+            return nil
+        }
+        guard let next, next <= schedule.lastDate else { return nil }
+        return next
     }
 }
