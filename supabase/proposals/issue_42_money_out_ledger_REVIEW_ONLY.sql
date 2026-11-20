@@ -27,6 +27,40 @@ grant select on public.saving_adjustments to authenticated;
 create policy saving_adjustments_owned_read on public.saving_adjustments
     for select to authenticated using ((select auth.uid()) = user_id);
 
+-- Deployed savings sync currently UPSERTs existing rows. Allow a retry
+-- only when every persisted field is unchanged; forbid history rewriting.
+-- This trigger also serializes new deposits with record_money_out by locking
+-- the same goal row before evaluating the account's net balance.
+create or replace function public.guard_saving_contribution_immutable()
+returns trigger language plpgsql security invoker set search_path = ''
+as $contribution_guard$
+begin
+    perform 1 from public.saving_goals
+      where id = new.goal_id and user_id = new.user_id for update;
+    if not found then
+        raise exception 'Goal unavailable for contribution' using errcode='42501';
+    end if;
+    if tg_op = 'UPDATE' then
+        if row(old.id,old.goal_id,old.user_id,old.amount,old.xp_earned,
+               old.date,old.created_at)
+           is distinct from
+           row(new.id,new.goal_id,new.user_id,new.amount,new.xp_earned,
+               new.date,new.created_at) then
+            raise exception 'Saving contributions are immutable'
+              using errcode='23514';
+        end if;
+    end if;
+    return new;
+end;
+$contribution_guard$;
+drop trigger if exists pipo_immutable_contribution_guard
+    on public.saving_transactions;
+create trigger pipo_immutable_contribution_guard
+before insert or update on public.saving_transactions
+for each row execute function public.guard_saving_contribution_immutable();
+revoke delete on public.saving_transactions from authenticated;
+revoke all on function public.guard_saving_contribution_immutable() from public,anon,authenticated;
+
 -- A concurrent call for the same goal is serialized by a row lock.
 -- The caller supplies a stable UUID across retries; a duplicate with different
 -- payload is rejected, not silently treated as a successful new entry.
