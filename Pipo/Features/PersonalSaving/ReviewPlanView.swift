@@ -207,7 +207,8 @@ struct ReviewPlanView: View {
     }
 
     private var activePersonalGoalCount: Int {
-        goals.filter { !$0.isGroupGoal && $0.progress < 1 }.count
+        AccountScope.visibleGoals(goals, userID: authStateManager.userID)
+            .filter { !$0.isGroupGoal && $0.progress < 1 }.count
     }
 
     private var currentProfile: UserProfile? {
@@ -217,6 +218,10 @@ struct ReviewPlanView: View {
     private func confirmCreation() {
         defer { saving = false }
         guard createdGoalID == nil else { return }
+        guard let userID = authStateManager.userID else {
+            errorMessage = "Sign in to create a saving goal."
+            return
+        }
         let activeCount = activePersonalGoalCount
         guard subscriptionManager.canCreateGoal(isGroup: false, activeCount: activeCount) else {
             isPaywallPresented = true
@@ -224,13 +229,14 @@ struct ReviewPlanView: View {
         }
 
         let existingProfile = currentProfile
-        let profile = existingProfile ?? UserProfile(userID: authStateManager.userID)
+        let profile = existingProfile ?? UserProfile(userID: userID)
         let previousCount = profile.activePersonalGoalsCount
         let previousUserID = profile.userID
         let goal = PersonalGoal(
             title: plan.title, category: plan.category, customCategory: plan.customCategory,
             targetAmount: plan.targetAmount, startDate: plan.startDate, targetDate: plan.targetDate,
-            rhythm: plan.rhythm, preferredSavingDay: plan.preferredSavingDay
+            rhythm: plan.rhythm, preferredSavingDay: plan.preferredSavingDay,
+            ownerUserID: userID
         )
         goal.plannedContributionOverride = plan.contributionOverride
         goal.subItems = plan.breakdown.compactMap { item in
@@ -238,7 +244,7 @@ struct ReviewPlanView: View {
             return SubItem(title: item.cleanTitle, amount: Double(amount))
         }
 
-        profile.userID = authStateManager.userID
+        profile.userID = userID
         profile.activePersonalGoalsCount = activeCount + 1
         modelContext.insert(goal)
         if existingProfile == nil { modelContext.insert(profile) }
@@ -294,6 +300,7 @@ struct PersonalGoalDetailView: View {
     private let recordSaving: () -> Void
 
     @Query private var goals: [PersonalGoal]
+    @Environment(AuthStateManager.self) private var authStateManager
 
     init(goalID: UUID, onBack: @escaping () -> Void, recordSaving: @escaping () -> Void) {
         _goals = Query(filter: #Predicate<PersonalGoal> { $0.id == goalID })
@@ -310,7 +317,8 @@ struct PersonalGoalDetailView: View {
                 }
                 .foregroundStyle(PipoTheme.ink)
 
-                if let goal = goals.first {
+                if let goal = goals.first,
+                   AccountScope.owns(goal, userID: authStateManager.userID) {
                     details(for: goal)
                 } else {
                     ContentUnavailableView("Goal unavailable", systemImage: "target")

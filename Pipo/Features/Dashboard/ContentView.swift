@@ -60,12 +60,22 @@ struct DashboardView: View {
         self.onSavingCompleted = onSavingCompleted
     }
 
+    private var ownedGoals: [PersonalGoal] {
+        AccountScope.visibleGoals(goals, userID: authStateManager.userID)
+    }
+
+    private var ownedTransactions: [SavingTransaction] {
+        AccountScope.visibleTransactions(
+            transactions, goals: ownedGoals, userID: authStateManager.userID
+        )
+    }
+
     private var activeGoals: [PersonalGoal] {
-        goals.filter { $0.progress < 1 }
+        ownedGoals.filter { $0.progress < 1 }
     }
 
     private var completedGoals: [PersonalGoal] {
-        goals.filter { $0.progress >= 1 }
+        ownedGoals.filter { $0.progress >= 1 }
     }
 
     private var focusGoal: PersonalGoal? {
@@ -96,7 +106,7 @@ struct DashboardView: View {
         VStack(spacing: 0) {
             ScrollView {
                 VStack(alignment: .leading, spacing: 20) {
-                    if goals.isEmpty {
+                    if ownedGoals.isEmpty {
                         welcomeHeader
                         firstGoalWelcomeCard
                     } else {
@@ -123,7 +133,7 @@ struct DashboardView: View {
                 .padding(.bottom, 24)
             }
             .scrollBounceBehavior(.basedOnSize)
-            if !goals.isEmpty {
+            if !ownedGoals.isEmpty {
                 bottomNavigation
             }
         }
@@ -139,15 +149,31 @@ struct DashboardView: View {
             openPendingDepositRequest()
         }
         .onChange(of: authStateManager.userID) { _, _ in
-            updateWidgetSnapshot()
+            // A presented sheet or deferred milestone cannot survive account switches.
+            isShowingSaveConfirmation = false
+            goalToRecord = nil
+            selectedGroupGoal = nil
+            showingAchievements = false
+            preferredFocusGoalID = nil
+            completedSavingReward = nil
             mascotReply = nil
+            selectedPage = .home
+            updateWidgetSnapshot()
         }
         .sheet(isPresented: $isShowingSaveConfirmation, onDismiss: clearPendingSaving) {
-            saveConfirmation
-                .presentationDetents([.medium])
+            if let goalToRecord, AccountScope.owns(goalToRecord, userID: authStateManager.userID) {
+                saveConfirmation
+                    .presentationDetents([.medium])
+            } else {
+                ContentUnavailableView("Goal unavailable", systemImage: "lock.shield")
+            }
         }
         .sheet(item: $selectedGroupGoal) { goal in
-            groupGoalDetail(goal)
+            if AccountScope.owns(goal, userID: authStateManager.userID) {
+                groupGoalDetail(goal)
+            } else {
+                ContentUnavailableView("Goal unavailable", systemImage: "lock.shield")
+            }
         }
         .sheet(isPresented: $showingAchievements) {
             achievementsSheet
@@ -176,7 +202,7 @@ struct DashboardView: View {
         VStack(alignment: .leading, spacing: 4) {
             HStack(alignment: .center, spacing: 12) {
                 VStack(alignment: .leading, spacing: 6) {
-                    if !goals.isEmpty {
+                    if !ownedGoals.isEmpty {
                         Text("YOUR SPACE")
                             .font(.system(size: 11, weight: .bold, design: .rounded))
                             .tracking(0.8)
@@ -186,7 +212,7 @@ struct DashboardView: View {
                         .font(.largeTitle.bold())
                         .foregroundStyle(PipoTheme.ink)
                         .accessibilityAddTraits(.isHeader)
-                    Text(goals.isEmpty
+                    Text(ownedGoals.isEmpty
                         ? (onboardingPersonalization?.motivation?.homeGreeting ?? "Little by little, it adds up.")
                         : "Your plans, your pace.")
                         .font(.subheadline)
@@ -205,7 +231,7 @@ struct DashboardView: View {
                 .frame(width: 97, height: 105)
                 .accessibilityIdentifier("pipo.dashboard.mascot")
             }
-            if let mascotReply, !goals.isEmpty {
+            if let mascotReply, !ownedGoals.isEmpty {
                 HStack(spacing: 8) {
                     Text(mascotReply)
                         .font(.footnote.weight(.medium))
@@ -670,15 +696,15 @@ struct DashboardView: View {
             Text("RECENT ACTIVITY")
                 .font(.caption.bold())
                 .foregroundStyle(PipoTheme.muted)
-            if transactions.isEmpty {
+            if ownedTransactions.isEmpty {
                 Text("No contributions recorded yet. Your journey starts when you save.")
                     .foregroundStyle(PipoTheme.muted)
                     .font(.subheadline)
             } else {
-                ForEach(transactions.prefix(20)) { transaction in
+                ForEach(ownedTransactions.prefix(20)) { transaction in
                     HStack {
                         VStack(alignment: .leading, spacing: 4) {
-                            Text(goals.first(where: { $0.id == transaction.goalId })?.title ?? "Saving entry")
+                            Text(ownedGoals.first(where: { $0.id == transaction.goalId })?.title ?? "Saving entry")
                                 .font(.subheadline.bold())
                             Text(transaction.date.formatted(date: .abbreviated, time: .omitted))
                                 .font(.caption)
@@ -798,6 +824,7 @@ struct DashboardView: View {
     }
 
     private func openGoal(_ goal: PersonalGoal) {
+        guard AccountScope.owns(goal, userID: authStateManager.userID) else { return }
         if goal.isGroupGoal {
             selectedGroupGoal = goal
         } else {
@@ -806,7 +833,8 @@ struct DashboardView: View {
     }
 
     private func beginRecording(_ goal: PersonalGoal) {
-        guard goal.progress < 1 else { return }
+        guard AccountScope.owns(goal, userID: authStateManager.userID),
+              goal.progress < 1 else { return }
         goalToRecord = goal
         savingAmount = ""
         isShowingSaveConfirmation = true
@@ -829,11 +857,8 @@ struct DashboardView: View {
     }
 
     private func logs(for goal: PersonalGoal) -> [SavingTransaction] {
-        transactions.filter {
-            $0.goalId == goal.id
-            && (authStateManager.userID == nil
-                || $0.userID == authStateManager.userID || $0.userID == nil)
-        }
+        guard AccountScope.owns(goal, userID: authStateManager.userID) else { return [] }
+        return ownedTransactions.filter { $0.goalId == goal.id }
     }
 
     private func plannedAmount(for goal: PersonalGoal) -> Double? {
@@ -930,10 +955,18 @@ struct DashboardView: View {
     }
 
     private func confirmSaving() {
-        guard let goal = goalToRecord, let amount = parsedSavingAmount else { return }
+        guard let goal = goalToRecord,
+              let userID = authStateManager.userID,
+              authStateManager.authState == .authenticated,
+              AccountScope.owns(goal, userID: userID),
+              goal.progress < 1,
+              let amount = parsedSavingAmount else {
+            isShowingSaveConfirmation = false
+            return
+        }
 
-        let existingProfile = UserProfile.existing(for: authStateManager.userID, in: profiles)
-        let profile = existingProfile ?? UserProfile(userID: authStateManager.userID)
+        let existingProfile = UserProfile.existing(for: userID, in: profiles)
+        let profile = existingProfile ?? UserProfile(userID: userID)
         let previousCurrentAmount = goal.currentAmount
         let previousTotalXP = profile.totalXP
         let previousCurrentLevel = profile.currentLevel
@@ -943,13 +976,13 @@ struct DashboardView: View {
         let transaction: SavingTransaction
 
         do {
-            profile.userID = authStateManager.userID
+            profile.userID = userID
             transaction = try GamificationManager().recordSaving(
                 amount: amount,
                 goal: goal,
                 profile: profile
             )
-            transaction.userID = authStateManager.userID
+            transaction.userID = userID
         } catch {
             profile.userID = previousUserID
             goal.currentAmount = previousCurrentAmount
@@ -996,7 +1029,7 @@ struct DashboardView: View {
 
     private func openPendingDepositRequest() {
         guard let goalID = navigationManager.consumeDepositRequest() else { return }
-        guard let goal = goals.first(where: {
+        guard let goal = ownedGoals.first(where: {
             $0.id == goalID && !$0.isGroupGoal && $0.currentAmount < $0.targetAmount
         }) else {
             saveErrorMessage = "That personal goal is no longer active."
@@ -1009,14 +1042,15 @@ struct DashboardView: View {
     }
 
     private func updateWidgetSnapshot(latestTransaction: SavingTransaction? = nil) {
-        let profile = UserProfile.existing(for: authStateManager.userID, in: profiles)
-        let goal = goals.first {
+        guard let userID = authStateManager.userID else { return }
+        let profile = currentProfile
+        let goal = ownedGoals.first {
             !$0.isGroupGoal && $0.currentAmount < $0.targetAmount
         }
         let lastSavingDate = goal.flatMap { goal in
             [
                 latestTransaction.flatMap { $0.goalId == goal.id ? $0 : nil },
-                transactions.first(where: { $0.goalId == goal.id })
+                ownedTransactions.first(where: { $0.goalId == goal.id })
             ]
                 .compactMap { $0?.date }
                 .max()
@@ -1031,10 +1065,12 @@ struct DashboardView: View {
             goalProgress: goal?.progress ?? 0,
             nextDepositDate: goal.flatMap {
                 nextDepositDate(for: $0, lastSavingDate: lastSavingDate)
-            }
+            },
+            ownerUserID: userID
         )
 
         do {
+            try WidgetSharedData.activate(userID: userID)
             try WidgetSharedData.save(snapshot)
         } catch {
             saveErrorMessage = "The saving was recorded, but the widget could not update: \(error.localizedDescription)"
@@ -1054,7 +1090,9 @@ struct DashboardView: View {
     }
 
     private func clearPendingSaving() {
-        if let reward = completedSavingReward {
+        if let reward = completedSavingReward,
+           reward.transaction.userID == authStateManager.userID,
+           AccountScope.owns(reward.goal, userID: authStateManager.userID) {
             onSavingCompleted(
                 reward.transaction,
                 reward.goal,

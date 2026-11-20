@@ -66,6 +66,7 @@ private enum PipoDashboardQA {
         let context = ModelContext(container)
         let calendar = Calendar.current
         let today = Date.now
+        let qaOwnerID = UUID(uuidString: "99999999-9999-4999-8999-999999999999")!
         func shifted(_ days: Int) -> Date {
             calendar.date(byAdding: .day, value: days, to: today) ?? today
         }
@@ -79,6 +80,7 @@ private enum PipoDashboardQA {
             targetDate: shifted(80),
             rhythm: .weekly,
             preferredSavingDay: calendar.component(.weekday, from: today),
+            ownerUserID: qaOwnerID,
             createdAt: shifted(-35)
         )
         bali.plannedContributionOverride = 75_000
@@ -90,6 +92,7 @@ private enum PipoDashboardQA {
             startDate: shifted(-25),
             targetDate: shifted(140),
             rhythm: .monthly,
+            ownerUserID: qaOwnerID,
             createdAt: shifted(-25)
         )
         let group = PersonalGoal(
@@ -101,6 +104,7 @@ private enum PipoDashboardQA {
             targetDate: shifted(120),
             rhythm: .flexible,
             isGroupGoal: true,
+            ownerUserID: qaOwnerID,
             createdAt: shifted(-40)
         )
 
@@ -109,10 +113,12 @@ private enum PipoDashboardQA {
             context.insert(SavingTransaction(
                 goalId: bali.id,
                 amount: 75_000,
-                date: date
+                date: date,
+                userID: qaOwnerID
             ))
         }
         context.insert(UserProfile(
+            userID: qaOwnerID,
             totalXP: 900,
             currentLevel: 1,
             streakDays: 3,

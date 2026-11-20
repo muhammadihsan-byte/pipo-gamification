@@ -48,9 +48,9 @@ final class UserProfile {
     }
 
     static func existing(for userID: UUID?, in profiles: [UserProfile]) -> UserProfile? {
-        if let userID, let profile = profiles.first(where: { $0.userID == userID }) {
-            return profile
-        }
-        return profiles.first(where: { $0.userID == nil })
+        // Unowned legacy profiles must never become another account's XP,
+        // purchase entitlement or badge state on sign-in.
+        guard let userID else { return nil }
+        return profiles.first(where: { $0.userID == userID })
     }
 }

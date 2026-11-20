@@ -198,15 +198,14 @@ final class StoreKitManager {
     func restorePurchasedSlots(
         userID: UUID,
         modelContext: ModelContext,
-        subscriptionManager: SubscriptionManager
+        subscriptionManager: SubscriptionManager,
+        isCurrentAccount: @escaping @MainActor () -> Bool = { true }
     ) async throws {
+        guard isCurrentAccount() else { return }
         let profiles = try modelContext.fetch(FetchDescriptor<UserProfile>())
         var profile = UserProfile.existing(for: userID, in: profiles)
         if let profile {
-            if profile.userID == nil {
-                profile.userID = userID
-                try modelContext.save()
-            }
+            // Legacy unowned profiles are never assigned to the next login.
             subscriptionManager.updateEntitlements(
                 purchasedPersonalSlots: profile.purchasedPersonalSlots,
                 purchasedGroupSlots: profile.purchasedGroupSlots
@@ -220,6 +219,8 @@ final class StoreKitManager {
 
         guard let supabaseService else { return }
         let remoteProfile = try await supabaseService.fetchUserProfileSlots(userID: userID)
+        // The user may have signed out while the network request was in flight.
+        guard isCurrentAccount() else { return }
         guard let remoteProfile else {
             if let profile {
                 try await supabaseService.syncUserProfile(slotBalance(for: profile, userID: userID))
@@ -253,6 +254,7 @@ final class StoreKitManager {
             purchasedGroupSlots: groupSlots
         )
 
+        guard isCurrentAccount() else { return }
         let mergedProfile = slotBalance(for: profile, userID: userID)
         if mergedProfile != remoteProfile {
             try await supabaseService.syncUserProfile(mergedProfile)

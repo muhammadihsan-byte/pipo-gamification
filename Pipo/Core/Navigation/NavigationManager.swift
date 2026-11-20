@@ -44,6 +44,17 @@ final class NavigationManager {
         path = NavigationPath()
     }
 
+    func resetAccountContext() {
+        popToRoot()
+        pendingDepositGoalID = nil
+        isMilestonePresented = false
+        milestoneXPEarned = GamificationManager.xpPerSaving
+        milestoneStreakDays = 0
+        selectedRhythm = .monthly
+        preferredDepositDay = 25
+        plannedContributionAmount = nil
+    }
+
     func requestDeposit(goalID: UUID) {
         popToRoot()
         pendingDepositGoalID = goalID

@@ -67,6 +67,9 @@ final class PersonalGoal {
     @Attribute(.externalStorage) var goalPhoto: Data?
     @Attribute(.externalStorage) var groupPhoto: Data?
     var isGroupGoal: Bool
+    // Optional so older SwiftData rows migrate without being assigned to a new login.
+    // A nil owner is quarantined and never displayed until ownership is verified.
+    var ownerUserID: UUID?
     var createdAt: Date
 
     init(
@@ -82,6 +85,7 @@ final class PersonalGoal {
         rhythm: SavingRhythm = .weekly,
         preferredSavingDay: Int? = nil,
         isGroupGoal: Bool = false,
+        ownerUserID: UUID? = nil,
         createdAt: Date = .now
     ) {
         self.id = id
@@ -96,6 +100,7 @@ final class PersonalGoal {
         self.rhythm = rhythm
         self.preferredSavingDay = preferredSavingDay
         self.isGroupGoal = isGroupGoal
+        self.ownerUserID = ownerUserID
         self.createdAt = createdAt
     }
 
