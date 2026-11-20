@@ -158,6 +158,7 @@ struct AuthView: View {
                     }
                     .font(.caption.weight(.medium))
                     .foregroundStyle(PipoTheme.pink)
+                    .accessibilityIdentifier("pipo.auth.forgotPassword")
                 }
 
                 HStack(spacing: 10) {
