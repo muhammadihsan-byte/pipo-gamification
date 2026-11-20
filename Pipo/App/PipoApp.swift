@@ -14,6 +14,7 @@ struct PipoApp: App {
         #if DEBUG
         let args = ProcessInfo.processInfo.arguments
         let qaInMemory = args.contains("-pipo-visual-qa")
+            || args.contains("-pipo-account-qa")
             || args.contains("-pipo-onboarding-qa")
             || args.contains("-pipo-onboarding-qa-returning")
             || args.contains("-pipo-dashboard-qa")
@@ -42,6 +43,7 @@ struct PipoApp: App {
         WindowGroup {
             #if DEBUG
             if ProcessInfo.processInfo.arguments.contains("-pipo-visual-qa")
+                || ProcessInfo.processInfo.arguments.contains("-pipo-account-qa")
                 || ProcessInfo.processInfo.arguments.contains("-pipo-onboarding-qa")
                 || ProcessInfo.processInfo.arguments.contains("-pipo-onboarding-qa-returning")
                 || ProcessInfo.processInfo.arguments.contains("-pipo-dashboard-qa") {

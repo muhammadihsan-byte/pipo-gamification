@@ -1,0 +1,31 @@
+name: Live Supabase Auth Smoke (Non-Destructive)
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - "scripts/smoke_supabase_live.py"
+      - ".github/workflows/live-auth-smoke.yml"
+      - "Pipo.xcodeproj/project.pbxproj"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  anonymous-denial:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Probe deployed Supabase endpoints without real credentials
+        run: python3 scripts/smoke_supabase_live.py
+      - name: Attach exactly scoped live evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: pipo-live-anonymous-auth-${{ github.run_id }}
+          path: validation/live-auth-smoke.json
+          if-no-files-found: warn
+          retention-days: 7

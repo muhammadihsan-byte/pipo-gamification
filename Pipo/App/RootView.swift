@@ -38,7 +38,10 @@ struct RootView: View {
         #if DEBUG
         // Returning-user simulator fixtures must not depend on whether a
         // previous test happened to create an onboarding profile.
-        if ProcessInfo.processInfo.arguments.contains("-pipo-dashboard-qa") {
+        if ProcessInfo.processInfo.arguments.contains("-pipo-dashboard-qa")
+            || ProcessInfo.processInfo.arguments.contains("-pipo-account-qa") {
+            // Debug-only no-goal privacy QA: authenticated but no onboarding
+            // fixture and no seeded personal data.
             return false
         }
         if ProcessInfo.processInfo.arguments.contains("-pipo-onboarding-qa") {
@@ -64,6 +67,7 @@ struct RootView: View {
         let qaSignedIn = args.contains("-pipo-onboarding-qa")
             || args.contains("-pipo-onboarding-qa-returning")
             || args.contains("-pipo-visual-qa")
+            || args.contains("-pipo-account-qa")
             || args.contains("-pipo-dashboard-qa")
         let onboardingQAUserID = qaSignedIn
             ? UUID(uuidString: "99999999-9999-4999-8999-999999999999")
@@ -116,6 +120,8 @@ struct RootView: View {
         .task {
             #if DEBUG
             if ProcessInfo.processInfo.arguments.contains("-pipo-visual-qa")
+                || ProcessInfo.processInfo.arguments.contains("-pipo-auth-qa")
+                || ProcessInfo.processInfo.arguments.contains("-pipo-account-qa")
                 || ProcessInfo.processInfo.arguments.contains("-pipo-dashboard-qa")
                 || (ProcessInfo.processInfo.arguments.contains("-pipo-onboarding-qa") || ProcessInfo.processInfo.arguments.contains("-pipo-onboarding-qa-returning")) { return }
             #endif
@@ -125,6 +131,8 @@ struct RootView: View {
         .task {
             #if DEBUG
             if ProcessInfo.processInfo.arguments.contains("-pipo-visual-qa")
+                || ProcessInfo.processInfo.arguments.contains("-pipo-auth-qa")
+                || ProcessInfo.processInfo.arguments.contains("-pipo-account-qa")
                 || ProcessInfo.processInfo.arguments.contains("-pipo-dashboard-qa")
                 || (ProcessInfo.processInfo.arguments.contains("-pipo-onboarding-qa") || ProcessInfo.processInfo.arguments.contains("-pipo-onboarding-qa-returning")) { return }
             #endif
@@ -704,13 +712,23 @@ private struct AccountDeletionConfirmationView: View {
                     }
                     .frame(maxWidth: .infinity)
                     .disabled(isWorking)
-                    .accessibilityIdentifier("pipo.deleteAccount.cancel")
+                    .accessibilityIdentifier("pipo.deleteAccount.keepAccount")
                 }
                 .padding(24)
             }
             .background(.white)
             .navigationTitle("Account deletion")
             .navigationBarTitleDisplayMode(.inline)
+            // The keyboard can cover the bottom "Keep my account" button.
+            // Keep cancellation reachable without scrolling or dismissal.
+            .toolbar(.visible, for: .navigationBar)
+            .toolbar {
+                ToolbarItem(placement: .topBarLeading) {
+                    Button("Cancel") { dismiss() }
+                        .disabled(isWorking)
+                        .accessibilityIdentifier("pipo.deleteAccount.cancel")
+                }
+            }
             .interactiveDismissDisabled(isWorking)
         }
     }
