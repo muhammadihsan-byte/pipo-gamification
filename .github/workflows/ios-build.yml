@@ -78,6 +78,10 @@ jobs:
           } >> "$GITHUB_ENV"
           echo "Using project $XCODE_PROJECT with scheme $XCODE_SCHEME"
 
+      - name: P0 static release configuration preflight
+        shell: bash
+        run: bash scripts/check-p0-release-config.sh
+
       - name: Select a compatible installed iOS simulator
         if: github.event_name != 'workflow_dispatch' || inputs.validation_mode != 'build-only'
         shell: bash
@@ -183,7 +187,7 @@ jobs:
             build test 2>&1 | tee validation/xcodebuild.log
 
       - name: Dashboard B — one controlled native iOS visual QA recording
-        if: github.event_name == 'pull_request' && github.head_ref == 'feat/pipo-dashboard-b'
+        if: github.event_name == 'pull_request' && (github.head_ref == 'feat/pipo-dashboard-b' || github.head_ref == 'feat/pipo-p0-release-hardening')
         shell: bash
         run: |
           set -euo pipefail
