@@ -116,6 +116,7 @@ struct RootView: View {
         .task {
             #if DEBUG
             if ProcessInfo.processInfo.arguments.contains("-pipo-visual-qa")
+                || ProcessInfo.processInfo.arguments.contains("-pipo-auth-qa")
                 || ProcessInfo.processInfo.arguments.contains("-pipo-dashboard-qa")
                 || (ProcessInfo.processInfo.arguments.contains("-pipo-onboarding-qa") || ProcessInfo.processInfo.arguments.contains("-pipo-onboarding-qa-returning")) { return }
             #endif
@@ -125,6 +126,7 @@ struct RootView: View {
         .task {
             #if DEBUG
             if ProcessInfo.processInfo.arguments.contains("-pipo-visual-qa")
+                || ProcessInfo.processInfo.arguments.contains("-pipo-auth-qa")
                 || ProcessInfo.processInfo.arguments.contains("-pipo-dashboard-qa")
                 || (ProcessInfo.processInfo.arguments.contains("-pipo-onboarding-qa") || ProcessInfo.processInfo.arguments.contains("-pipo-onboarding-qa-returning")) { return }
             #endif
