@@ -295,7 +295,7 @@ enum SavingMoneyOutRequestError: Error, Equatable {
 /// Stable idempotency key must be created before the first send and reused
 /// unchanged after a timeout or a relaunch. NEVER regenerate it on retry.
 /// This does not move bank money; the server only records manual saving usage.
-struct SavingMoneyOutRPCRequest: Encodable, Sendable {
+struct SavingMoneyOutRPCRequest: Codable, Sendable {
     let requestID: UUID
     let goalID: UUID
     let amount: Int
@@ -327,6 +327,196 @@ struct SavingMoneyOutRPCRequest: Encodable, Sendable {
         case amount = "p_amount"
         case note = "p_note"
         case preference = "p_preference"
+    }
+}
+
+/// Crash-safe local delivery intent, never a declaration that money has moved.
+/// A pending request remains pending after a network timeout and must be retried
+/// with its original ID. Acknowledged requests remain until cloud readback.
+struct PendingMoneyOutIntent: Codable, Equatable, Sendable {
+    enum State: String, Codable, Sendable {
+        case staged
+        case acknowledged
+    }
+
+    let ownerID: UUID
+    let request: SavingMoneyOutRPCRequest
+    let createdAt: Date
+    var state: State
+
+    static func == (lhs: Self, rhs: Self) -> Bool {
+        lhs.ownerID == rhs.ownerID &&
+        lhs.request.requestID == rhs.request.requestID &&
+        lhs.request.goalID == rhs.request.goalID &&
+        lhs.request.amount == rhs.request.amount &&
+        lhs.request.note == rhs.request.note &&
+        lhs.request.preference == rhs.request.preference &&
+        lhs.createdAt == rhs.createdAt && lhs.state == rhs.state
+    }
+}
+
+enum MoneyOutJournalError: Error, Equatable {
+    case idempotencyConflict
+    case unknownIntent
+    case notAcknowledged
+    case unverifiedCloudReceipt
+    case invalidJournal
+    case tooManyPendingIntents
+}
+
+/// The application-support journal is separate from SwiftData migrations.
+/// It deliberately does not auto-retry or modify balance; those operations
+/// require the approved server rollout and explicit account/session guards.
+/// MainActor serializes journal read/modify/write on the current device.
+@MainActor
+final class MoneyOutIntentJournal {
+    private let directory: URL
+    private let files: FileManager
+    private let maximumEntries = 500
+
+    init(directory: URL, fileManager: FileManager = .default) {
+        self.directory = directory
+        self.files = fileManager
+    }
+
+    static func inApplicationSupport() throws -> MoneyOutIntentJournal {
+        let root = try FileManager.default.url(
+            for: .applicationSupportDirectory, in: .userDomainMask,
+            appropriateFor: nil, create: true
+        )
+        return MoneyOutIntentJournal(
+            directory: root.appendingPathComponent(
+                "PipoMoneyOutIntents", isDirectory: true
+            )
+        )
+    }
+
+    func all(for ownerID: UUID) throws -> [PendingMoneyOutIntent] {
+        let path = fileURL(for: ownerID)
+        guard files.fileExists(atPath: path.path) else { return [] }
+        let data = try Data(contentsOf: path)
+        let entries: [PendingMoneyOutIntent]
+        do {
+            entries = try JSONDecoder().decode(
+                [PendingMoneyOutIntent].self, from: data
+            )
+        } catch {
+            throw MoneyOutJournalError.invalidJournal
+        }
+        guard entries.count <= maximumEntries else {
+            throw MoneyOutJournalError.tooManyPendingIntents
+        }
+        var ids = Set<UUID>()
+        for entry in entries {
+            guard entry.ownerID == ownerID,
+                  ids.insert(entry.request.requestID).inserted,
+                  (try? SavingMoneyOutRPCRequest(
+                    requestID: entry.request.requestID,
+                    goalID: entry.request.goalID,
+                    amount: entry.request.amount,
+                    note: entry.request.note,
+                    preference: entry.request.preference
+                  )) != nil
+            else { throw MoneyOutJournalError.invalidJournal }
+        }
+        return entries
+    }
+
+    @discardableResult
+    func stage(
+        _ request: SavingMoneyOutRPCRequest,
+        ownerID: UUID
+    ) throws -> PendingMoneyOutIntent {
+        var entries = try all(for: ownerID)
+        if let existing = entries.first(where: {
+            $0.request.requestID == request.requestID
+        }) {
+            guard existing.request.goalID == request.goalID,
+                  existing.request.amount == request.amount,
+                  existing.request.note == request.note,
+                  existing.request.preference == request.preference
+            else { throw MoneyOutJournalError.idempotencyConflict }
+            return existing
+        }
+        guard entries.count < maximumEntries else {
+            throw MoneyOutJournalError.tooManyPendingIntents
+        }
+        let entry = PendingMoneyOutIntent(
+            ownerID: ownerID, request: request,
+            createdAt: .now, state: .staged
+        )
+        entries.append(entry)
+        try persist(entries, ownerID: ownerID)
+        return entry
+    }
+
+    /// Call only after submitVerifiedMoneyOut has checked the actual receipt.
+    func acknowledge(
+        requestID: UUID, receipt: SavingMoneyOutRPCReceipt,
+        ownerID: UUID
+    ) throws {
+        var entries = try all(for: ownerID)
+        guard let index = entries.firstIndex(where: {
+            $0.request.requestID == requestID
+        }) else { throw MoneyOutJournalError.unknownIntent }
+        try receipt.verify(request: entries[index].request, ownerID: ownerID)
+        entries[index].state = .acknowledged
+        try persist(entries, ownerID: ownerID)
+    }
+
+    /// Readback must include the exact server adjustment before the local
+    /// delivery intent can be discarded. The returned snapshot is still
+    /// read-only; local goal balances are NOT automatically overwritten.
+    @discardableResult
+    func finishVerifiedReadback(
+        requestID: UUID,
+        cloud: SavingLedgerCloudSnapshotEnvelope,
+        ownerID: UUID
+    ) throws -> SavingLedgerSnapshot {
+        let entries = try all(for: ownerID)
+        guard let entry = entries.first(where: {
+            $0.request.requestID == requestID
+        }) else { throw MoneyOutJournalError.unknownIntent }
+        guard entry.state == .acknowledged else {
+            throw MoneyOutJournalError.notAcknowledged
+        }
+        guard cloud.goalID == entry.request.goalID,
+              cloud.userID == ownerID,
+              cloud.adjustments.contains(where: {
+                $0.id == requestID && $0.goalID == entry.request.goalID &&
+                $0.userID == ownerID && $0.kind == "money_out" &&
+                $0.amount.isFinite &&
+                Int(exactly: $0.amount) == entry.request.amount
+              })
+        else { throw MoneyOutJournalError.unverifiedCloudReceipt }
+        let snapshot = try SavingCloudLedgerReconciler.reconstruct(
+            goalID: cloud.goalID, ownerID: ownerID,
+            contributions: cloud.contributions, adjustments: cloud.adjustments
+        )
+        try persist(
+            entries.filter { $0.request.requestID != requestID },
+            ownerID: ownerID
+        )
+        return snapshot
+    }
+
+    private func fileURL(for ownerID: UUID) -> URL {
+        directory.appendingPathComponent(
+            ownerID.uuidString.lowercased() + ".json", isDirectory: false
+        )
+    }
+
+    private func persist(
+        _ entries: [PendingMoneyOutIntent], ownerID: UUID
+    ) throws {
+        try files.createDirectory(
+            at: directory, withIntermediateDirectories: true
+        )
+        let payload = try JSONEncoder().encode(entries)
+        try payload.write(
+            to: fileURL(for: ownerID),
+            options: [.atomic, .completeFileProtectionUnlessOpen]
+        )
     }
 }
 
