@@ -232,6 +232,51 @@ final class PipoUIRecordingTests: XCTestCase {
         attachOnboardingScreen("Approved Budget B — saved goal detail")
     }
 
+    /// #44: all 11 remaining selected card families are rendered from a
+    /// DEBUG-only fixture and exported in sequential simulator screenshots.
+    /// Money-out decision/input/impact are interactive drafts only.
+    func testAllElevenApprovedCardFamilies() {
+        continueAfterFailure = false
+        app.launchArguments = ["-pipo-dashboard-qa", "-pipo-allcards-qa"]
+        app.launch()
+
+        XCTAssertTrue(app.staticTexts["APPROVED PIPO CARDS · QA ONLY"]
+                        .waitForExistence(timeout: 25),
+                      "All-card QA board must load without a real account")
+
+        let required = [
+            "YOUR GOAL",
+            "YOUR MILESTONE · EARNED",
+            "YOUR STICKER ALBUM",
+            "POSTCARD TO FUTURE ME",
+            "GROUP GOAL · DEVICE ONLY",
+            "YOUR RECORD / EDITABLE NOTE",
+            "A CHANGE, NOT A RESET",
+            "TWO WAYS FORWARD / YOU CHOOSE",
+            "MY SAVING JOURNAL",
+            "A GOAL YOU REACHED",
+            "A NEW JOURNEY"
+        ]
+        var observed = Set<String>()
+        let scroller = app.scrollViews.firstMatch
+        XCTAssertTrue(scroller.exists)
+        for page in 0..<12 {
+            for heading in required where app.staticTexts[heading].exists {
+                observed.insert(heading)
+            }
+            if page.isMultiple(of: 2) {
+                attachOnboardingScreen("Pipo #44 - All Cards QA page \(page)")
+            }
+            if observed.count == required.count { break }
+            scroller.swipeUp()
+        }
+        let missing = required.filter { !observed.contains($0) }
+        XCTAssertTrue(missing.isEmpty, "Approved card headings not rendered: \(missing)")
+        let realMoneyOutAction = app.buttons["Confirm money withdrawal"].firstMatch
+        XCTAssertFalse(realMoneyOutAction.exists,
+                       "Draft-only cards must not expose real-money operations")
+    }
+
     /// Non-destructive P0 simulator acceptance: sign-in availability and
     /// account deletion confirmation. The fixture is DEBUG-only and has no
     /// backend Auth session. NEVER tap the destructive submit action.

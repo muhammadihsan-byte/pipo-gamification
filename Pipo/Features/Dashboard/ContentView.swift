@@ -303,52 +303,27 @@ struct DashboardView: View {
         }
     }
 
-    /// The first Home state should teach the actual goal journey without
-    /// forcing a goal, showing fabricated progress, or duplicating the CTA.
+    /// First-time home stays actionable and renders the approved V4 Empty B.
+    /// The existing three-step guidance remains visible below the card.
     private var firstGoalWelcomeCard: some View {
-        TicketCard {
-            VStack(alignment: .leading, spacing: 15) {
-                HStack(alignment: .center, spacing: 12) {
-                    Image(systemName: "flag.checkered.circle.fill")
-                        .font(.system(size: 30))
-                        .foregroundStyle(PipoTheme.pink)
-                        .accessibilityHidden(true)
-                    VStack(alignment: .leading, spacing: 5) {
-                        Text("Your first saving goal")
-                            .font(.headline)
-                            .foregroundStyle(PipoTheme.ink)
-                            .accessibilityAddTraits(.isHeader)
-                        Text(firstGoalInvitation)
-                            .font(.subheadline)
-                            .foregroundStyle(PipoTheme.muted)
-                            .fixedSize(horizontal: false, vertical: true)
-                    }
-                }
-
-                Text("Choose something that matters, set a target, then record what you save.")
-                    .font(.subheadline)
-                    .foregroundStyle(PipoTheme.ink)
-                    .fixedSize(horizontal: false, vertical: true)
-
-                TicketSeparator()
-
-                VStack(alignment: .leading, spacing: 10) {
-                    firstGoalStep("1", title: "Pick your goal")
-                    firstGoalStep("2", title: "Set a target and date")
-                    firstGoalStep("3", title: "Record progress as you save")
-                }
-                .accessibilityElement(children: .contain)
-
-                Button("Create a saving goal", action: onCreateGoal)
-                    .buttonStyle(PrimaryActionButtonStyle())
-                    .accessibilityIdentifier("pipo.home.firstGoal.create")
-
-                Text("No rush. You can explore Pipo before creating a goal.")
-                    .font(.footnote)
-                    .foregroundStyle(PipoTheme.muted)
-                    .fixedSize(horizontal: false, vertical: true)
+        VStack(alignment: .leading, spacing: 14) {
+            Text("Your first saving goal")
+                .font(.headline)
+                .accessibilityAddTraits(.isHeader)
+            PipoEmptyStateBCard(onCreate: onCreateGoal)
+            Text(firstGoalInvitation)
+                .font(.subheadline)
+                .foregroundStyle(PipoTheme.muted)
+            VStack(alignment: .leading, spacing: 10) {
+                firstGoalStep("1", title: "Pick your goal")
+                firstGoalStep("2", title: "Set a target and date")
+                firstGoalStep("3", title: "Record progress as you save")
             }
+            Text("No rush. You can explore Pipo before creating a goal.")
+                .font(.footnote)
+                .foregroundStyle(PipoTheme.muted)
         }
+        .accessibilityIdentifier("pipo.home.firstGoal")
     }
 
     private func firstGoalStep(_ number: String, title: String) -> some View {
@@ -369,6 +344,20 @@ struct DashboardView: View {
 
     private var homeDashboard: some View {
         VStack(alignment: .leading, spacing: 16) {
+            #if DEBUG
+            if ProcessInfo.processInfo.arguments.contains("-pipo-allcards-qa"),
+               let focusGoal {
+                PipoApprovedCardsGalleryQA(
+                    goal: focusGoal,
+                    groupGoal: ownedGoals.first(where: { $0.isGroupGoal }),
+                    transactions: logs(for: focusGoal),
+                    earnedIDs: Set(currentProfile?.unlockedBadgeIds ?? []),
+                    onOpenCollection: { showingAchievements = true },
+                    onCreateGoal: onCreateGoal,
+                    onSeeJourney: { selectedPage = .journey }
+                )
+            }
+            #endif
             if let focusGoal {
                 featuredGoalCard(focusGoal)
                 activityAndAchievements(for: focusGoal)
@@ -413,7 +402,9 @@ struct DashboardView: View {
                     selectedPage = .goals
                 }
                 ForEach(completedGoals.prefix(2)) { goal in
-                    compactGoalRow(goal)
+                    PipoCompletionBCard(goal: goal) {
+                        selectedPage = .journey
+                    }
                 }
             }
             if focusGoal != nil {
@@ -808,50 +799,19 @@ struct DashboardView: View {
 
     private var journeyPage: some View {
         VStack(alignment: .leading, spacing: 16) {
-            Button {
-                showingAchievements = true
-            } label: {
-                HStack {
-                    Label("Achievements", systemImage: "medal.fill")
-                        .font(.headline)
-                    Spacer()
-                    Text("\(earnedBadgeCount) earned")
-                    Image(systemName: "chevron.right")
-                }
-                .foregroundStyle(PipoTheme.ink)
-                .padding(16)
-                .background(PipoTheme.cream, in: RoundedRectangle(cornerRadius: 18))
-            }
-            .accessibilityIdentifier("pipo.dashboard.journey.achievements")
+            PipoMilestonesDCard(
+                earnedIDs: Set(currentProfile?.unlockedBadgeIds ?? []),
+                onOpenCollection: { showingAchievements = true }
+            )
             Text("RECENT ACTIVITY")
                 .font(.caption.bold())
                 .foregroundStyle(PipoTheme.muted)
-            if ownedTransactions.isEmpty {
-                Text("No contributions recorded yet. Your journey starts when you save.")
-                    .foregroundStyle(PipoTheme.muted)
-                    .font(.subheadline)
-            } else {
-                ForEach(ownedTransactions.prefix(20)) { transaction in
-                    HStack {
-                        VStack(alignment: .leading, spacing: 4) {
-                            Text(ownedGoals.first(where: { $0.id == transaction.goalId })?.title ?? "Saving entry")
-                                .font(.subheadline.bold())
-                            Text(transaction.date.formatted(date: .abbreviated, time: .omitted))
-                                .font(.caption)
-                                .foregroundStyle(PipoTheme.muted)
-                        }
-                        Spacer()
-                        Text("+ " + money(transaction.amount))
-                            .font(.subheadline.weight(.semibold))
-                            .foregroundStyle(PipoTheme.deepPink)
-                    }
-                    .padding(14)
-                    .background(PipoTheme.cream, in: RoundedRectangle(cornerRadius: 14))
+            PipoActivityHistoryDCard(
+                transactions: ownedTransactions,
+                titleForGoal: { goalID in
+                    ownedGoals.first(where: { $0.id == goalID })?.title ?? "Saving entry"
                 }
-            }
-            Text("Entries are self-reported and are not bank transactions.")
-                .font(.caption)
-                .foregroundStyle(PipoTheme.muted)
+            )
         }
     }
 
@@ -1016,19 +976,15 @@ struct DashboardView: View {
                     Text("Group saving · manually recorded progress")
                         .font(.subheadline)
                         .foregroundStyle(PipoTheme.muted)
-                    TicketCard {
-                        VStack(alignment: .leading, spacing: 12) {
-                            LabeledContent("Status", value: goal.lifecycleState.title)
-                            LabeledContent("Recorded", value: money(goal.currentAmount))
-                            ProgressView(value: goal.progress)
-                                .tint(PipoTheme.pink)
-                                .accessibilityLabel("Shared goal progress")
-                                .accessibilityValue("\(Int(goal.progress * 100)) percent")
-                            LabeledContent("Target", value: money(goal.targetAmount))
-                            LabeledContent("Remaining", value: money(goal.remainingAmount))
-                            LabeledContent("Target date", value: goal.targetDate.formatted(date: .abbreviated, time: .omitted))
-                        }
-                    }
+                    PipoPlanOverviewBCard(
+                        goal: goal,
+                        preparedMembers: goal.groupDetails.flatMap {
+                            try? JSONDecoder().decode(GroupPlanDetails.self, from: $0)
+                        }?.preparedMembers ?? []
+                    )
+                    LabeledContent("Status", value: goal.lifecycleState.title)
+                    LabeledContent("Target date", value: goal.targetDate.formatted(date: .abbreviated, time: .omitted))
+                        .font(.subheadline)
                     Text("This screen shows recorded goal progress, not verified contributions from individual members.")
                         .font(.footnote)
                         .foregroundStyle(PipoTheme.muted)
