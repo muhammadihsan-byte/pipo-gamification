@@ -52,3 +52,19 @@ This branch now includes **disabled-by-default infrastructure**, not a released 
 **Critical: do not enable Money Out in the product yet.** Remote recovery cannot safely overwrite a device goal that contains unsynced local contributions. The application must first implement durable pending request intent, a consistent server snapshot / local merge policy and conflict recovery, a versioned goal-revision RPC, and tests exercising two real Supabase Auth users against a disposable database. The existing `saving_goals` UPSERT remains unsuitable for concurrent revisions across multiple devices.
 
 No live data or access policies have been altered. The current database still permits authenticated users to update/delete their own contribution rows; this is a release blocker until the proposed protections are deployed and exercised in staging.
+
+## Durable offline intent implementation (journal groundwork)
+
+`MoneyOutIntentJournal` persists a pending manual-usage intent in per-account files under Application Support using atomic writes and iOS file protection, rather than adding SwiftData schema fields before migration approval.
+
+- Stage request ID **before** any server call. A retry after timeouts or process relaunch uses the exact same UUID, goal and payload; a reused UUID with different payload fails.
+- Only a verified `SavingMoneyOutRPCReceipt` can transition `staged` to `acknowledged`.
+- A second account never receives another account's pending requests; corrupt JSON fails closed instead of silently becoming an empty queue.
+- Intents are cleared only after a server ledger snapshot contains the exact owned money-out event and its reconstructed ledger passes validation. This process returns a snapshot but never overwrites unsynced local SwiftData balance or XP.
+- The journal remains deliberately **unwired to production UI**. Before enabling, the product must coordinate auth/session changes, crash recovery, commit acknowledgement, widget/UI updates, background policy, stale-version conflict handling and user-visible error states.
+
+## Staging environment availability and cost
+
+On 21 November 2026, Supabase `pipo` had no existing development branches. The connector quoted `0.01344` USD **per hour** for creating a Supabase branch. Do not create this branch without explicit agreement to the nonzero recurring cost. Real-user A/B RLS, idempotency, concurrent deposits and corrections remain **unverified on a database**, and the SQL in `supabase/proposals/issue_42_money_out_ledger_REVIEW_ONLY.sql` must remain a proposal only until staging is available.
+
+Note: an iOS XCTest pass exercises local Swift application logic; it cannot validate the proposed SQL's execution, Postgres permissions or Supabase RPC behavior.
