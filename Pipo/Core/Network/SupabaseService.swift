@@ -241,6 +241,12 @@ struct GroupGoalProgressUpdate: Codable, Equatable, Sendable {
 /// from Supabase Auth. A response alone does not represent local cleanup.
 struct AccountDeletionResponse: Decodable, Sendable {
     let deleted: Bool
+    let userID: UUID
+
+    enum CodingKeys: String, CodingKey {
+        case deleted
+        case userID = "user_id"
+    }
 }
 
 struct UserProfileSlotBalancePayload: Codable, Equatable, Sendable {
@@ -354,10 +360,15 @@ final class SupabaseService {
         guard client.auth.currentUser?.id == accountID else {
             throw SupabaseServiceError.notAuthenticated
         }
+        // The expected UUID is only a fail-closed consistency check. The
+        // server MUST derive deletion authority from the verified bearer JWT.
         let result: AccountDeletionResponse = try await client.functions.invoke(
-            "delete-account"
+            "delete-account",
+            options: FunctionInvokeOptions(
+                body: ["expected_user_id": accountID.uuidString.lowercased()]
+            )
         )
-        guard result.deleted else {
+        guard result.deleted, result.userID == accountID else {
             throw SupabaseServiceError.deletionNotConfirmed
         }
     }
