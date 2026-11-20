@@ -4,6 +4,7 @@ enum GamificationError: LocalizedError {
     case invalidDepositAmount
     case depositBeforeLastSaving
     case valueOutOfRange
+    case goalNotActive
 
     var errorDescription: String? {
         switch self {
@@ -13,6 +14,8 @@ enum GamificationError: LocalizedError {
             return "A saving cannot be recorded before the previous saving."
         case .valueOutOfRange:
             return "The saving total or XP total is too large to record."
+        case .goalNotActive:
+            return "This goal is paused, archived or complete. Resume an unfinished goal to record more savings."
         }
     }
 }
@@ -29,6 +32,7 @@ struct GamificationManager {
         calendar: Calendar = .current,
         priorTransactions: [SavingTransaction] = []
     ) throws -> SavingTransaction {
+        guard goal.canRecordSaving else { throw GamificationError.goalNotActive }
         guard amount.isFinite, amount > 0 else {
             throw GamificationError.invalidDepositAmount
         }

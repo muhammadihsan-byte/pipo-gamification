@@ -37,7 +37,6 @@ struct DashboardView: View {
     @Query private var profiles: [UserProfile]
 
     @State private var selectedPage = DashboardPage.home
-    @State private var preferredFocusGoalID: UUID?
     @State private var selectedGroupGoal: PersonalGoal?
     @State private var showingAchievements = false
     @State private var showingPrivacyOverview = false
@@ -79,17 +78,24 @@ struct DashboardView: View {
     }
 
     private var activeGoals: [PersonalGoal] {
-        ownedGoals.filter { $0.progress < 1 }
+        ownedGoals.filter(\.canRecordSaving)
+    }
+
+    private var pausedGoals: [PersonalGoal] {
+        ownedGoals.filter { $0.lifecycleState == .paused }
+    }
+
+    private var archivedGoals: [PersonalGoal] {
+        ownedGoals.filter { $0.lifecycleState == .archived }
     }
 
     private var completedGoals: [PersonalGoal] {
-        ownedGoals.filter { $0.progress >= 1 }
+        ownedGoals.filter { $0.lifecycleState == .completed }
     }
 
     private var focusGoal: PersonalGoal? {
-        if let preferredFocusGoalID,
-           let match = activeGoals.first(where: { $0.id == preferredFocusGoalID }) {
-            return match
+        if let pinned = activeGoals.first(where: { $0.isFocusPreferred == true }) {
+            return pinned
         }
         let personal = activeGoals.filter { !$0.isGroupGoal }
         // The most advanced active personal goal has priority over newer drafts.
@@ -176,14 +182,15 @@ struct DashboardView: View {
             selectedGroupGoal = nil
             showingAchievements = false
             showingPrivacyOverview = false
-            preferredFocusGoalID = nil
             completedSavingReward = nil
             mascotReply = nil
             selectedPage = .home
             updateWidgetSnapshot()
         }
         .sheet(isPresented: $isShowingSaveConfirmation, onDismiss: clearPendingSaving) {
-            if let goalToRecord, AccountScope.owns(goalToRecord, userID: authStateManager.userID) {
+            if let goalToRecord,
+               AccountScope.owns(goalToRecord, userID: authStateManager.userID),
+               goalToRecord.canRecordSaving {
                 saveConfirmation
                     .presentationDetents([.medium])
             } else {
@@ -383,12 +390,22 @@ struct DashboardView: View {
                     VStack(alignment: .leading, spacing: 10) {
                         Text("Every goal has its moment.")
                             .font(.title3.bold())
-                        Text("Your existing goals are complete. You can start another whenever you're ready.")
+                        Text(pausedGoals.isEmpty
+                             ? "Your active goals are complete or archived. You can start another whenever you're ready."
+                             : "Your plans are paused. Resume one from Saving goals when you're ready.")
                             .font(.subheadline)
                             .foregroundStyle(PipoTheme.muted)
                         Button("Create a saving goal", action: onCreateGoal)
                             .buttonStyle(PrimaryActionButtonStyle())
                     }
+                }
+            }
+            if !pausedGoals.isEmpty {
+                sectionHeader("Paused for now", action: "See all") {
+                    selectedPage = .goals
+                }
+                ForEach(pausedGoals.prefix(2)) { goal in
+                    compactGoalRow(goal)
                 }
             }
             if !completedGoals.isEmpty {
@@ -613,45 +630,102 @@ struct DashboardView: View {
         Button {
             openGoal(goal)
         } label: {
-            HStack(alignment: .center, spacing: 12) {
-                VStack(alignment: .leading, spacing: 6) {
-                    Text(goal.title)
-                        .font(.subheadline.bold())
-                        .foregroundStyle(PipoTheme.ink)
-                        .multilineTextAlignment(.leading)
-                    Text((goal.isGroupGoal ? "Group" : "Personal") + " · " + money(goal.currentAmount) + " recorded")
-                        .font(.caption)
-                        .foregroundStyle(PipoTheme.muted)
-                        .multilineTextAlignment(.leading)
-                        .lineLimit(2)
-                }
-                Spacer(minLength: 8)
-                VStack(alignment: .trailing, spacing: 5) {
-                    Text("\(Int(goal.progress * 100))%")
-                        .font(.headline.bold())
-                        .foregroundStyle(PipoTheme.deepPink)
-                    Text("View goal")
-                        .font(.caption2)
-                        .foregroundStyle(PipoTheme.muted)
-                }
-            }
-            .padding(14)
-            .frame(minHeight: 80)
-            .background(.white, in: RoundedRectangle(cornerRadius: 17))
-            .overlay(RoundedRectangle(cornerRadius: 17).strokeBorder(PipoTheme.border))
-            .contentShape(Rectangle())
+            compactGoalRowLabel(goal)
         }
         .buttonStyle(.plain)
         .contextMenu {
-            if goal.progress < 1 {
-                Button("Make focus goal", systemImage: "pin.fill") {
-                    preferredFocusGoalID = goal.id
-                    selectedPage = .home
-                }
-            }
+            goalLifecycleMenu(goal)
         }
         .accessibilityIdentifier("pipo.dashboard.goal.\(goal.id.uuidString)")
-        .accessibilityHint("Opens goal details")
+        .accessibilityHint("Opens goal details. Hold for goal actions.")
+    }
+
+    private func compactGoalRowLabel(_ goal: PersonalGoal) -> some View {
+        let kind = goal.isGroupGoal ? "Group" : "Personal"
+        let subtitle = "\(kind) · \(goal.lifecycleState.title) · \(money(goal.currentAmount)) recorded"
+        let percentage = Int(goal.progress * 100)
+
+        return HStack(alignment: .center, spacing: 12) {
+            VStack(alignment: .leading, spacing: 6) {
+                Text(goal.title)
+                    .font(.subheadline.bold())
+                    .foregroundStyle(PipoTheme.ink)
+                    .multilineTextAlignment(.leading)
+                Text(subtitle)
+                    .font(.caption)
+                    .foregroundStyle(PipoTheme.muted)
+                    .multilineTextAlignment(.leading)
+                    .lineLimit(2)
+            }
+            Spacer(minLength: 8)
+            VStack(alignment: .trailing, spacing: 5) {
+                Text("\(percentage)%")
+                    .font(.headline.bold())
+                    .foregroundStyle(PipoTheme.deepPink)
+                Text("View goal")
+                    .font(.caption2)
+                    .foregroundStyle(PipoTheme.muted)
+            }
+        }
+        .padding(14)
+        .frame(minHeight: 80)
+        .background(.white, in: RoundedRectangle(cornerRadius: 17))
+        .overlay(RoundedRectangle(cornerRadius: 17).strokeBorder(PipoTheme.border))
+        .contentShape(Rectangle())
+    }
+
+    @ViewBuilder
+    private func goalLifecycleMenu(_ goal: PersonalGoal) -> some View {
+        if goal.canRecordSaving {
+            Button("Make focus goal", systemImage: "pin.fill") {
+                makeFocusGoal(goal)
+            }
+            Button("Pause goal", systemImage: "pause.circle") {
+                changeLifecycle(of: goal, to: .paused)
+            }
+        }
+        if goal.lifecycleState == .paused || goal.lifecycleState == .archived {
+            Button("Resume goal", systemImage: "play.circle") {
+                changeLifecycle(of: goal, to: .active)
+            }
+        }
+        if goal.lifecycleState == .active || goal.lifecycleState == .paused {
+            Button("Archive goal", systemImage: "archivebox") {
+                changeLifecycle(of: goal, to: .archived)
+            }
+        }
+    }
+
+    private func makeFocusGoal(_ goal: PersonalGoal) {
+        guard AccountScope.owns(goal, userID: authStateManager.userID),
+              goal.canRecordSaving else { return }
+        let previous = ownedGoals.map { (goal: $0, flag: $0.isFocusPreferred) }
+        for owned in ownedGoals { owned.isFocusPreferred = owned.id == goal.id }
+        do {
+            try modelContext.save()
+            selectedPage = .home
+            updateWidgetSnapshot()
+        } catch {
+            for old in previous { old.goal.isFocusPreferred = old.flag }
+            saveErrorMessage = "Couldn't keep your focus goal. Please try again."
+        }
+    }
+
+    private func changeLifecycle(of goal: PersonalGoal, to state: GoalLifecycleState) {
+        guard AccountScope.owns(goal, userID: authStateManager.userID) else { return }
+        let previous = goal.lifecycleRaw
+        guard goal.transition(to: state) else { return }
+        do {
+            try modelContext.save()
+            if !goal.canRecordSaving, goalToRecord?.id == goal.id {
+                goalToRecord = nil
+                isShowingSaveConfirmation = false
+            }
+            updateWidgetSnapshot()
+        } catch {
+            goal.lifecycleRaw = previous
+            saveErrorMessage = "Couldn't update this goal. Please try again."
+        }
     }
 
     private func insightCard(for goal: PersonalGoal) -> some View {
@@ -692,6 +766,16 @@ struct DashboardView: View {
             if !activeGoals.isEmpty {
                 Text("IN PROGRESS").font(.caption.bold()).foregroundStyle(PipoTheme.muted)
                 ForEach(activeGoals) { goal in compactGoalRow(goal) }
+            }
+            if !pausedGoals.isEmpty {
+                Text("PAUSED").font(.caption.bold()).foregroundStyle(PipoTheme.muted)
+                    .padding(.top, 10)
+                ForEach(pausedGoals) { goal in compactGoalRow(goal) }
+            }
+            if !archivedGoals.isEmpty {
+                Text("ARCHIVED").font(.caption.bold()).foregroundStyle(PipoTheme.muted)
+                    .padding(.top, 10)
+                ForEach(archivedGoals) { goal in compactGoalRow(goal) }
             }
             if !completedGoals.isEmpty {
                 Text("COMPLETED").font(.caption.bold()).foregroundStyle(PipoTheme.muted)
@@ -913,6 +997,7 @@ struct DashboardView: View {
                         .foregroundStyle(PipoTheme.muted)
                     TicketCard {
                         VStack(alignment: .leading, spacing: 12) {
+                            LabeledContent("Status", value: goal.lifecycleState.title)
                             LabeledContent("Recorded", value: money(goal.currentAmount))
                             ProgressView(value: goal.progress)
                                 .tint(PipoTheme.pink)
@@ -926,6 +1011,17 @@ struct DashboardView: View {
                     Text("This screen shows recorded goal progress, not verified contributions from individual members.")
                         .font(.footnote)
                         .foregroundStyle(PipoTheme.muted)
+                    if goal.canRecordSaving {
+                        Button("Pause group goal") {
+                            changeLifecycle(of: goal, to: .paused)
+                        }
+                        .accessibilityIdentifier("pipo.goal.pause")
+                    } else if goal.lifecycleState == .paused || goal.lifecycleState == .archived {
+                        Button("Resume group goal") {
+                            changeLifecycle(of: goal, to: .active)
+                        }
+                        .accessibilityIdentifier("pipo.goal.resume")
+                    }
                 }
                 .padding(20)
             }
@@ -950,7 +1046,7 @@ struct DashboardView: View {
 
     private func beginRecording(_ goal: PersonalGoal) {
         guard AccountScope.owns(goal, userID: authStateManager.userID),
-              goal.progress < 1 else { return }
+              goal.canRecordSaving else { return }
         goalToRecord = goal
         savingAmount = ""
         isShowingSaveConfirmation = true
@@ -1049,7 +1145,7 @@ struct DashboardView: View {
                     Button("Save") {
                         confirmSaving()
                     }
-                    .disabled(parsedSavingAmount == nil || goalToRecord == nil)
+                    .disabled(parsedSavingAmount == nil || goalToRecord?.canRecordSaving != true)
                 }
             }
         }
@@ -1075,7 +1171,7 @@ struct DashboardView: View {
               let userID = authStateManager.userID,
               authStateManager.authState == .authenticated,
               AccountScope.owns(goal, userID: userID),
-              goal.progress < 1,
+              goal.canRecordSaving,
               let amount = parsedSavingAmount else {
             isShowingSaveConfirmation = false
             return
@@ -1157,7 +1253,7 @@ struct DashboardView: View {
     private func openPendingDepositRequest() {
         guard let goalID = navigationManager.consumeDepositRequest() else { return }
         guard let goal = ownedGoals.first(where: {
-            $0.id == goalID && !$0.isGroupGoal && $0.currentAmount < $0.targetAmount
+            $0.id == goalID && !$0.isGroupGoal && $0.canRecordSaving
         }) else {
             saveErrorMessage = "That personal goal is no longer active."
             return
@@ -1171,9 +1267,8 @@ struct DashboardView: View {
     private func updateWidgetSnapshot(latestTransaction: SavingTransaction? = nil) {
         guard let userID = authStateManager.userID else { return }
         let profile = currentProfile
-        let goal = ownedGoals.first {
-            !$0.isGroupGoal && $0.currentAmount < $0.targetAmount
-        }
+        let goal = (focusGoal?.isGroupGoal == false ? focusGoal : nil)
+            ?? activeGoals.first(where: { !$0.isGroupGoal })
         let widgetHistory: [SavingTransaction] = goal.map { goal in
             var history = logs(for: goal)
             if let latestTransaction,
@@ -1287,7 +1382,7 @@ enum DashboardSchedule {
         asOf now: Date,
         calendar: Calendar = .current
     ) -> Date? {
-        guard goal.progress < 1, goal.rhythm != .flexible,
+        guard goal.canRecordSaving, goal.rhythm != .flexible,
               goal.targetAmount.isFinite,
               goal.targetAmount >= 1,
               goal.targetAmount < Double(Int.max),

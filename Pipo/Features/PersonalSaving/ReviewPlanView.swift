@@ -301,6 +301,8 @@ struct PersonalGoalDetailView: View {
 
     @Query private var goals: [PersonalGoal]
     @Environment(AuthStateManager.self) private var authStateManager
+    @Environment(\.modelContext) private var modelContext
+    @State private var lifecycleError: String?
 
     init(goalID: UUID, onBack: @escaping () -> Void, recordSaving: @escaping () -> Void) {
         _goals = Query(filter: #Predicate<PersonalGoal> { $0.id == goalID })
@@ -331,6 +333,14 @@ struct PersonalGoalDetailView: View {
         .background(.white)
         .foregroundStyle(PipoTheme.ink)
         .toolbar(.hidden, for: .navigationBar)
+        .alert("Goal not updated", isPresented: Binding(
+            get: { lifecycleError != nil },
+            set: { if !$0 { lifecycleError = nil } }
+        )) {
+            Button("OK", role: .cancel) { lifecycleError = nil }
+        } message: {
+            Text(lifecycleError ?? "")
+        }
     }
 
     private func details(for goal: PersonalGoal) -> some View {
@@ -342,6 +352,7 @@ struct PersonalGoalDetailView: View {
 
             TicketCard {
                 VStack(alignment: .leading, spacing: 12) {
+                    LabeledContent("Status", value: goal.lifecycleState.title)
                     LabeledContent("Saved", value: money(goal.currentAmount))
                     ProgressView(value: goal.progress)
                         .tint(PipoTheme.green)
@@ -367,8 +378,52 @@ struct PersonalGoalDetailView: View {
                 }
             }
 
-            Button("Record a saving", action: recordSaving)
+            if goal.canRecordSaving {
+                Button("Record a saving", action: recordSaving)
+                    .buttonStyle(PrimaryActionButtonStyle())
+                    .accessibilityIdentifier("pipo.goal.recordSaving")
+                Button("Pause this goal") {
+                    changeLifecycle(of: goal, to: .paused)
+                }
+                .font(.subheadline.weight(.semibold))
+                .foregroundStyle(PipoTheme.deepPink)
+                .frame(maxWidth: .infinity, minHeight: 44)
+                .accessibilityIdentifier("pipo.goal.pause")
+                Button("Archive this goal") {
+                    changeLifecycle(of: goal, to: .archived)
+                }
+                .font(.footnote.weight(.medium))
+                .foregroundStyle(PipoTheme.muted)
+                .frame(maxWidth: .infinity, minHeight: 44)
+                .accessibilityIdentifier("pipo.goal.archive")
+            } else if goal.lifecycleState == .paused || goal.lifecycleState == .archived {
+                Text(goal.lifecycleState == .paused
+                     ? "This goal is paused. Nothing was lost."
+                     : "This goal is archived. Your saved history is still here.")
+                    .font(.footnote)
+                    .foregroundStyle(PipoTheme.muted)
+                Button("Resume this goal") {
+                    changeLifecycle(of: goal, to: .active)
+                }
                 .buttonStyle(PrimaryActionButtonStyle())
+                .accessibilityIdentifier("pipo.goal.resume")
+            } else {
+                Label("Goal completed", systemImage: "checkmark.seal.fill")
+                    .font(.headline)
+                    .foregroundStyle(PipoTheme.green)
+            }
+        }
+    }
+
+    private func changeLifecycle(of goal: PersonalGoal, to state: GoalLifecycleState) {
+        guard AccountScope.owns(goal, userID: authStateManager.userID) else { return }
+        let old = goal.lifecycleRaw
+        guard goal.transition(to: state) else { return }
+        do {
+            try modelContext.save()
+        } catch {
+            goal.lifecycleRaw = old
+            lifecycleError = "We couldn't save this change. Please try again."
         }
     }
 }

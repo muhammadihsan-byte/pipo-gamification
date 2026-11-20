@@ -25,6 +25,19 @@ enum SavingRhythm: String, Codable, CaseIterable, Identifiable, Sendable {
     var id: String { rawValue }
 }
 
+enum GoalLifecycleState: String, Codable, CaseIterable, Sendable {
+    case active, paused, archived, completed
+
+    var title: String {
+        switch self {
+        case .active: "In progress"
+        case .paused: "Paused"
+        case .archived: "Archived"
+        case .completed: "Completed"
+        }
+    }
+}
+
 @Model
 final class SubItem {
     var id: UUID
@@ -71,6 +84,9 @@ final class PersonalGoal {
     // A nil owner is quarantined and never displayed until ownership is verified.
     var ownerUserID: UUID?
     var createdAt: Date
+    // Optional persistence fields permit lightweight migration from old rows.
+    var lifecycleRaw: String?
+    var isFocusPreferred: Bool?
 
     init(
         id: UUID = UUID(),
@@ -86,7 +102,9 @@ final class PersonalGoal {
         preferredSavingDay: Int? = nil,
         isGroupGoal: Bool = false,
         ownerUserID: UUID? = nil,
-        createdAt: Date = .now
+        createdAt: Date = .now,
+        lifecycleRaw: String? = nil,
+        isFocusPreferred: Bool? = nil
     ) {
         self.id = id
         self.title = title
@@ -102,6 +120,37 @@ final class PersonalGoal {
         self.isGroupGoal = isGroupGoal
         self.ownerUserID = ownerUserID
         self.createdAt = createdAt
+        self.lifecycleRaw = lifecycleRaw
+        self.isFocusPreferred = isFocusPreferred
+    }
+
+    // Progress determines completion, independent of an earlier paused state.
+    // Unrecognized legacy values revert safely to an active goal.
+    var lifecycleState: GoalLifecycleState {
+        if targetAmount > 0 && currentAmount >= targetAmount { return .completed }
+        switch lifecycleRaw {
+        case GoalLifecycleState.paused.rawValue: return .paused
+        case GoalLifecycleState.archived.rawValue: return .archived
+        default: return .active
+        }
+    }
+
+    var canRecordSaving: Bool { lifecycleState == .active }
+
+    @discardableResult
+    func transition(to next: GoalLifecycleState) -> Bool {
+        let allowed: Bool
+        switch (lifecycleState, next) {
+        case (.active, .paused), (.active, .archived),
+             (.paused, .active), (.paused, .archived),
+             (.archived, .active):
+            allowed = true
+        default:
+            allowed = false
+        }
+        guard allowed else { return false }
+        lifecycleRaw = next == .active ? nil : next.rawValue
+        return true
     }
 
     var progress: Double {
