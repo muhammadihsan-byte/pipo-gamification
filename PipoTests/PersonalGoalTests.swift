@@ -1,4 +1,5 @@
 import Foundation
+import UIKit
 import SwiftData
 import XCTest
 @testable import Pipo
@@ -382,5 +383,47 @@ extension PersonalGoalTests {
         XCTAssertEqual(details.creatorID, owner)
         XCTAssertEqual(details.preparedMembers, ["Ari"])
         XCTAssertEqual(review.members.map(\.status), [.accepted])
+    }
+}
+
+extension PersonalGoalTests {
+    @MainActor
+    func testIssue48PhotoNormalizesWithoutChangingSavingRecords() throws {
+        let owner = UUID()
+        let goal = PersonalGoal(
+            title: "A real photo goal", category: .trip,
+            targetAmount: 1_000_000, currentAmount: 250_000,
+            targetDate: Date(timeIntervalSinceNow: 90 * 86_400),
+            ownerUserID: owner
+        )
+        let input = UIGraphicsImageRenderer(
+            size: CGSize(width: 320, height: 500)
+        ).pngData { ctx in
+            UIColor.systemTeal.setFill()
+            ctx.fill(CGRect(x: 0, y: 0, width: 320, height: 500))
+        }
+        let clean = try PipoGoalPhotoProcessing.prepare(input)
+        XCTAssertTrue(clean.starts(with: [0xFF, 0xD8]))
+        let outputImage = try XCTUnwrap(UIImage(data: clean))
+        XCTAssertEqual(outputImage.size.width, 320)
+        XCTAssertEqual(outputImage.size.height, 500)
+        goal.goalPhoto = clean
+        XCTAssertEqual(goal.currentAmount, 250_000)
+        XCTAssertEqual(goal.targetAmount, 1_000_000)
+        XCTAssertEqual(goal.progress, 0.25)
+        goal.goalPhoto = nil
+        XCTAssertNil(goal.goalPhoto)
+        XCTAssertEqual(goal.currentAmount, 250_000)
+    }
+
+    @MainActor
+    func testIssue48RejectsUnreadableAndOversizedPhotoData() {
+        XCTAssertThrowsError(try PipoGoalPhotoProcessing.prepare(Data()))
+        XCTAssertThrowsError(try PipoGoalPhotoProcessing.prepare(Data("not an image".utf8)))
+        XCTAssertThrowsError(
+            try PipoGoalPhotoProcessing.prepare(
+                Data(repeating: 0xFE, count: 12 * 1024 * 1024 + 1)
+            )
+        )
     }
 }
