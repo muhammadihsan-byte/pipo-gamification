@@ -41,3 +41,14 @@ The branch currently adds:
 **Known gaps preventing completion:** secure plan-revision persistence and budget-item sync; signed two-account RLS tests; correction-event replay after device restoration; server/net-balance reconciliation with the local goal snapshot; offline idempotency and conflict handling; full screenshot/MP4 and device accessibility validation. The correction RPC and migration proposal require independent security review before deployment.
 
 **CI:** exact-head run for PR #47 was requested by temporarily targeting main for a PR event, then restoring the PR to its stacked draft base. Only a completed successful exact-head run counts as validation. Do not claim a queued/in-progress run as success. No user merge approval has been requested.
+
+## Recovery and server-write safety update
+
+This branch now includes **disabled-by-default infrastructure**, not a released financial flow:
+- `SupabaseService.fetchVerifiedSavingLedger` reads owned contribution and adjustment rows, verifies that the signed-in user did not change between calls, validates strict whole-IDR values, IDs, event types, account ownership, and timestamp formats (including PostgreSQL fractional timestamps), and computes a **read-only** balance/XP snapshot.
+- `SupabaseService.submitVerifiedMoneyOut` is an **unwired** RPC adapter using the caller-supplied immutable request UUID. It refuses malformed amounts, notes, unsupported replanning preferences, and server receipts with mismatching IDs/owner/goal/amount/note/preference. No automatic retry generates a new ID.
+- The SQL proposal now contains an immutability trigger to reject modified historical saving contributions while permitting byte-identical UPSERT retries. The same trigger locks the goal row to serialize contributions against the money-out RPC. Direct transaction DELETE access is revoked for authenticated users in the **proposal only**.
+
+**Critical: do not enable Money Out in the product yet.** Remote recovery cannot safely overwrite a device goal that contains unsynced local contributions. The application must first implement durable pending request intent, a consistent server snapshot / local merge policy and conflict recovery, a versioned goal-revision RPC, and tests exercising two real Supabase Auth users against a disposable database. The existing `saving_goals` UPSERT remains unsuitable for concurrent revisions across multiple devices.
+
+No live data or access policies have been altered. The current database still permits authenticated users to update/delete their own contribution rows; this is a release blocker until the proposed protections are deployed and exercised in staging.
