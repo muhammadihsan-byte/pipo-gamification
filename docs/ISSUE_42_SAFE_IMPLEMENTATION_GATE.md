@@ -68,3 +68,7 @@ No live data or access policies have been altered. The current database still pe
 On 21 November 2026, Supabase `pipo` had no existing development branches. The connector quoted `0.01344` USD **per hour** for creating a Supabase branch. Do not create this branch without explicit agreement to the nonzero recurring cost. Real-user A/B RLS, idempotency, concurrent deposits and corrections remain **unverified on a database**, and the SQL in `supabase/proposals/issue_42_money_out_ledger_REVIEW_ONLY.sql` must remain a proposal only until staging is available.
 
 Note: an iOS XCTest pass exercises local Swift application logic; it cannot validate the proposed SQL's execution, Postgres permissions or Supabase RPC behavior.
+
+## Most recent simulator failure triage
+
+Run [#44817352154](https://github.com/muhammadihsan-byte/pipo-gamification/actions/runs/44817352154) compiled successfully but failed the *test fixture* `testIssue42CloudRecoveryRejectsUnknownAdjustmentTypeAndFractionalAmount` because a global text replacement of `999` sometimes mutated digits inside randomly generated UUIDs. The test now replaces the exact JSON `"amount":999` substring only, preserving UUIDs. This is a test fixture defect, not evidence that a production money-out transaction or cloud write occurred. Re-run full unit and focused native QA against the new head before any merge.
