@@ -31,16 +31,19 @@ struct PipoMascotView: View {
     private let state: PipoMascotState
     private let companion: CompanionState?
     private let isPresented: Bool
+    private let onTap: (() -> Void)?
 
     init(state: PipoMascotState) {
         self.state = state
         companion = nil
         isPresented = true
+        onTap = nil
     }
 
-    init(companion: CompanionState, isPresented: Bool = true) {
+    init(companion: CompanionState, isPresented: Bool = true, onTap: (() -> Void)? = nil) {
         self.companion = companion
         self.isPresented = isPresented
+        self.onTap = onTap
         state = .idle
     }
 
@@ -103,6 +106,7 @@ struct PipoMascotView: View {
         let now = ContinuousClock.now
         guard canPlay, lastTap.map({ $0.duration(to: now) >= .milliseconds(900) }) ?? true else { return }
         lastTap = now
+        onTap?()
         if reduceMotion {
             UIImpactFeedbackGenerator(style: .light).impactOccurred()
         } else {
