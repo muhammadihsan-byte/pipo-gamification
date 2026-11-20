@@ -127,7 +127,8 @@ struct RootView: View {
                     try await storeKitManager.restorePurchasedSlots(
                         userID: userID,
                         modelContext: modelContext,
-                        subscriptionManager: subscriptionManager
+                        subscriptionManager: subscriptionManager,
+                        isCurrentAccount: { authStateManager.userID == userID }
                     )
                 } catch {
                     noticeMessage = "Purchased slots could not sync: \(error.localizedDescription)"
@@ -159,7 +160,8 @@ struct RootView: View {
                     try await storeKitManager.restorePurchasedSlots(
                         userID: userID,
                         modelContext: modelContext,
-                        subscriptionManager: subscriptionManager
+                        subscriptionManager: subscriptionManager,
+                        isCurrentAccount: { authStateManager.userID == userID }
                     )
                 } catch {
                     noticeMessage = "Purchased slots could not sync: \(error.localizedDescription)"
