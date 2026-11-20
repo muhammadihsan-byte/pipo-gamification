@@ -380,15 +380,28 @@ final class SupabaseService {
         )
         guard !batch.goals.isEmpty else { return }
         // The composite FK requires goals before their saving entries.
-        try await client.from("saving_goals")
-            .upsert(batch.goals, onConflict: "id")
-            .execute()
+        try await upsertGoalPayloads(batch.goals)
         guard client.auth.currentUser?.id == authenticatedUserID else {
             throw SupabaseServiceError.notAuthenticated
         }
         guard !batch.transactions.isEmpty else { return }
-        try await client.from("saving_transactions")
-            .upsert(batch.transactions, onConflict: "id")
+        try await upsertTransactionPayloads(batch.transactions)
+    }
+
+    // The Supabase SDK's PostgrestResponse<Void> is not Sendable in Swift 6.
+    // Keep that response fully inside nonisolated async helpers returning Void,
+    // following the same pattern as the pre-existing transaction writer.
+    private nonisolated func upsertGoalPayloads(_ payloads: [SavingGoalPayload]) async throws {
+        try await client
+            .from("saving_goals")
+            .upsert(payloads, onConflict: "id")
+            .execute()
+    }
+
+    private nonisolated func upsertTransactionPayloads(_ payloads: [SavingTransactionPayload]) async throws {
+        try await client
+            .from("saving_transactions")
+            .upsert(payloads, onConflict: "id")
             .execute()
     }
 
