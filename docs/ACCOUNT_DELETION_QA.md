@@ -7,7 +7,7 @@
 - Profile → Account & privacy → Delete my account, reachable even with **zero goals**.
 - Explains irreversible deletion, self-recorded money, and removal of cloud and local data.
 - User must type `DELETE` and confirm. Cancel remains available and does not call the server.
-- Swift app invokes authenticated `delete-account` Edge Function; it never carries a target user ID, service-role key or password.
+- Swift app invokes authenticated `delete-account` Edge Function; it sends only the signed-in ID as a non-authoritative \`expected_user_id\` consistency check; it carries no service-role key or password. The server verifies the caller independently and rejects mismatches.
 - Function validates the bearer token against Supabase Auth `/auth/v1/user` and uses the **returned verified ID only** with the privileged hard-delete endpoint.
 - Current deployed schema's `saving_goals`, `saving_transactions` and `user_profiles` all reference `auth.users` with `ON DELETE CASCADE` (verified read-only 20 Nov 2026). No new migration is required.
 - Local SwiftData goals/entries/profiles are deleted **only after a positive server reply**, restricted to exactly that UUID; `PersonalGoal.subItems` cascade via SwiftData.
@@ -23,8 +23,8 @@ The function is **source only** at `supabase/functions/delete-account/`; it has 
 - Entrypoint: `index.ts`
 - Keep `verify_jwt = true` (see `supabase/config.toml`). The platform validates the caller's user JWT; the function then fetches the actual user using that token.
 - Uses the runtime's `SUPABASE_URL`, `SUPABASE_ANON_KEY` and `SUPABASE_SERVICE_ROLE_KEY` **only server-side**; never add privileged values to Xcode, commit them or send them to the client.
-- Only `POST`; no request body ID selects another account. Return success only after the Auth admin deletion request succeeds.
-- Run Deno unit tests with `deno test supabase/functions/delete-account/handler.test.ts`. Test missing/expired token, cross-user injection, admin errors and missing server key.
+- Only `POST`; the request's \`expected_user_id\` must match the verified session UUID, but never selects the deletion subject. Return success only after the Auth admin deletion request succeeds.
+- Run Deno unit tests with `deno test supabase/functions/delete-account/handler.test.ts`. Test missing/expired token, cross-user injection, stale-account mismatch, missing confirmation, admin errors and missing server key.
 - Confirm no other future tables, storage objects, group memberships or purchase ledgers introduce FK dependencies before deployment.
 - Apple Sign in linked accounts require a **verified Apple token revocation process** as part of deletion; the current implementation does not revoke Apple authorization. This remains a release blocker if Apple sign-in is enabled.
 
@@ -36,7 +36,7 @@ Use only disposable accounts with explicit test consent. Never delete a real cus
 - [ ] Backend function deployed only after explicit owner approval; JWT verification still on.
 - [ ] On a signed iPhone, sign up test account A, save personal and group plans, create a transaction and onboarding nickname; then verify the profile delete entry is reachable.
 - [ ] On a brand-new account with **no goals**, verify Profile → Delete account works.
-- [ ] Cancel and incorrect confirmation produce zero network deletion calls.
+- [ ] Cancel and incorrect confirmation produce zero network deletion calls; a stale confirmation for account A cannot delete a now-active account B.
 - [ ] Simulated offline/500/401 backend response leaves A's SwiftData, onboarding and widget state intact and gives truthful failure.
 - [ ] Confirm A's Auth user no longer exists, A's cloud goal/transaction/profile rows are gone, refresh tokens cannot access the deleted account, and a later sign-in with A fails.
 - [ ] Confirm B's cloud and device rows remain intact after deleting A; ownerless historical local records are never re-assigned.
