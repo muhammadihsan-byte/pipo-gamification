@@ -23,7 +23,7 @@ private enum DashboardPage: String, CaseIterable, Identifiable {
 @MainActor
 struct DashboardView: View {
     private let onCreateGoal: () -> Void
-    private let onSavingCompleted: (SavingTransaction, PersonalGoal, Int, Int) -> Void
+    private let onSavingCompleted: (SavingTransaction, PersonalGoal, Int, Int, [PipoBadge]) -> Void
 
     @Environment(\.modelContext) private var modelContext
     @Environment(AuthStateManager.self) private var authStateManager
@@ -47,13 +47,14 @@ struct DashboardView: View {
         transaction: SavingTransaction,
         goal: PersonalGoal,
         xpEarned: Int,
-        streakDays: Int
+        streakDays: Int,
+        unlockedBadges: [PipoBadge]
     )?
 
     init(
         onCreateGoal: @escaping () -> Void,
-        onSavingCompleted: @escaping (SavingTransaction, PersonalGoal, Int, Int) -> Void = {
-            _, _, _, _ in
+        onSavingCompleted: @escaping (SavingTransaction, PersonalGoal, Int, Int, [PipoBadge]) -> Void = {
+            _, _, _, _, _ in
         }
     ) {
         self.onCreateGoal = onCreateGoal
@@ -102,6 +103,11 @@ struct DashboardView: View {
         UserProfile.existing(for: authStateManager.userID, in: profiles)
     }
 
+    private var earnedBadgeCount: Int {
+        let earned = Set(currentProfile?.unlockedBadgeIds ?? [])
+        return PipoBadge.allCases.filter { earned.contains($0.rawValue) }.count
+    }
+
     var body: some View {
         VStack(spacing: 0) {
             ScrollView {
@@ -143,6 +149,14 @@ struct DashboardView: View {
         .onAppear {
             updateWidgetSnapshot()
             openPendingDepositRequest()
+            if navigationManager.consumeAchievementsRequest() {
+                showingAchievements = true
+            }
+        }
+        .onChange(of: navigationManager.isMilestonePresented) { _, isPresented in
+            if !isPresented && navigationManager.consumeAchievementsRequest() {
+                showingAchievements = true
+            }
         }
         .onChange(of: navigationManager.pendingDepositGoalID) { _, goalID in
             guard goalID != nil else { return }
@@ -516,7 +530,7 @@ struct DashboardView: View {
             } label: {
                 metricCard(
                     label: "ACHIEVEMENTS",
-                    value: "\(currentProfile?.unlockedBadgeIds.count ?? 0) badges",
+                    value: "\(earnedBadgeCount) badges",
                     hint: "See your collection"
                 )
             }
@@ -551,7 +565,7 @@ struct DashboardView: View {
     }
 
     private func rhythmValue(for goal: PersonalGoal) -> String {
-        let count = DashboardActivity.consecutivePeriods(
+        let count = SavingConsistency.consecutivePeriods(
             dates: logs(for: goal).map(\.date),
             rhythm: goal.rhythm,
             startDate: goal.startDate
@@ -685,7 +699,7 @@ struct DashboardView: View {
                     Label("Achievements", systemImage: "medal.fill")
                         .font(.headline)
                     Spacer()
-                    Text("\(currentProfile?.unlockedBadgeIds.count ?? 0) earned")
+                    Text("\(earnedBadgeCount) earned")
                     Image(systemName: "chevron.right")
                 }
                 .foregroundStyle(PipoTheme.ink)
@@ -755,22 +769,42 @@ struct DashboardView: View {
     private var achievementsSheet: some View {
         NavigationStack {
             ScrollView {
-                VStack(alignment: .leading, spacing: 14) {
-                    if let ids = currentProfile?.unlockedBadgeIds, !ids.isEmpty {
-                        ForEach(ids, id: \.self) { id in
-                            Label(id.replacingOccurrences(of: "-", with: " ").capitalized, systemImage: "medal.fill")
-                                .font(.headline)
-                                .foregroundStyle(PipoTheme.deepPink)
-                                .padding(16)
-                                .frame(maxWidth: .infinity, alignment: .leading)
-                                .background(PipoTheme.palePink, in: RoundedRectangle(cornerRadius: 16))
+                LazyVStack(alignment: .leading, spacing: 12) {
+                    Text("\(earnedBadgeCount) of \(PipoBadge.allCases.count) badges collected")
+                        .font(.subheadline)
+                        .foregroundStyle(PipoTheme.muted)
+                        .accessibilityIdentifier("pipo.achievements.count")
+                    ForEach(PipoBadge.allCases) { badge in
+                        let earned = currentProfile?.unlockedBadgeIds.contains(badge.rawValue) ?? false
+                        HStack(spacing: 12) {
+                            Image("PipoBadge_\(badge.rawValue)")
+                                .resizable()
+                                .scaledToFit()
+                                .frame(width: 76, height: 68)
+                                .opacity(earned ? 1 : 0.35)
+                                .accessibilityHidden(true)
+                            VStack(alignment: .leading, spacing: 5) {
+                                Text(badge.title)
+                                    .font(.subheadline.bold())
+                                    .foregroundStyle(PipoTheme.ink)
+                                Text(badge.description)
+                                    .font(.caption)
+                                    .foregroundStyle(PipoTheme.muted)
+                                    .fixedSize(horizontal: false, vertical: true)
+                                Text(earned ? "Earned" : (badge.isImplemented ? "Locked" : "Coming later"))
+                                    .font(.caption2.weight(.semibold))
+                                    .foregroundStyle(earned ? PipoTheme.deepPink : PipoTheme.muted)
+                            }
+                            Spacer(minLength: 0)
+                            Image(systemName: earned ? "checkmark.seal.fill" : "lock.fill")
+                                .foregroundStyle(earned ? PipoTheme.deepPink : PipoTheme.muted)
+                                .accessibilityHidden(true)
                         }
-                    } else {
-                        ContentUnavailableView(
-                            "No badges yet",
-                            systemImage: "medal",
-                            description: Text("Your first achievement comes from a real saving milestone.")
-                        )
+                        .padding(12)
+                        .background(earned ? PipoTheme.palePink : PipoTheme.cream,
+                                    in: RoundedRectangle(cornerRadius: 16))
+                        .accessibilityElement(children: .combine)
+                        .accessibilityLabel("\(badge.title). \(earned ? "Earned" : badge.isImplemented ? "Locked" : "Coming later"). \(badge.description)")
                     }
                 }
                 .padding(20)
@@ -973,16 +1007,24 @@ struct DashboardView: View {
         let previousStreakDays = profile.streakDays
         let previousLastSavingDate = profile.lastSavingDate
         let previousUserID = profile.userID
+        let previousBadges = profile.unlockedBadgeIds
+        let priorGoalTransactions = logs(for: goal)
         let transaction: SavingTransaction
+        let newlyUnlocked: [PipoBadge]
 
         do {
             profile.userID = userID
             transaction = try GamificationManager().recordSaving(
                 amount: amount,
                 goal: goal,
-                profile: profile
+                profile: profile,
+                priorTransactions: priorGoalTransactions
             )
             transaction.userID = userID
+            newlyUnlocked = AchievementEngine.grant(
+                profile: profile, goal: goal, transaction: transaction,
+                history: priorGoalTransactions, previousAmount: previousCurrentAmount
+            )
         } catch {
             profile.userID = previousUserID
             goal.currentAmount = previousCurrentAmount
@@ -990,6 +1032,7 @@ struct DashboardView: View {
             profile.currentLevel = previousCurrentLevel
             profile.streakDays = previousStreakDays
             profile.lastSavingDate = previousLastSavingDate
+            profile.unlockedBadgeIds = previousBadges
             saveErrorMessage = error.localizedDescription
             isShowingSaveConfirmation = false
             return
@@ -1009,6 +1052,7 @@ struct DashboardView: View {
             profile.currentLevel = previousCurrentLevel
             profile.streakDays = previousStreakDays
             profile.lastSavingDate = previousLastSavingDate
+            profile.unlockedBadgeIds = previousBadges
             if existingProfile == nil {
                 modelContext.delete(profile)
             }
@@ -1021,7 +1065,8 @@ struct DashboardView: View {
             transaction,
             goal,
             transaction.xpEarned,
-            profile.streakDays
+            profile.streakDays,
+            newlyUnlocked
         )
         updateWidgetSnapshot(latestTransaction: transaction)
         isShowingSaveConfirmation = false
@@ -1057,7 +1102,12 @@ struct DashboardView: View {
         }
 
         let snapshot = WidgetSnapshot(
-            streakDays: profile?.streakDays ?? 0,
+            streakDays: goal.map {
+                SavingConsistency.consecutivePeriods(
+                    dates: logs(for: $0).map(\.date),
+                    rhythm: $0.rhythm, startDate: $0.startDate
+                )
+            } ?? 0,
             totalXP: profile?.totalXP ?? 0,
             currentLevel: profile?.currentLevel ?? 1,
             goalID: goal?.id,
@@ -1066,7 +1116,17 @@ struct DashboardView: View {
             nextDepositDate: goal.flatMap {
                 nextDepositDate(for: $0, lastSavingDate: lastSavingDate)
             },
-            ownerUserID: userID
+            ownerUserID: userID,
+            consistencyUnit: goal.flatMap { goal in
+                switch goal.rhythm {
+                case .daily: "day"
+                case .weekly: "week"
+                case .biWeekly: "2-week period"
+                case .monthly: "month"
+                case .flexible: nil
+                }
+            },
+            recordedCount: goal.map { logs(for: $0).count } ?? 0
         )
 
         do {
@@ -1097,7 +1157,8 @@ struct DashboardView: View {
                 reward.transaction,
                 reward.goal,
                 reward.xpEarned,
-                reward.streakDays
+                reward.streakDays,
+                reward.unlockedBadges
             )
             completedSavingReward = nil
         }
@@ -1119,58 +1180,18 @@ struct DashboardView: View {
 }
 
 
-// A goal-specific streak represents periods containing recorded contributions.
-// Unlike UserProfile.streakDays, it never combines goals with different rhythms.
+// Compatibility entry point; one canonical cadence implementation.
 enum DashboardActivity {
     static func consecutivePeriods(
-        dates: [Date],
-        rhythm: SavingRhythm,
-        startDate: Date,
-        asOf now: Date = .now,
-        calendar: Calendar = .current
+        dates: [Date], rhythm: SavingRhythm, startDate: Date,
+        asOf now: Date = .now, calendar: Calendar = .current
     ) -> Int {
-        guard rhythm != .flexible else { return 0 }
-        let start = calendar.startOfDay(for: startDate)
-        let today = calendar.startOfDay(for: now)
-        guard start <= today else { return 0 }
-        let currentPeriod = index(for: today, from: start, rhythm: rhythm, calendar: calendar)
-        let savedPeriods = Set(dates.compactMap { date -> Int? in
-            guard date >= startDate, date <= now else { return nil }
-            return index(for: date, from: start, rhythm: rhythm, calendar: calendar)
-        })
-        guard let mostRecent = savedPeriods.max(),
-              mostRecent >= currentPeriod - 1 else { return 0 }
-        var count = 0
-        var period = mostRecent
-        while savedPeriods.contains(period) {
-            count += 1
-            period -= 1
-        }
-        return count
-    }
-
-    private static func index(
-        for date: Date,
-        from start: Date,
-        rhythm: SavingRhythm,
-        calendar: Calendar
-    ) -> Int {
-        switch rhythm {
-        case .daily:
-            return calendar.dateComponents([.day], from: start, to: date).day ?? 0
-        case .weekly, .biWeekly:
-            let days = calendar.dateComponents([.day], from: start, to: date).day ?? 0
-            return days / (rhythm == .weekly ? 7 : 14)
-        case .monthly:
-            let startMonth = calendar.dateInterval(of: .month, for: start)?.start ?? start
-            let currentMonth = calendar.dateInterval(of: .month, for: date)?.start ?? date
-            return calendar.dateComponents([.month], from: startMonth, to: currentMonth).month ?? 0
-        case .flexible:
-            return 0
-        }
+        SavingConsistency.consecutivePeriods(
+            dates: dates, rhythm: rhythm, startDate: startDate,
+            asOf: now, calendar: calendar
+        )
     }
 }
-
 
 /// A date derived from the user's selected saving rhythm and preferred day,
 /// not from the date of the last (possibly extra) contribution.

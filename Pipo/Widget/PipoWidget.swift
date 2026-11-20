@@ -66,7 +66,7 @@ struct PipoWidget: Widget {
                 .widgetURL(entry.logDepositURL)
         }
         .configurationDisplayName("Pipo")
-        .description("Track your saving streak and goal progress.")
+        .description("Track your saving goal progress and planned contributions.")
         .supportedFamilies([.systemSmall, .systemMedium])
     }
 }
@@ -110,9 +110,9 @@ private struct PipoWidgetView: View {
                     .foregroundStyle(.secondary)
                     .lineLimit(2)
             } else {
-                Text("🔥 \(entry.snapshot.streakDays) Day Streak")
+                Text(consistencyText)
                     .font(.subheadline.weight(.bold))
-                    .lineLimit(1)
+                    .lineLimit(2)
                     .minimumScaleFactor(0.8)
                 Text("Level \(entry.snapshot.currentLevel) · \(entry.snapshot.totalXP.formatted()) XP")
                     .font(.caption)
@@ -174,6 +174,15 @@ private struct PipoWidgetView: View {
             }
         }
         .padding(4)
+    }
+
+    private var consistencyText: String {
+        if let unit = entry.snapshot.consistencyUnit {
+            let count = entry.snapshot.streakDays
+            return "\(count) \(unit)\(count == 1 ? "" : "s") consistent"
+        }
+        let count = entry.snapshot.recordedCount
+        return "\(count) \(count == 1 ? "save" : "saves") recorded"
     }
 
     private var nextDepositText: String {

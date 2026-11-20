@@ -4,15 +4,18 @@ import SwiftUI
 struct ConsistencyMilestoneView: View {
     let xpEarned: Int
     let streakDays: Int
+    let badgeTitles: [String]
     let onViewAchievements: () -> Void
 
     init(
         xpEarned: Int = GamificationManager.xpPerSaving,
         streakDays: Int,
+        badgeTitles: [String] = [],
         onViewAchievements: @escaping () -> Void
     ) {
         self.xpEarned = xpEarned
         self.streakDays = streakDays
+        self.badgeTitles = badgeTitles
         self.onViewAchievements = onViewAchievements
     }
 
@@ -60,15 +63,26 @@ struct ConsistencyMilestoneView: View {
         VStack(spacing: 8) {
             Label("+\(xpEarned) XP", systemImage: "sparkles")
                 .foregroundStyle(PipoTheme.deepPink)
-            Label("Saving recorded", systemImage: "checkmark.seal.fill")
-                .foregroundStyle(PipoTheme.pink)
+            if let latestBadge = badgeTitles.first {
+                Label("Badge unlocked: \(latestBadge)", systemImage: "medal.fill")
+                    .foregroundStyle(PipoTheme.pink)
+                if badgeTitles.count > 1 {
+                    Text("+\(badgeTitles.count - 1) more badges unlocked")
+                        .font(.caption.weight(.medium))
+                        .foregroundStyle(PipoTheme.muted)
+                }
+            } else {
+                Label("Saving recorded", systemImage: "checkmark.seal.fill")
+                    .foregroundStyle(PipoTheme.pink)
+            }
         }
         .font(.subheadline.weight(.bold))
         .padding(.horizontal, 16)
         .padding(.vertical, 12)
         .background(PipoTheme.palePink, in: RoundedRectangle(cornerRadius: 16))
         .accessibilityElement(children: .combine)
-        .accessibilityLabel("\(xpEarned) XP earned. Saving recorded.")
+        .accessibilityLabel("\(xpEarned) XP earned. " +
+            (badgeTitles.isEmpty ? "Saving recorded." : "Badges unlocked: \(badgeTitles.joined(separator: ", "))."))
     }
 }
 
