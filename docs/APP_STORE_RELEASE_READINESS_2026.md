@@ -4,7 +4,7 @@
 
 ## Verified in repository / backend
 - SwiftData local saving flow; owned account records are isolated.
-- Supabase Auth login and password recovery source; separate callback routes.
+- Supabase Auth login, user-facing account sign-out and password recovery source; separate callback routes.
 - In-app Delete Account flow with typed confirmation, app-owned local cleanup and backend Auth-user hard-delete handler. Cloud tables currently have ON DELETE CASCADE FKs.
 - Remote personal saving **upload only**: no cross-device restore, conflict resolution, or reinstall guarantee. Do not call it full backup or full sync.
 - Group plans are device-local rather than real multi-user shared accounts; avoid marketing collaboration as shipped.
