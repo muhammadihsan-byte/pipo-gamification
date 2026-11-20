@@ -216,6 +216,9 @@ final class PipoUIRecordingTests: XCTestCase {
         XCTAssertTrue(focus.waitForExistence(timeout: 25))
         focus.tap()
 
+        let backToGoals = app.buttons["Saving goals"].firstMatch
+        XCTAssertTrue(backToGoals.waitForExistence(timeout: 15),
+                      "Tapping the focus goal must navigate to the personal goal detail")
         XCTAssertTrue(app.staticTexts["BUDGET CATEGORIES"].waitForExistence(timeout: 15),
                       "Approved Budget B must appear in Goal Detail")
         XCTAssertTrue(app.staticTexts["Travel & stay"].exists,
