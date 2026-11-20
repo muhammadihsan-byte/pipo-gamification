@@ -355,6 +355,21 @@ struct SavingMoneyOutRPCReceipt: Decodable, Sendable {
     }
 }
 
+/// A single PostgreSQL statement snapshot prevents torn cross-device reads.
+/// The RPC enforces owner RLS; the client independently validates identity.
+struct SavingLedgerCloudSnapshotEnvelope: Decodable, Sendable {
+    let goalID: UUID
+    let userID: UUID
+    let contributions: [SavingLedgerCloudContribution]
+    let adjustments: [SavingLedgerCloudAdjustment]
+
+    enum CodingKeys: String, CodingKey {
+        case goalID = "goal_id"
+        case userID = "user_id"
+        case contributions, adjustments
+    }
+}
+
 enum SavingCloudRecoveryError: Error, Equatable {
     case invalidServerEntry
     case accountChanged
@@ -681,9 +696,9 @@ final class SupabaseService {
             .execute().value
     }
 
-    /// Read-only cloud recovery preview, intentionally NOT called by normal
-    /// dashboard loading until the SQL migration and offline sync policy pass QA.
-    /// Reading the second table fails closed if the migration is absent.
+    /// Reads one RLS-authorized database snapshot instead of racing two
+    /// independent requests. Never overwrites device-only unsynced entries.
+    /// Unavailable until the proposed database RPC is deployed and tested.
     func fetchVerifiedSavingLedger(
         goalID: UUID,
         authenticatedUserID: UUID
@@ -691,44 +706,26 @@ final class SupabaseService {
         guard client.auth.currentUser?.id == authenticatedUserID else {
             throw SupabaseServiceError.notAuthenticated
         }
-        let entries = try await fetchSavingLedgerContributions(
-            goalID: goalID, userID: authenticatedUserID
-        )
+        let cloud = try await fetchAtomicSavingLedgerSnapshot(goalID: goalID)
         guard client.auth.currentUser?.id == authenticatedUserID else {
             throw SavingCloudRecoveryError.accountChanged
         }
-        let adjustments = try await fetchSavingLedgerAdjustments(
-            goalID: goalID, userID: authenticatedUserID
-        )
-        guard client.auth.currentUser?.id == authenticatedUserID else {
-            throw SavingCloudRecoveryError.accountChanged
+        guard cloud.goalID == goalID, cloud.userID == authenticatedUserID else {
+            throw SavingCloudRecoveryError.invalidServerEntry
         }
         return try SavingCloudLedgerReconciler.reconstruct(
             goalID: goalID, ownerID: authenticatedUserID,
-            contributions: entries, adjustments: adjustments
+            contributions: cloud.contributions, adjustments: cloud.adjustments
         )
     }
 
-    private nonisolated func fetchSavingLedgerContributions(
-        goalID: UUID, userID: UUID
-    ) async throws -> [SavingLedgerCloudContribution] {
-        try await client.from("saving_transactions")
-            .select("id,goal_id,user_id,amount,xp_earned,date")
-            .eq("goal_id", value: goalID.uuidString)
-            .eq("user_id", value: userID.uuidString)
-            .limit(10_001)
-            .execute().value
-    }
-
-    private nonisolated func fetchSavingLedgerAdjustments(
-        goalID: UUID, userID: UUID
-    ) async throws -> [SavingLedgerCloudAdjustment] {
-        try await client.from("saving_adjustments")
-            .select("id,goal_id,user_id,kind,amount,corrects_event_id,created_at")
-            .eq("goal_id", value: goalID.uuidString)
-            .eq("user_id", value: userID.uuidString)
-            .limit(10_001)
-            .execute().value
+    private nonisolated func fetchAtomicSavingLedgerSnapshot(
+        goalID: UUID
+    ) async throws -> SavingLedgerCloudSnapshotEnvelope {
+        try await client.rpc(
+            "get_saving_ledger_snapshot",
+            params: ["p_goal_id": goalID.uuidString]
+        ).execute().value
     }
 
     // Purchased slot counts are authoritative server state. In particular,
