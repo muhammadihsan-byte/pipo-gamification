@@ -74,6 +74,108 @@ final class PersonalGoalTests: XCTestCase {
         XCTAssertNil(PersonalPlanFormatting.parseRupiah("-100"))
     }
 
+
+    func testLifecycleDefaultsAndPausedArchivedTransitions() {
+        let goal = PersonalGoal(
+            title: "Holiday", category: .trip,
+            targetAmount: 1_000, currentAmount: 200,
+            targetDate: .now
+        )
+        XCTAssertEqual(goal.lifecycleState, .active)
+        XCTAssertTrue(goal.canRecordSaving)
+        XCTAssertTrue(goal.transition(to: .paused))
+        XCTAssertEqual(goal.lifecycleState, .paused)
+        XCTAssertFalse(goal.canRecordSaving)
+        XCTAssertFalse(goal.transition(to: .completed), "Only recorded progress completes a goal")
+        XCTAssertTrue(goal.transition(to: .archived))
+        XCTAssertEqual(goal.currentAmount, 200, "Archiving never loses recorded savings")
+        XCTAssertTrue(goal.transition(to: .active))
+        XCTAssertEqual(goal.lifecycleState, .active)
+        XCTAssertNil(goal.lifecycleRaw)
+        XCTAssertTrue(goal.canRecordSaving)
+        goal.lifecycleRaw = "unknown-legacy-value"
+        XCTAssertEqual(goal.lifecycleState, .active)
+    }
+
+    func testCompletingTargetBlocksMoreSavesAndCannotBeReopened() {
+        let goal = PersonalGoal(
+            title: "Camera", category: .gadget,
+            targetAmount: 400, currentAmount: 200, targetDate: .now
+        )
+        XCTAssertTrue(goal.transition(to: .paused))
+        goal.currentAmount = 440
+        XCTAssertEqual(goal.progress, 1)
+        XCTAssertEqual(goal.lifecycleState, .completed)
+        XCTAssertFalse(goal.canRecordSaving)
+        XCTAssertFalse(goal.transition(to: .active))
+        XCTAssertFalse(goal.transition(to: .archived))
+    }
+
+    func testGamificationNeverAwardsXPForPausedOrCompletedGoal() {
+        let owner = UUID()
+        let goal = PersonalGoal(
+            title: "Concert", category: .trip,
+            targetAmount: 200, currentAmount: 50,
+            targetDate: .now, ownerUserID: owner
+        )
+        let profile = UserProfile(userID: owner, totalXP: 600)
+        let originalXP = profile.totalXP
+
+        XCTAssertTrue(goal.transition(to: .paused))
+        XCTAssertThrowsError(
+            try GamificationManager().recordSaving(amount: 25, goal: goal, profile: profile)
+        ) { error in
+            guard case GamificationError.goalNotActive = error else {
+                XCTFail("Expected a goal-not-active error, got \(error)")
+                return
+            }
+        }
+        XCTAssertEqual(goal.currentAmount, 50)
+        XCTAssertEqual(profile.totalXP, originalXP)
+
+        goal.currentAmount = 200
+        XCTAssertThrowsError(
+            try GamificationManager().recordSaving(amount: 25, goal: goal, profile: profile)
+        )
+        XCTAssertEqual(profile.totalXP, originalXP)
+    }
+
+    @MainActor
+    func testLifecycleFocusPersistenceRemainsAccountScopedAfterReopen() throws {
+        let accountA = UUID(), accountB = UUID()
+        let container = try ModelContainer(
+            for: Schema([PersonalGoal.self, SubItem.self]),
+            configurations: [ModelConfiguration(isStoredInMemoryOnly: true)]
+        )
+        let writer = ModelContext(container)
+        let focusA = PersonalGoal(title: "A focus", category: .trip,
+                                  targetAmount: 1_000, targetDate: .now,
+                                  ownerUserID: accountA)
+        let otherA = PersonalGoal(title: "A paused", category: .gift,
+                                  targetAmount: 800, targetDate: .now,
+                                  ownerUserID: accountA)
+        let focusB = PersonalGoal(title: "B focus", category: .house,
+                                  targetAmount: 5_000, targetDate: .now,
+                                  ownerUserID: accountB)
+        let unowned = PersonalGoal(title: "Legacy", category: .trip,
+                                   targetAmount: 700, targetDate: .now)
+        focusA.isFocusPreferred = true
+        focusB.isFocusPreferred = true
+        XCTAssertTrue(otherA.transition(to: .paused))
+        for goal in [focusA, otherA, focusB, unowned] { writer.insert(goal) }
+        try writer.save()
+
+        let reader = ModelContext(container)
+        let all = try reader.fetch(FetchDescriptor<PersonalGoal>())
+        let ownedA = AccountScope.visibleGoals(all, userID: accountA)
+        let ownedB = AccountScope.visibleGoals(all, userID: accountB)
+        XCTAssertEqual(ownedA.filter { $0.isFocusPreferred == true }.map(\.id), [focusA.id])
+        XCTAssertEqual(ownedB.filter { $0.isFocusPreferred == true }.map(\.id), [focusB.id])
+        XCTAssertEqual(ownedA.first(where: { $0.id == otherA.id })?.lifecycleState, .paused)
+        XCTAssertTrue(AccountScope.visibleGoals(all, userID: nil).isEmpty)
+        XCTAssertEqual(all.count, 4, "Legacy rows remain quarantined")
+    }
+
     private var calendar: Calendar {
         var calendar = Calendar(identifier: .gregorian)
         calendar.timeZone = TimeZone(secondsFromGMT: 0)!
