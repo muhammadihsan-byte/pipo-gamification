@@ -8,6 +8,7 @@ struct WidgetSnapshot: Sendable {
     let goalTitle: String?
     let goalProgress: Double
     let nextDepositDate: Date?
+    var ownerUserID: UUID? = nil
 
     static let empty = WidgetSnapshot(
         streakDays: 0,
@@ -23,10 +24,38 @@ struct WidgetSnapshot: Sendable {
 enum WidgetSharedData {
     static let appGroupIdentifier = "group.com.pipo.app"
     private static let snapshotKey = "pipo.widget.snapshot"
+    private static let activeAccountKey = "pipo.widget.active.account"
+
+    /// Change the widget's active account before the next account's data is saved.
+    /// Old unowned snapshots become unreadable. Never infer ownership for them.
+    static func activate(userID: UUID?) throws {
+        guard let defaults = UserDefaults(suiteName: appGroupIdentifier) else {
+            throw WidgetSharedDataError.appGroupUnavailable
+        }
+        let previousUserID = defaults.string(forKey: activeAccountKey)
+        let nextUserID = userID?.uuidString
+        if previousUserID != nextUserID {
+            defaults.removeObject(forKey: snapshotKey)
+        }
+        if let nextUserID {
+            defaults.set(nextUserID, forKey: activeAccountKey)
+        } else {
+            defaults.removeObject(forKey: activeAccountKey)
+        }
+    }
 
     static func save(_ snapshot: WidgetSnapshot) throws {
         guard let defaults = UserDefaults(suiteName: appGroupIdentifier) else {
             throw WidgetSharedDataError.appGroupUnavailable
+        }
+
+        let activeUserID = defaults.string(forKey: activeAccountKey)
+        if let ownerUserID = snapshot.ownerUserID {
+            guard activeUserID == ownerUserID.uuidString else {
+                throw WidgetSharedDataError.accountMismatch
+            }
+        } else if snapshot.goalID != nil || snapshot.totalXP != 0 || snapshot.streakDays != 0 {
+            throw WidgetSharedDataError.accountMismatch
         }
 
         var values: [String: Any] = [
@@ -35,6 +64,9 @@ enum WidgetSharedData {
             "currentLevel": max(snapshot.currentLevel, 1),
             "goalProgress": min(max(snapshot.goalProgress, 0), 1)
         ]
+        if let owner = snapshot.ownerUserID {
+            values["ownerUserID"] = owner.uuidString
+        }
         if let goalID = snapshot.goalID {
             values["goalID"] = goalID.uuidString
         }
@@ -49,9 +81,12 @@ enum WidgetSharedData {
     }
 
     static func load() -> WidgetSnapshot {
-        guard
-            let values = UserDefaults(suiteName: appGroupIdentifier)?
-                .dictionary(forKey: snapshotKey)
+        guard let defaults = UserDefaults(suiteName: appGroupIdentifier),
+              let currentAccount = defaults.string(forKey: activeAccountKey),
+              let values = defaults.dictionary(forKey: snapshotKey),
+              let owner = values["ownerUserID"] as? String,
+              owner == currentAccount,
+              let ownerUserID = UUID(uuidString: owner)
         else {
             return .empty
         }
@@ -63,15 +98,22 @@ enum WidgetSharedData {
             goalID: (values["goalID"] as? String).flatMap(UUID.init(uuidString:)),
             goalTitle: values["goalTitle"] as? String,
             goalProgress: values["goalProgress"] as? Double ?? 0,
-            nextDepositDate: values["nextDepositDate"] as? Date
+            nextDepositDate: values["nextDepositDate"] as? Date,
+            ownerUserID: ownerUserID
         )
     }
 }
 
 enum WidgetSharedDataError: LocalizedError {
     case appGroupUnavailable
+    case accountMismatch
 
     var errorDescription: String? {
-        "The Pipo App Group is unavailable. Check the App Group capability for both app targets."
+        switch self {
+        case .appGroupUnavailable:
+            return "The Pipo App Group is unavailable. Check the App Group capability for both app targets."
+        case .accountMismatch:
+            return "The widget snapshot doesn't belong to the active Pipo account."
+        }
     }
 }
