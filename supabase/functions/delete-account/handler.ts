@@ -69,6 +69,24 @@ export async function handleDeleteAccount(
       return reply(401, { error: "Could not verify the signed-in account." });
     }
 
+    // This ID is NOT the authorization subject. It is a second, restrictive
+    // confirmation that the app has not switched accounts since opening its
+    // confirmation screen. Always delete the user resolved by Auth, never the
+    // caller-supplied expected ID.
+    let expected: unknown;
+    try {
+      const payload = await request.json() as { expected_user_id?: unknown };
+      expected = payload?.expected_user_id;
+    } catch {
+      return reply(400, { error: "Account confirmation is missing." });
+    }
+    if (
+      typeof expected !== "string" ||
+      expected.toLowerCase() !== user.id.toLowerCase()
+    ) {
+      return reply(409, { error: "Account changed. Sign in and try again." });
+    }
+
     // Hard delete, not a soft-delete or a client-side sign-out. Pipo's
     // account-owned public tables have ON DELETE CASCADE references to
     // auth.users. The service role key NEVER leaves this Edge Function.
@@ -87,7 +105,7 @@ export async function handleDeleteAccount(
         error: "Server deletion could not be confirmed. Try again.",
       });
     }
-    return reply(200, { deleted: true });
+    return reply(200, { deleted: true, user_id: user.id });
   } catch {
     return reply(503, {
       error: "Could not confirm account deletion. Try again.",
