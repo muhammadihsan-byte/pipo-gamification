@@ -65,3 +65,12 @@ Make App Privacy answers from the implemented build, **not** from general copy. 
 - [ ] Explicit owner approval before TestFlight or App Store publishing
 
 Official Apple requirements: https://developer.apple.com/app-store/review/guidelines/ ; https://developer.apple.com/app-store/app-privacy-details/
+
+
+## Privacy-manifest implementation and release verification
+
+- App: `Pipo/App/PrivacyInfo.xcprivacy` declares app-owned use of `UserDefaults` and shared App Group preferences using current Apple approved reason codes `CA92.1` and `1C8F.1`; declares app-level email, user ID, self-reported financial goals and related account content processed for app functionality, linked to the account and not for tracking.
+- Widget: `Pipo/Widget/PrivacyInfo.xcprivacy` declares App Group `UserDefaults` reason `1C8F.1`, with no independent server collection or tracking claimed.
+- `scripts/check-privacy-manifest.sh` validates both plists and verifies the built iOS simulator **Pipo.app** and widget **.appex** each contain their respective manifest. The GitHub Actions job uses the actual compiled bundle paths, not just repo file existence.
+- [ ] **Still required:** audit included versions of Supabase Swift, Rive, Lottie and transitive SDKs for their own manifests/signatures and API usage; review the final Xcode privacy report from an Apple-signed archive and cross-check actual App Store Connect App Privacy answers. The native manifest declaration alone does not establish compliance with all Apple SDK privacy requirements.
+- Relevant Apple reference: https://developer.apple.com/documentation/bundleresources/privacy-manifest-files
