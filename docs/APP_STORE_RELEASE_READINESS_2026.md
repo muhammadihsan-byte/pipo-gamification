@@ -12,7 +12,8 @@
 - Social sign-in UI and SDK entry path are disabled until Apple/Google credentials and Apple authorization revocation are complete.
 
 ## Must complete before release
-- [ ] Deploy and verify signed JWT-protected `delete-account` Edge Function, including legitimate disposable-user hard deletion, session invalidation, owner-isolated row cascade and account switch. Apple-linked user accounts must remain deletion-blocked while Apple revocation is unfinished.
+- [x] Deployed `delete-account` Edge Function v1 is ACTIVE with signed-JWT verification enabled; Apple-linked deletion remains fail-closed pending revocation.
+- [ ] Complete legitimate disposable-user hard deletion, session invalidation, owner-isolated row cascade and account-switch acceptance on a signed iPhone. The deployed version alone does not prove this.
 - [ ] Supabase Auth callback redirect allowlist, email templates and disposable-account live password-reset acceptance.
 - [ ] Physical signed iPhone review of signup, onboarding, goals, restore after reinstall, widget/deep links, accessibility, keyboard, background/foreground, offline and zero-goals profile.
 - [ ] Implement verified remote download/restoration, or clearly explain device-local-only limitations and ensure no misleading "backed up" promise in UX/marketing.
@@ -31,4 +32,4 @@
 - App Privacy Details: https://developer.apple.com/app-store/app-privacy-details/
 - App Store Connect privacy settings: https://developer.apple.com/help/app-store-connect/manage-app-information/manage-app-privacy/
 
-**Evidence principle:** do not close P0 #8 until live tests, signed-device review, external privacy/Apple-account configuration and final human release approval. CI and static inspection do not replace those steps.
+**Evidence principle:** [Live backend smoke and full A/B device QA plan](LIVE_AUTH_DEVICE_QA.md) distinguishes anonymous network probes from authenticated acceptance. Do not close P0 #8 until live user tests, signed-device review, external privacy/Apple-account configuration and final release approval. CI and static inspection do not replace those steps.
