@@ -17,6 +17,29 @@ final class SupabaseServiceTests: XCTestCase {
         XCTAssertEqual(configuration.redirectURL.absoluteString, "pipo://login-callback")
     }
 
+    func testPasswordRecoveryCallbackRoutesAndSocialProvidersRemainGated() throws {
+        let config = try SupabaseConfiguration.load(
+            environment: [
+                "SUPABASE_URL": "https://example.supabase.co",
+                "SUPABASE_ANON_KEY": "public-key"
+            ], infoDictionary: [:]
+        )
+        XCTAssertEqual(
+            config.passwordRecoveryRedirectURL.absoluteString,
+            "pipo://login-callback/reset-password"
+        )
+        XCTAssertTrue(config.isSignInCallback(URL(string: "pipo://login-callback?code=abc")!))
+        XCTAssertFalse(config.isPasswordRecoveryCallback(URL(string: "pipo://login-callback?code=abc")!))
+        XCTAssertTrue(config.isPasswordRecoveryCallback(
+            URL(string: "pipo://login-callback/reset-password?code=abc")!
+        ))
+        XCTAssertFalse(config.isSignInCallback(URL(string: "pipo://login-callback.evil?code=abc")!))
+        XCTAssertFalse(config.isPasswordRecoveryCallback(
+            URL(string: "pipo://another-host/reset-password?code=abc")!
+        ))
+        XCTAssertFalse(AuthProviderAvailability.socialSignInEnabled)
+    }
+
     func testRejectsMissingOrInsecureSupabaseConfiguration() {
         XCTAssertThrowsError(
             try SupabaseConfiguration.load(environment: [:], infoDictionary: [:])

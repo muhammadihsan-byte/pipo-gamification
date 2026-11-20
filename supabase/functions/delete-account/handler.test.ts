@@ -117,3 +117,38 @@ Deno.test("missing account confirmation cannot delete a verified user", async ()
   check(response.status === 400, "missing confirmation must be rejected");
   check(calls === 1, "only user verification may happen");
 });
+
+Deno.test("Apple-linked user is never hard-deleted before authorization revocation", async () => {
+  let calls = 0;
+  const response = await handleDeleteAccount(
+    req("valid-jwt", JSON.stringify({ expected_user_id: OWNER })),
+    environment,
+    async () => {
+      calls++;
+      return Response.json({
+        id: OWNER,
+        app_metadata: { providers: ["email", "apple"] },
+        identities: [{ provider: "apple" }],
+      });
+    },
+  );
+  check(response.status === 409, "Apple revocation must precede hard delete");
+  check(calls === 1, "must not use the privileged deletion endpoint");
+});
+
+Deno.test("Apple as primary provider is blocked even with no identities payload", async () => {
+  let calls = 0;
+  const response = await handleDeleteAccount(
+    req("valid-jwt", JSON.stringify({ expected_user_id: OWNER })),
+    environment,
+    async () => {
+      calls++;
+      return Response.json({
+        id: OWNER,
+        app_metadata: { provider: "apple" },
+      });
+    },
+  );
+  check(response.status === 409, "must not delete Apple linked user");
+  check(calls === 1, "no admin deletion");
+});

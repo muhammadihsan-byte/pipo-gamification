@@ -1,6 +1,12 @@
 import Foundation
 import Supabase
 
+/// Social providers are intentionally not offered until Apple token
+/// revocation, credentials and real-device provider QA are all complete.
+enum AuthProviderAvailability {
+    static let socialSignInEnabled = false
+}
+
 struct SupabaseConfiguration: Sendable {
     let url: URL
     let anonKey: String
@@ -43,6 +49,27 @@ struct SupabaseConfiguration: Sendable {
         }
 
         return SupabaseConfiguration(url: url, anonKey: anonKey, redirectURL: redirectURL)
+    }
+
+    /// Use a distinct callback path so password recovery never
+    /// silently becomes a normal sign-in.
+    var passwordRecoveryRedirectURL: URL {
+        redirectURL.appendingPathComponent("reset-password")
+    }
+
+    func isSignInCallback(_ url: URL) -> Bool {
+        matchesCallback(url, expected: redirectURL)
+    }
+
+    func isPasswordRecoveryCallback(_ url: URL) -> Bool {
+        matchesCallback(url, expected: passwordRecoveryRedirectURL)
+    }
+
+    private func matchesCallback(_ url: URL, expected: URL) -> Bool {
+        url.scheme?.lowercased() == expected.scheme?.lowercased()
+            && url.host?.lowercased() == expected.host?.lowercased()
+            && url.path.trimmingCharacters(in: CharacterSet(charactersIn: "/"))
+                == expected.path.trimmingCharacters(in: CharacterSet(charactersIn: "/"))
     }
 
     private static func configuredValue(
@@ -270,6 +297,7 @@ enum SupabaseServiceError: LocalizedError {
     case invalidSavingGoal
     case invalidOrUnownedTransaction
     case deletionNotConfirmed
+    case socialSignInUnavailable
 
     var errorDescription: String? {
         switch self {
@@ -289,6 +317,8 @@ enum SupabaseServiceError: LocalizedError {
             "A saving entry is invalid or does not belong to an owned personal goal."
         case .deletionNotConfirmed:
             "Pipo could not confirm account deletion. Your local data was not removed."
+        case .socialSignInUnavailable:
+            "Social sign-in is not available yet. Use your email address."
         }
     }
 }
@@ -347,6 +377,9 @@ final class SupabaseService {
         provider: Provider,
         authStateManager: AuthStateManager
     ) async throws {
+        guard AuthProviderAvailability.socialSignInEnabled else {
+            throw SupabaseServiceError.socialSignInUnavailable
+        }
         let session = try await client.auth.signInWithOAuth(
             provider: provider,
             redirectTo: configuration.redirectURL
@@ -356,6 +389,19 @@ final class SupabaseService {
 
     /// Never use a service-role key in the app. The backend's authenticated
     /// delete-account function chooses the user from the verified bearer token.
+    func requestPasswordReset(email: String) async throws {
+        try await client.auth.resetPasswordForEmail(
+            email, redirectTo: configuration.passwordRecoveryRedirectURL
+        )
+    }
+
+    func updateRecoveredPassword(_ password: String) async throws {
+        guard client.auth.currentUser != nil else {
+            throw SupabaseServiceError.notAuthenticated
+        }
+        try await client.auth.update(user: UserAttributes(password: password))
+    }
+
     func deleteCurrentAccount(accountID: UUID) async throws {
         guard client.auth.currentUser?.id == accountID else {
             throw SupabaseServiceError.notAuthenticated

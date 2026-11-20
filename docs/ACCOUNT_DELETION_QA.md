@@ -26,7 +26,7 @@ The function is **source only** at `supabase/functions/delete-account/`; it has 
 - Only `POST`; the request's \`expected_user_id\` must match the verified session UUID, but never selects the deletion subject. Return success only after the Auth admin deletion request succeeds.
 - Run Deno unit tests with `deno test supabase/functions/delete-account/handler.test.ts`. Test missing/expired token, cross-user injection, stale-account mismatch, missing confirmation, admin errors and missing server key.
 - Confirm no other future tables, storage objects, group memberships or purchase ledgers introduce FK dependencies before deployment.
-- Apple Sign in linked accounts require a **verified Apple token revocation process** as part of deletion; the current implementation does not revoke Apple authorization. This remains a release blocker if Apple sign-in is enabled.
+- Apple Sign in linked accounts require a **verified Apple token revocation process** as part of deletion. The hardened backend explicitly rejects Apple-linked users (HTTP 409) instead of deleting Auth identity without revocation, and social-login entry points are disabled. Re-enable Apple signup only after token revocation is supported and tested.
 
 ## Live acceptance before App Store / TestFlight
 

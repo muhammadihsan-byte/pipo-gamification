@@ -13,6 +13,9 @@ struct RootView: View {
     @State private var choosingPlan = false
     @State private var showingAccountDeletion = false
     @State private var isDeletingAccount = false
+    @State private var isSigningOut = false
+    @State private var isResettingPassword = false
+    @State private var isRecoveringSession = false
     @State private var noticeMessage: String?
     @State private var hasFinishedOnboardingQA = false
     @State private var completedOnboardingAccountID: UUID?
@@ -172,7 +175,7 @@ struct RootView: View {
                 purchasedPersonalSlots: 0, purchasedGroupSlots: 0
             )
             updateWidgetAccount(userID)
-            guard let userID, !isDeletingAccount else { return }
+            guard let userID, !isDeletingAccount, !isRecoveringSession else { return }
             // Do not wait for StoreKit before retrying local-only goal sync.
             enqueuePersonalSavingsSync(for: userID)
             Task {
@@ -193,7 +196,7 @@ struct RootView: View {
         .onChange(of: scenePhase) { _, phase in
             // A failed offline write remains local; retry on foreground,
             // without inventing a successful server sync or a timer.
-            if phase == .active, !isDeletingAccount,
+            if phase == .active, !isDeletingAccount, !isRecoveringSession,
                let userID = authStateManager.userID {
                 enqueuePersonalSavingsSync(for: userID, showFailure: false)
             }
@@ -222,22 +225,58 @@ struct RootView: View {
                 return
             }
 
-            guard
-                let supabaseService,
-                url.scheme == supabaseService.configuration.redirectURL.scheme
-            else {
+            guard let supabaseService else { return }
+            let isRecovery = supabaseService.configuration.isPasswordRecoveryCallback(url)
+            guard isRecovery || supabaseService.configuration.isSignInCallback(url) else {
                 return
             }
+            // Recovery login must not show the normal dashboard during the
+            // transient password-editor session.
+            if isRecovery { isRecoveringSession = true }
             Task {
                 do {
                     try await supabaseService.handleAuthCallback(
                         url,
                         authStateManager: authStateManager
                     )
+                    if isRecovery { isResettingPassword = true }
                 } catch {
+                    if isRecovery {
+                        // If the provider accepted a partial session, never
+                        // leave it open on the normal dashboard.
+                        do {
+                            try await supabaseService.signOut(authStateManager: authStateManager)
+                            isRecoveringSession = false
+                        } catch {
+                            noticeMessage = "Recovery failed. Close and reopen Pipo to try again."
+                            return
+                        }
+                    }
                     noticeMessage = error.localizedDescription
                 }
             }
+        }
+        .sheet(isPresented: $isResettingPassword) {
+            PasswordResetView(
+                onSubmit: { password in
+                    guard let supabaseService else {
+                        throw SupabaseServiceError.notAuthenticated
+                    }
+                    try await supabaseService.updateRecoveredPassword(password)
+                    try await supabaseService.signOut(authStateManager: authStateManager)
+                    isResettingPassword = false
+                    isRecoveringSession = false
+                    noticeMessage = "Password updated. Sign in with your new password."
+                },
+                onCancel: {
+                    guard let supabaseService else {
+                        throw SupabaseServiceError.notAuthenticated
+                    }
+                    try await supabaseService.signOut(authStateManager: authStateManager)
+                    isResettingPassword = false
+                    isRecoveringSession = false
+                }
+            )
         }
         .sheet(isPresented: $showingAccountDeletion) {
             AccountDeletionConfirmationView(onDelete: performAccountDeletion)
@@ -270,14 +309,25 @@ struct RootView: View {
 
     @ViewBuilder
     private var rootContent: some View {
-        switch authStateManager.authState {
-        case .unauthenticated:
-            authenticationView
-        case .authenticated:
-            if needsOnboarding {
-                onboardingView
-            } else {
-                dashboardView
+        if isRecoveringSession {
+            VStack(spacing: 12) {
+                ProgressView()
+                Text("Securing your password recovery…")
+                    .font(.footnote)
+                    .foregroundStyle(PipoTheme.muted)
+            }
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
+            .background(.white)
+        } else {
+            switch authStateManager.authState {
+            case .unauthenticated:
+                authenticationView
+            case .authenticated:
+                if needsOnboarding {
+                    onboardingView
+                } else {
+                    dashboardView
+                }
             }
         }
     }
@@ -313,9 +363,7 @@ struct RootView: View {
             onGoogleSignIn: {
                 beginOAuthSignIn(provider: .google)
             },
-            onForgotPassword: {
-                noticeMessage = "Password reset is not configured yet."
-            }
+            onForgotPassword: requestPasswordReset
         )
     }
 
@@ -326,9 +374,11 @@ struct RootView: View {
             },
             onDeleteAccount: {
                 guard authStateManager.authState == .authenticated,
-                      authStateManager.userID != nil else { return }
+                      authStateManager.userID != nil,
+                      !isSigningOut, !isDeletingAccount else { return }
                 showingAccountDeletion = true
             },
+            onSignOut: signOutCurrentAccount,
             onSavingCompleted: { transaction, goal, xpEarned, streakDays, badges in
                 guard !isDeletingAccount,
                       let userID = authStateManager.userID,
@@ -400,6 +450,42 @@ struct RootView: View {
             : "Your Pipo account was deleted on the server. Some device data or widget content could not be cleared; Pipo will retry cleanup when you next open the app."
     }
 
+    private func signOutCurrentAccount() {
+        guard !isSigningOut, !isDeletingAccount, !isRecoveringSession,
+              authStateManager.authState == .authenticated,
+              let signedInID = authStateManager.userID,
+              let supabaseService else { return }
+        isSigningOut = true
+        Task {
+            defer { isSigningOut = false }
+            guard authStateManager.userID == signedInID else { return }
+            do {
+                try await supabaseService.signOut(authStateManager: authStateManager)
+                // Account changes clear widget state, navigation and entitlements.
+                navigationManager.resetAccountContext()
+            } catch {
+                guard authStateManager.userID == signedInID else { return }
+                noticeMessage = "Couldn't sign out. Please check your connection and try again."
+            }
+        }
+    }
+
+    private func requestPasswordReset(_ email: String) {
+        guard let supabaseService else {
+            noticeMessage = supabaseConfigurationError ?? "Supabase is not configured."
+            return
+        }
+        Task {
+            do {
+                try await supabaseService.requestPasswordReset(email: email)
+                // Do not confirm whether the email address is registered.
+                noticeMessage = "If an account exists, a password reset link will arrive by email."
+            } catch {
+                noticeMessage = error.localizedDescription
+            }
+        }
+    }
+
     private func authenticate(_ credentials: AuthCredentials) {
         guard let supabaseService else {
             noticeMessage = supabaseConfigurationError ?? "Supabase is not configured."
@@ -433,7 +519,7 @@ struct RootView: View {
     private func enqueuePersonalSavingsSync(
         for userID: UUID, showFailure: Bool = true
     ) {
-        guard !isDeletingAccount,
+        guard !isDeletingAccount, !isRecoveringSession,
               authStateManager.authState == .authenticated,
               authStateManager.userID == userID,
               let supabaseService else { return }

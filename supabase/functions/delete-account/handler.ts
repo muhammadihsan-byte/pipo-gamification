@@ -64,9 +64,31 @@ export async function handleDeleteAccount(
     if (!lookup.ok) {
       return reply(401, { error: "Session expired. Sign in and try again." });
     }
-    const user = await lookup.json() as { id?: unknown };
+    const user = await lookup.json() as {
+      id?: unknown;
+      app_metadata?: { provider?: unknown; providers?: unknown };
+      identities?: Array<{ provider?: unknown }>;
+    };
     if (typeof user.id !== "string" || !/^[0-9a-f-]{36}$/i.test(user.id)) {
       return reply(401, { error: "Could not verify the signed-in account." });
+    }
+
+    // Sign in with Apple requires revoking its authorization on deletion.
+    // Do not irrevocably delete Auth credentials before the Apple provider
+    // revocation is implemented and verified with real Apple credentials.
+    const providers = [
+      user.app_metadata?.provider,
+      ...(Array.isArray(user.app_metadata?.providers)
+        ? user.app_metadata.providers : []),
+      ...(Array.isArray(user.identities)
+        ? user.identities.map((identity) => identity.provider) : []),
+    ];
+    if (providers.some((provider) =>
+      typeof provider === "string" && provider.toLowerCase() === "apple"
+    )) {
+      return reply(409, {
+        error: "Apple account deletion is not available yet. Contact support before deleting this account.",
+      });
     }
 
     // This ID is NOT the authorization subject. It is a second, restrictive
