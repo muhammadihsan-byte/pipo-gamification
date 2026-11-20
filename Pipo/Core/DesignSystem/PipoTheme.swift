@@ -17,6 +17,9 @@ enum PipoTheme {
     static let cardInk = Color(red: 15 / 255, green: 23 / 255, blue: 42 / 255)
     static let cardMuted = Color(red: 71 / 255, green: 85 / 255, blue: 105 / 255)
     static let cardAccentStrong = Color(red: 229 / 255, green: 69 / 255, blue: 105 / 255)
+    // Small accent text needs 4.5:1 contrast on white. Figma's #E54569
+    // is ~3.9:1; #D4315B retains the visual character at ~4.8:1.
+    static let cardAccentReadable = Color(red: 212 / 255, green: 49 / 255, blue: 91 / 255)
     static let cardBorder = Color(red: 226 / 255, green: 232 / 255, blue: 240 / 255)
 }
 
@@ -94,14 +97,14 @@ struct PipoBudgetBreakdownCard: View {
                 HStack(alignment: .center, spacing: 8) {
                     Text("BUDGET CATEGORIES")
                         .font(.system(size: 11, weight: .bold))
-                        .foregroundStyle(PipoTheme.cardAccentStrong)
+                        .foregroundStyle(PipoTheme.cardAccentReadable)
                         .accessibilityAddTraits(.isHeader)
 
                     Spacer(minLength: 8)
                     if let onEdit {
                         Button("Edit", action: onEdit)
                             .font(.subheadline.weight(.semibold))
-                            .foregroundStyle(PipoTheme.cardAccentStrong)
+                            .foregroundStyle(PipoTheme.cardAccentReadable)
                             .frame(minWidth: 44, minHeight: 44)
                             .accessibilityIdentifier("pipo.budget.edit")
                             .accessibilityLabel("Edit budget breakdown")
@@ -133,7 +136,7 @@ struct PipoBudgetBreakdownCard: View {
                 if let total = PipoBudgetPresentation.validTotal(for: lines) {
                     Text("TOTAL " + money(total))
                         .font(.system(size: 15, weight: .bold))
-                        .foregroundStyle(PipoTheme.cardAccentStrong)
+                        .foregroundStyle(PipoTheme.cardAccentReadable)
                         .fixedSize(horizontal: false, vertical: true)
                         .accessibilityIdentifier("pipo.budget.total")
 
