@@ -630,57 +630,70 @@ struct DashboardView: View {
         Button {
             openGoal(goal)
         } label: {
-            HStack(alignment: .center, spacing: 12) {
-                VStack(alignment: .leading, spacing: 6) {
-                    Text(goal.title)
-                        .font(.subheadline.bold())
-                        .foregroundStyle(PipoTheme.ink)
-                        .multilineTextAlignment(.leading)
-                    Text((goal.isGroupGoal ? "Group" : "Personal") + " · " + goal.lifecycleState.title + " · " + money(goal.currentAmount) + " recorded")
-                        .font(.caption)
-                        .foregroundStyle(PipoTheme.muted)
-                        .multilineTextAlignment(.leading)
-                        .lineLimit(2)
-                }
-                Spacer(minLength: 8)
-                VStack(alignment: .trailing, spacing: 5) {
-                    Text("\(Int(goal.progress * 100))%")
-                        .font(.headline.bold())
-                        .foregroundStyle(PipoTheme.deepPink)
-                    Text("View goal")
-                        .font(.caption2)
-                        .foregroundStyle(PipoTheme.muted)
-                }
-            }
-            .padding(14)
-            .frame(minHeight: 80)
-            .background(.white, in: RoundedRectangle(cornerRadius: 17))
-            .overlay(RoundedRectangle(cornerRadius: 17).strokeBorder(PipoTheme.border))
-            .contentShape(Rectangle())
+            compactGoalRowLabel(goal)
         }
         .buttonStyle(.plain)
         .contextMenu {
-            if goal.canRecordSaving {
-                Button("Make focus goal", systemImage: "pin.fill") {
-                    makeFocusGoal(goal)
-                }
-                Button("Pause goal", systemImage: "pause.circle") {
-                    changeLifecycle(of: goal, to: .paused)
-                }
-            }
-            if goal.lifecycleState == .paused || goal.lifecycleState == .archived {
-                Button("Resume goal", systemImage: "play.circle") {
-                    changeLifecycle(of: goal, to: .active)
-                }
-            }
-            if goal.lifecycleState == .active || goal.lifecycleState == .paused {
-                Button("Archive goal", systemImage: "archivebox") {
-                    changeLifecycle(of: goal, to: .archived)
-                }
-            }
+            goalLifecycleMenu(goal)
         }
         .accessibilityIdentifier("pipo.dashboard.goal.\(goal.id.uuidString)")
         .accessibilityHint("Opens goal details. Hold for goal actions.")
+    }
+
+    private func compactGoalRowLabel(_ goal: PersonalGoal) -> some View {
+        let kind = goal.isGroupGoal ? "Group" : "Personal"
+        let subtitle = "\(kind) · \(goal.lifecycleState.title) · \(money(goal.currentAmount)) recorded"
+        let percentage = Int(goal.progress * 100)
+
+        return HStack(alignment: .center, spacing: 12) {
+            VStack(alignment: .leading, spacing: 6) {
+                Text(goal.title)
+                    .font(.subheadline.bold())
+                    .foregroundStyle(PipoTheme.ink)
+                    .multilineTextAlignment(.leading)
+                Text(subtitle)
+                    .font(.caption)
+                    .foregroundStyle(PipoTheme.muted)
+                    .multilineTextAlignment(.leading)
+                    .lineLimit(2)
+            }
+            Spacer(minLength: 8)
+            VStack(alignment: .trailing, spacing: 5) {
+                Text("\(percentage)%")
+                    .font(.headline.bold())
+                    .foregroundStyle(PipoTheme.deepPink)
+                Text("View goal")
+                    .font(.caption2)
+                    .foregroundStyle(PipoTheme.muted)
+            }
+        }
+        .padding(14)
+        .frame(minHeight: 80)
+        .background(.white, in: RoundedRectangle(cornerRadius: 17))
+        .overlay(RoundedRectangle(cornerRadius: 17).strokeBorder(PipoTheme.border))
+        .contentShape(Rectangle())
+    }
+
+    @ViewBuilder
+    private func goalLifecycleMenu(_ goal: PersonalGoal) -> some View {
+        if goal.canRecordSaving {
+            Button("Make focus goal", systemImage: "pin.fill") {
+                makeFocusGoal(goal)
+            }
+            Button("Pause goal", systemImage: "pause.circle") {
+                changeLifecycle(of: goal, to: .paused)
+            }
+        }
+        if goal.lifecycleState == .paused || goal.lifecycleState == .archived {
+            Button("Resume goal", systemImage: "play.circle") {
+                changeLifecycle(of: goal, to: .active)
+            }
+        }
+        if goal.lifecycleState == .active || goal.lifecycleState == .paused {
+            Button("Archive goal", systemImage: "archivebox") {
+                changeLifecycle(of: goal, to: .archived)
+            }
+        }
     }
 
     private func makeFocusGoal(_ goal: PersonalGoal) {
