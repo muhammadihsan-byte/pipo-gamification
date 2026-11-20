@@ -248,6 +248,90 @@ struct PersonalSavingSyncBatch {
     }
 }
 
+/// Rows are decoded from an account-restricted Supabase SELECT only.
+/// The server uses numeric(18,2); the app requires exact whole IDR amounts
+/// until fractional-currency support is formally designed.
+struct SavingLedgerCloudContribution: Decodable, Sendable {
+    let id: UUID
+    let goalID: UUID
+    let userID: UUID
+    let amount: Double
+    let xpEarned: Int
+    let date: Date
+
+    enum CodingKeys: String, CodingKey {
+        case id, amount, date
+        case goalID = "goal_id"
+        case userID = "user_id"
+        case xpEarned = "xp_earned"
+    }
+}
+
+struct SavingLedgerCloudAdjustment: Decodable, Sendable {
+    let id: UUID
+    let goalID: UUID
+    let userID: UUID
+    let kind: String
+    let amount: Double
+    let correctsEventID: UUID?
+    let createdAt: Date
+
+    enum CodingKeys: String, CodingKey {
+        case id, kind, amount
+        case goalID = "goal_id"
+        case userID = "user_id"
+        case correctsEventID = "corrects_event_id"
+        case createdAt = "created_at"
+    }
+}
+
+enum SavingCloudRecoveryError: Error, Equatable {
+    case invalidServerEntry
+    case accountChanged
+    case tooManyEntries
+}
+
+/// Strict, pure reconstruction of independently fetched cloud rows.
+/// No local SwiftData changes occur until an explicit reconciliation policy
+/// for unsynced contributions has been reviewed and approved.
+enum SavingCloudLedgerReconciler {
+    static func reconstruct(
+        goalID: UUID, ownerID: UUID,
+        contributions: [SavingLedgerCloudContribution],
+        adjustments: [SavingLedgerCloudAdjustment]
+    ) throws -> SavingLedgerSnapshot {
+        guard contributions.count <= 10_000, adjustments.count <= 10_000 else {
+            throw SavingCloudRecoveryError.tooManyEntries
+        }
+        let savings: [SavingTransaction] = try contributions.map { entry in
+            guard entry.goalID == goalID, entry.userID == ownerID,
+                  entry.amount.isFinite, let amount = Int(exactly: entry.amount),
+                  amount > 0, entry.xpEarned >= 0
+            else { throw SavingCloudRecoveryError.invalidServerEntry }
+            return SavingTransaction(
+                id: entry.id, goalId: entry.goalID, amount: Double(amount),
+                xpEarned: entry.xpEarned, date: entry.date, userID: entry.userID
+            )
+        }
+        let events: [SavingAdjustmentEvent] = try adjustments.map { entry in
+            guard entry.goalID == goalID, entry.userID == ownerID,
+                  let kind = SavingAdjustmentKind(rawValue: entry.kind),
+                  entry.amount.isFinite, let amount = Int(exactly: entry.amount),
+                  amount != 0
+            else { throw SavingCloudRecoveryError.invalidServerEntry }
+            return SavingAdjustmentEvent(
+                id: entry.id, goalID: entry.goalID, userID: entry.userID,
+                kind: kind, amount: amount,
+                correctsEventID: entry.correctsEventID, date: entry.createdAt
+            )
+        }
+        return try SavingLedgerSnapshot.reconstruct(
+            goalID: goalID, ownerID: ownerID, savings: savings,
+            adjustments: events
+        )
+    }
+}
+
 struct GroupGoalProgressUpdate: Codable, Equatable, Sendable {
     let goalID: UUID
     let userID: UUID
@@ -490,6 +574,56 @@ final class SupabaseService {
             .from("saving_transactions")
             .upsert(payloads, onConflict: "id")
             .execute()
+    }
+
+    /// Read-only cloud recovery preview, intentionally NOT called by normal
+    /// dashboard loading until the SQL migration and offline sync policy pass QA.
+    /// Reading the second table fails closed if the migration is absent.
+    func fetchVerifiedSavingLedger(
+        goalID: UUID,
+        authenticatedUserID: UUID
+    ) async throws -> SavingLedgerSnapshot {
+        guard client.auth.currentUser?.id == authenticatedUserID else {
+            throw SupabaseServiceError.notAuthenticated
+        }
+        let entries = try await fetchSavingLedgerContributions(
+            goalID: goalID, userID: authenticatedUserID
+        )
+        guard client.auth.currentUser?.id == authenticatedUserID else {
+            throw SavingCloudRecoveryError.accountChanged
+        }
+        let adjustments = try await fetchSavingLedgerAdjustments(
+            goalID: goalID, userID: authenticatedUserID
+        )
+        guard client.auth.currentUser?.id == authenticatedUserID else {
+            throw SavingCloudRecoveryError.accountChanged
+        }
+        return try SavingCloudLedgerReconciler.reconstruct(
+            goalID: goalID, ownerID: authenticatedUserID,
+            contributions: entries, adjustments: adjustments
+        )
+    }
+
+    private nonisolated func fetchSavingLedgerContributions(
+        goalID: UUID, userID: UUID
+    ) async throws -> [SavingLedgerCloudContribution] {
+        try await client.from("saving_transactions")
+            .select("id,goal_id,user_id,amount,xp_earned,date")
+            .eq("goal_id", value: goalID.uuidString)
+            .eq("user_id", value: userID.uuidString)
+            .limit(10_001)
+            .execute().value
+    }
+
+    private nonisolated func fetchSavingLedgerAdjustments(
+        goalID: UUID, userID: UUID
+    ) async throws -> [SavingLedgerCloudAdjustment] {
+        try await client.from("saving_adjustments")
+            .select("id,goal_id,user_id,kind,amount,corrects_event_id,created_at")
+            .eq("goal_id", value: goalID.uuidString)
+            .eq("user_id", value: userID.uuidString)
+            .limit(10_001)
+            .execute().value
     }
 
     // Purchased slot counts are authoritative server state. In particular,
