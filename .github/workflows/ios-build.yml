@@ -225,6 +225,22 @@ jobs:
             CODE_SIGNING_REQUIRED=NO \
             test 2>&1 | tee validation/all-approved-cards-qa.log
 
+      - name: Issue 48 — goal detail photo hero focused native iOS QA
+        if: github.event_name == 'pull_request' && github.head_ref == 'feat/pipo-48-goal-photo-hero-v1'
+        shell: bash
+        run: |
+          set -euo pipefail
+          xcodebuild \
+            -project "$XCODE_PROJECT" \
+            -scheme "$XCODE_SCHEME" \
+            -destination "id=$SIMULATOR_UDID" \
+            -derivedDataPath "$RUNNER_TEMP/PipoDerivedData" \
+            -resultBundlePath "$RUNNER_TEMP/PipoGoalPhotoHeroQA.xcresult" \
+            -only-testing:PipoUITests/PipoUIRecordingTests/testIssue48GoalDetailHeroAndEmptyMediaSafety \
+            CODE_SIGNING_ALLOWED=NO \
+            CODE_SIGNING_REQUIRED=NO \
+            test 2>&1 | tee validation/pipo-48-hero-qa.log
+
       - name: Dashboard B — one controlled native iOS visual QA recording
         if: github.event_name == 'pull_request' && (github.head_ref == 'feat/pipo-dashboard-b' || github.head_ref == 'feat/pipo-p0-release-hardening')
         shell: bash
@@ -301,7 +317,7 @@ jobs:
         if: always()
         shell: bash
         run: |
-          for bundle in "$RUNNER_TEMP/PipoTestResults.xcresult" "$RUNNER_TEMP/PipoDashboardResults.xcresult" "$RUNNER_TEMP/PipoAuthQAResults.xcresult" "$RUNNER_TEMP/PipoCardParityResults.xcresult" "$RUNNER_TEMP/PipoAllCardsQAResults.xcresult"; do
+          for bundle in "$RUNNER_TEMP/PipoTestResults.xcresult" "$RUNNER_TEMP/PipoDashboardResults.xcresult" "$RUNNER_TEMP/PipoAuthQAResults.xcresult" "$RUNNER_TEMP/PipoCardParityResults.xcresult" "$RUNNER_TEMP/PipoAllCardsQAResults.xcresult" "$RUNNER_TEMP/PipoGoalPhotoHeroQA.xcresult"; do
             if test -d "$bundle"; then
               name="$(basename "$bundle" .xcresult)"
               mkdir -p "validation/visual-qa/$name"
@@ -324,5 +340,6 @@ jobs:
             ${{ runner.temp }}/PipoAuthQAResults.xcresult
             ${{ runner.temp }}/PipoCardParityResults.xcresult
             ${{ runner.temp }}/PipoAllCardsQAResults.xcresult
+            ${{ runner.temp }}/PipoGoalPhotoHeroQA.xcresult
           if-no-files-found: warn
           retention-days: 7
