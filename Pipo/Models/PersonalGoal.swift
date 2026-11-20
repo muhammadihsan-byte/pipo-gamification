@@ -166,3 +166,116 @@ final class PersonalGoal {
         max(targetAmount - currentAmount, 0)
     }
 }
+
+ 
+// MARK: - #42 deterministic financial previews (no writes or XP awards)
+//
+// These pure calculations deliberately do NOT record a money-out entry.
+// An account-owned, idempotent, server-validated ledger must be available
+// before the confirmation control can be connected to persisted data.
+enum PlanFinancialPreviewError: Error, Equatable {
+    case invalidTarget
+    case invalidBalance
+    case invalidAmount
+    case insufficientSavings
+    case invalidSchedule
+    case invalidBreakdown
+}
+
+struct PlanFinancialPreview: Equatable {
+    let netRecorded: Int
+    let target: Int
+    let remaining: Int
+    let futurePeriods: Int
+    let proposedPerPeriod: Int
+
+    static func revisedTarget(
+        netRecorded: Int,
+        target: Int,
+        futurePeriods: Int,
+        breakdown: [Int]? = nil
+    ) throws -> PlanFinancialPreview {
+        guard netRecorded >= 0 else { throw PlanFinancialPreviewError.invalidBalance }
+        guard target > 0 else { throw PlanFinancialPreviewError.invalidTarget }
+        if let breakdown {
+            var budgetTotal = 0
+            for item in breakdown {
+                guard item > 0 else { throw PlanFinancialPreviewError.invalidBreakdown }
+                let (next, overflow) = budgetTotal.addingReportingOverflow(item)
+                guard !overflow else { throw PlanFinancialPreviewError.invalidBreakdown }
+                budgetTotal = next
+            }
+            guard budgetTotal == target else {
+                throw PlanFinancialPreviewError.invalidBreakdown
+            }
+        }
+        guard futurePeriods > 0 else { throw PlanFinancialPreviewError.invalidSchedule }
+        let remaining = max(target - netRecorded, 0)
+        let perPeriod = remaining / futurePeriods + (remaining % futurePeriods == 0 ? 0 : 1)
+        return .init(netRecorded: netRecorded, target: target,
+                     remaining: remaining, futurePeriods: futurePeriods,
+                     proposedPerPeriod: perPeriod)
+    }
+}
+
+struct MoneyOutFinancialPreview: Equatable {
+    let priorNetRecorded: Int
+    let moneyTakenOut: Int
+    let revisedNetRecorded: Int
+    let target: Int
+    let remaining: Int
+    let keepDatePerPeriod: Int
+    let keepAmountPeriods: Int
+    let keepAmountFinalContribution: Int
+
+    static func calculate(
+        netRecorded: Int,
+        target: Int,
+        moneyTakenOut: Int,
+        futurePeriods: Int,
+        currentPerPeriod: Int
+    ) throws -> MoneyOutFinancialPreview {
+        guard netRecorded >= 0 else { throw PlanFinancialPreviewError.invalidBalance }
+        guard target > 0 else { throw PlanFinancialPreviewError.invalidTarget }
+        guard moneyTakenOut > 0 else { throw PlanFinancialPreviewError.invalidAmount }
+        guard moneyTakenOut <= netRecorded else { throw PlanFinancialPreviewError.insufficientSavings }
+        guard futurePeriods > 0, currentPerPeriod > 0 else {
+            throw PlanFinancialPreviewError.invalidSchedule
+        }
+        let revised = netRecorded - moneyTakenOut
+        let remaining = max(target - revised, 0)
+        let keepDate = remaining / futurePeriods + (remaining % futurePeriods == 0 ? 0 : 1)
+        let periods = remaining / currentPerPeriod + (remaining % currentPerPeriod == 0 ? 0 : 1)
+        let finalContribution = periods == 0 ? 0 :
+            (remaining % currentPerPeriod == 0 ? currentPerPeriod : remaining % currentPerPeriod)
+        return .init(priorNetRecorded: netRecorded, moneyTakenOut: moneyTakenOut,
+                     revisedNetRecorded: revised, target: target, remaining: remaining,
+                     keepDatePerPeriod: keepDate, keepAmountPeriods: periods,
+                     keepAmountFinalContribution: finalContribution)
+    }
+}
+
+
+/// A correction replaces the *effect* of a previous money-out entry without
+/// fabricating a new saving or mutating historical XP. Preview only.
+struct MoneyOutCorrectionPreview: Equatable {
+    let correctedNetRecorded: Int
+    let adjustmentDelta: Int
+
+    static func calculate(
+        currentNetRecorded: Int,
+        originalMoneyOut: Int,
+        correctedMoneyOut: Int
+    ) throws -> MoneyOutCorrectionPreview {
+        guard currentNetRecorded >= 0 else { throw PlanFinancialPreviewError.invalidBalance }
+        guard originalMoneyOut > 0, correctedMoneyOut > 0 else {
+            throw PlanFinancialPreviewError.invalidAmount
+        }
+        // Reversal is positive when the original money-out was overstated.
+        let (delta, overflow) = originalMoneyOut.subtractingReportingOverflow(correctedMoneyOut)
+        guard !overflow else { throw PlanFinancialPreviewError.invalidAmount }
+        let (net, netOverflow) = currentNetRecorded.addingReportingOverflow(delta)
+        guard !netOverflow, net >= 0 else { throw PlanFinancialPreviewError.insufficientSavings }
+        return .init(correctedNetRecorded: net, adjustmentDelta: delta)
+    }
+}

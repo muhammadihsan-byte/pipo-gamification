@@ -393,6 +393,7 @@ struct PipoInputEditingDCard: View {
                         .font(.caption.bold())
                         .foregroundStyle(Card44.muted)
                     TextField("Amount in IDR", text: $amount)
+                        .accessibilityLabel("Amount in IDR")
                         .keyboardType(.numberPad)
                         .font(.title2.bold())
                         .foregroundStyle(Card44.ink)
@@ -418,6 +419,9 @@ struct PipoInputEditingDCard: View {
                     .accessibilityIdentifier("pipo.card.moneyOut.review")
             }
         }
+        // Keep the card discoverable without collapsing its editable fields
+        // into a single parent accessibility element on the iOS Simulator.
+        .accessibilityElement(children: .contain)
         .accessibilityIdentifier("pipo.card.inputEditingD")
     }
 }
