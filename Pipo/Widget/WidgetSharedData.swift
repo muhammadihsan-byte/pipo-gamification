@@ -9,6 +9,8 @@ struct WidgetSnapshot: Sendable {
     let goalProgress: Double
     let nextDepositDate: Date?
     var ownerUserID: UUID? = nil
+    var consistencyUnit: String? = nil
+    var recordedCount: Int = 0
 
     static let empty = WidgetSnapshot(
         streakDays: 0,
@@ -75,6 +77,10 @@ enum WidgetSharedData {
         if let owner = snapshot.ownerUserID {
             values["ownerUserID"] = owner.uuidString
         }
+        if let unit = snapshot.consistencyUnit {
+            values["consistencyUnit"] = unit
+        }
+        values["recordedCount"] = max(snapshot.recordedCount, 0)
         if let goalID = snapshot.goalID {
             values["goalID"] = goalID.uuidString
         }
@@ -113,7 +119,9 @@ enum WidgetSharedData {
             goalTitle: values["goalTitle"] as? String,
             goalProgress: values["goalProgress"] as? Double ?? 0,
             nextDepositDate: values["nextDepositDate"] as? Date,
-            ownerUserID: ownerUserID
+            ownerUserID: ownerUserID,
+            consistencyUnit: values["consistencyUnit"] as? String,
+            recordedCount: values["recordedCount"] as? Int ?? 0
         )
     }
 }

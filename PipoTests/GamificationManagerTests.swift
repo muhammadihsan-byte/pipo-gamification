@@ -187,12 +187,219 @@ final class GamificationManagerTests: XCTestCase {
         XCTAssertEqual(calendar.component(.day, from: next!), 28)
     }
 
+
+    @MainActor
+    func testMixedGoalHistoryCannotInflateConsistentPeriods() throws {
+        let owner = UUID()
+        let goal = PersonalGoal(title: "Trip", category: .trip, targetAmount: 900,
+                                startDate: makeDate(day: 1), targetDate: makeDate(day: 31),
+                                rhythm: .weekly, ownerUserID: owner)
+        let anotherGoal = UUID()
+        let profile = UserProfile(userID: owner, streakDays: 17)
+        let unrelated = SavingTransaction(goalId: anotherGoal, amount: 100, date: makeDate(day: 2), userID: owner)
+        let saving = try GamificationManager().recordSaving(
+            amount: 100, goal: goal, profile: profile, date: makeDate(day: 9),
+            priorTransactions: [unrelated]
+        )
+        XCTAssertEqual(saving.amount, 100)
+        XCTAssertEqual(profile.streakDays, 1)
+    }
+
+    @MainActor
+    func testFlexibleSavingNeverCreatesPunitiveStreak() throws {
+        let goal = PersonalGoal(title: "Flexible", category: .other, targetAmount: 900,
+                                startDate: makeDate(day: 1), targetDate: makeDate(day: 31),
+                                rhythm: .flexible)
+        let profile = UserProfile(streakDays: 50)
+        _ = try GamificationManager().recordSaving(
+            amount: 100, goal: goal, profile: profile, date: makeDate(day: 9)
+        )
+        XCTAssertEqual(profile.streakDays, 0)
+        XCTAssertEqual(SavingConsistency.consecutivePeriods(
+            dates: [makeDate(day: 9)], rhythm: .flexible,
+            startDate: makeDate(day: 1), asOf: makeDate(day: 10)
+        ), 0)
+    }
+
+    func testGracePeriodAndMissedPeriodReset() {
+        let start = makeDate(day: 1)
+        let history = [makeDate(day: 2), makeDate(day: 9)]
+        XCTAssertEqual(SavingConsistency.consecutivePeriods(
+            dates: history, rhythm: .weekly,
+            startDate: start, asOf: makeDate(day: 20)
+        ), 2)
+        XCTAssertEqual(SavingConsistency.consecutivePeriods(
+            dates: history, rhythm: .weekly,
+            startDate: start, asOf: makeDate(day: 27)
+        ), 0)
+        XCTAssertTrue(SavingConsistency.isRecovery(
+            priorDates: history, newDate: makeDate(day: 27),
+            rhythm: .weekly, startDate: start
+        ))
+    }
+
+    func testDaylightSavingAndMonthEndUseCalendarPeriods() {
+        var cal = Calendar(identifier: .gregorian)
+        cal.timeZone = TimeZone(identifier: "America/Los_Angeles")!
+        func date(_ year: Int, _ month: Int, _ day: Int) -> Date {
+            cal.date(from: DateComponents(year: year, month: month, day: day, hour: 12))!
+        }
+        let jan31 = date(2026, 1, 31)
+        let monthly = [jan31, date(2026, 2, 28), date(2026, 3, 31)]
+        XCTAssertEqual(SavingConsistency.consecutivePeriods(
+            dates: monthly, rhythm: .monthly,
+            startDate: jan31, asOf: date(2026, 3, 31), calendar: cal
+        ), 3)
+        let marchStart = date(2026, 3, 1)
+        let weekly = [marchStart, date(2026, 3, 8), date(2026, 3, 15)]
+        XCTAssertEqual(SavingConsistency.consecutivePeriods(
+            dates: weekly, rhythm: .weekly,
+            startDate: marchStart, asOf: date(2026, 3, 15), calendar: cal
+        ), 3)
+    }
+
+    @MainActor
+    func testBadgeUnlockIsIdempotentAndRejectsOtherAccounts() throws {
+        let owner = UUID()
+        let profile = UserProfile(userID: owner)
+        let goal = PersonalGoal(
+            title: "Trip", category: .trip, targetAmount: 400,
+            startDate: makeDate(day: 1), targetDate: makeDate(day: 31),
+            rhythm: .weekly, preferredSavingDay: 5, ownerUserID: owner
+        )
+        let first = SavingTransaction(goalId: goal.id, amount: 100,
+                                      date: makeDate(day: 1), userID: owner)
+        goal.currentAmount = 100
+        let earned = AchievementEngine.grant(
+            profile: profile, goal: goal, transaction: first,
+            history: [], previousAmount: 0
+        )
+        XCTAssertTrue(earned.contains(.firstSave))
+        XCTAssertTrue(earned.contains(.quarterWay))
+        XCTAssertTrue(earned.contains(.planMatch))
+        XCTAssertTrue(AchievementEngine.grant(
+            profile: profile, goal: goal, transaction: first,
+            history: [], previousAmount: 0
+        ).isEmpty)
+        XCTAssertEqual(Set(profile.unlockedBadgeIds).count, profile.unlockedBadgeIds.count)
+
+        let other = UserProfile(userID: UUID())
+        XCTAssertTrue(AchievementEngine.grant(
+            profile: other, goal: goal, transaction: first,
+            history: [], previousAmount: 0
+        ).isEmpty)
+        XCTAssertTrue(other.unlockedBadgeIds.isEmpty)
+    }
+
+    @MainActor
+    func testThreePlannedAndFourPeriodBadgesRequireDistinctScheduledPeriods() {
+        let owner = UUID()
+        let profile = UserProfile(userID: owner)
+        let goal = PersonalGoal(title: "Trip", category: .trip, targetAmount: 400,
+                                startDate: makeDate(day: 1), targetDate: makeDate(day: 31),
+                                rhythm: .weekly, preferredSavingDay: 5, ownerUserID: owner)
+        let one = SavingTransaction(goalId: goal.id, amount: 100, date: makeDate(day: 1), userID: owner)
+        let two = SavingTransaction(goalId: goal.id, amount: 100, date: makeDate(day: 8), userID: owner)
+        let repeatSaving = SavingTransaction(goalId: goal.id, amount: 100,
+                                             date: makeDate(day: 8).addingTimeInterval(3600), userID: owner)
+        let three = SavingTransaction(goalId: goal.id, amount: 100, date: makeDate(day: 15), userID: owner)
+        goal.currentAmount = 400
+        let firstTwo = AchievementEngine.grant(
+            profile: profile, goal: goal, transaction: repeatSaving,
+            history: [one, two], previousAmount: 300
+        )
+        XCTAssertFalse(firstTwo.contains(.plannedThree))
+        let third = AchievementEngine.grant(
+            profile: profile, goal: goal, transaction: three,
+            history: [one, two], previousAmount: 300
+        )
+        XCTAssertTrue(third.contains(.plannedThree))
+        XCTAssertFalse(third.contains(.periodsFour))
+        let four = SavingTransaction(goalId: goal.id, amount: 100, date: makeDate(day: 22), userID: owner)
+        let fourth = AchievementEngine.grant(
+            profile: profile, goal: goal, transaction: four,
+            history: [one, two, three], previousAmount: 300
+        )
+        XCTAssertTrue(fourth.contains(.periodsFour))
+    }
+
+    @MainActor
+    func testRecoveryAndExtraSavingHaveRealHistoryTriggers() {
+        let owner = UUID()
+        let profile = UserProfile(userID: owner)
+        let goal = PersonalGoal(title: "Trip", category: .trip, targetAmount: 1_000,
+                                startDate: makeDate(day: 1), targetDate: makeDate(day: 31),
+                                rhythm: .weekly, preferredSavingDay: 5, ownerUserID: owner)
+        let first = SavingTransaction(goalId: goal.id, amount: 100, date: makeDate(day: 1), userID: owner)
+        let recovered = SavingTransaction(goalId: goal.id, amount: 80, date: makeDate(day: 27), userID: owner)
+        goal.currentAmount = 180
+        let earned = AchievementEngine.grant(
+            profile: profile, goal: goal, transaction: recovered,
+            history: [first], previousAmount: 100
+        )
+        XCTAssertTrue(earned.contains(.recovery))
+        XCTAssertFalse(earned.contains(.extraSave))
+        XCTAssertFalse(earned.contains(.planMatch))
+    }
+
+
+    @MainActor
+    func testFirstStepRequiresTheFirstContributionAcrossAllAccountGoals() {
+        let owner = UUID()
+        let profile = UserProfile(userID: owner)
+        let previousGoal = UUID()
+        let goal = PersonalGoal(
+            title: "Trip", category: .trip, targetAmount: 1_000,
+            startDate: makeDate(day: 1), targetDate: makeDate(day: 31),
+            ownerUserID: owner
+        )
+        let existing = SavingTransaction(
+            goalId: previousGoal, amount: 80,
+            date: makeDate(day: 2), userID: owner
+        )
+        let next = SavingTransaction(
+            goalId: goal.id, amount: 100,
+            date: makeDate(day: 3), userID: owner
+        )
+        goal.currentAmount = 100
+        let earned = AchievementEngine.grant(
+            profile: profile, goal: goal, transaction: next,
+            history: [existing], previousAmount: 0
+        )
+        XCTAssertFalse(earned.contains(.firstSave))
+    }
+
+    @MainActor
+    func testExtraSavingRequiresAnotherContributionInTheSamePeriod() {
+        let owner = UUID()
+        let profile = UserProfile(userID: owner)
+        let goal = PersonalGoal(
+            title: "Trip", category: .trip, targetAmount: 1_000,
+            startDate: makeDate(day: 1), targetDate: makeDate(day: 31),
+            rhythm: .weekly, ownerUserID: owner
+        )
+        let first = SavingTransaction(
+            goalId: goal.id, amount: 75, date: makeDate(day: 9), userID: owner
+        )
+        let extra = SavingTransaction(
+            goalId: goal.id, amount: 50,
+            date: makeDate(day: 10), userID: owner
+        )
+        goal.currentAmount = 125
+        let earned = AchievementEngine.grant(
+            profile: profile, goal: goal, transaction: extra,
+            history: [first], previousAmount: 75
+        )
+        XCTAssertTrue(earned.contains(.extraSave))
+    }
+
     @MainActor
     private func makeGoal() -> PersonalGoal {
         PersonalGoal(
             title: "Emergency fund",
             category: .house,
             targetAmount: 10_000,
+            startDate: makeDate(day: 1),
             targetDate: makeDate(day: 31),
             rhythm: .weekly
         )

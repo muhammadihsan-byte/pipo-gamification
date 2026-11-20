@@ -19,6 +19,8 @@ final class NavigationManager {
     var path = NavigationPath()
     var isMilestonePresented = false
     var milestoneStreakDays = 0
+    var milestoneNewBadges: [String] = []
+    var pendingAchievementsRequest = false
     var milestoneXPEarned = GamificationManager.xpPerSaving
     var selectedRhythm: SavingRhythm = .monthly
     var preferredDepositDay = 25
@@ -50,6 +52,8 @@ final class NavigationManager {
         isMilestonePresented = false
         milestoneXPEarned = GamificationManager.xpPerSaving
         milestoneStreakDays = 0
+        milestoneNewBadges = []
+        pendingAchievementsRequest = false
         selectedRhythm = .monthly
         preferredDepositDay = 25
         plannedContributionAmount = nil
@@ -65,9 +69,21 @@ final class NavigationManager {
         return pendingDepositGoalID
     }
 
-    func transactionDidComplete(xpEarned: Int, streakDays: Int) {
+    func transactionDidComplete(
+        xpEarned: Int, streakDays: Int, badgeTitles: [String] = []
+    ) {
         milestoneXPEarned = xpEarned
         milestoneStreakDays = max(streakDays, 0)
+        milestoneNewBadges = badgeTitles
         isMilestonePresented = true
+    }
+
+    func requestAchievementsOpen() {
+        pendingAchievementsRequest = true
+    }
+
+    func consumeAchievementsRequest() -> Bool {
+        defer { pendingAchievementsRequest = false }
+        return pendingAchievementsRequest
     }
 }

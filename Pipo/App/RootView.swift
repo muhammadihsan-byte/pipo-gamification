@@ -30,6 +30,11 @@ struct RootView: View {
 
     private var needsOnboarding: Bool {
         #if DEBUG
+        // Returning-user simulator fixtures must not depend on whether a
+        // previous test happened to create an onboarding profile.
+        if ProcessInfo.processInfo.arguments.contains("-pipo-dashboard-qa") {
+            return false
+        }
         if ProcessInfo.processInfo.arguments.contains("-pipo-onboarding-qa") {
             return !hasFinishedOnboardingQA
         }
@@ -236,7 +241,9 @@ struct RootView: View {
             ConsistencyMilestoneView(
                 xpEarned: navigationManager.milestoneXPEarned,
                 streakDays: navigationManager.milestoneStreakDays,
+                badgeTitles: navigationManager.milestoneNewBadges,
                 onViewAchievements: {
+                    navigationManager.requestAchievementsOpen()
                     navigationManager.isMilestonePresented = false
                 }
             )
@@ -312,13 +319,14 @@ struct RootView: View {
             onCreateGoal: {
                 choosingPlan = true
             },
-            onSavingCompleted: { transaction, goal, xpEarned, streakDays in
+            onSavingCompleted: { transaction, goal, xpEarned, streakDays, badges in
                 guard let userID = authStateManager.userID,
                       AccountScope.owns(goal, userID: userID),
                       transaction.userID == userID else { return }
                 navigationManager.transactionDidComplete(
                     xpEarned: xpEarned,
-                    streakDays: streakDays
+                    streakDays: streakDays,
+                    badgeTitles: badges.map(\.title)
                 )
                 guard let supabaseService else { return }
                 Task {
@@ -444,7 +452,9 @@ struct RootView: View {
             ConsistencyMilestoneView(
                 xpEarned: navigationManager.milestoneXPEarned,
                 streakDays: navigationManager.milestoneStreakDays,
+                badgeTitles: navigationManager.milestoneNewBadges,
                 onViewAchievements: {
+                    navigationManager.requestAchievementsOpen()
                     navigationManager.popToRoot()
                 }
             )
