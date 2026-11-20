@@ -575,7 +575,7 @@ extension PersonalGoalTests {
         let owner = UUID(), goal = UUID()
         let sample = SavingLedgerCloudAdjustment(
             id: UUID(), goalID: goal, userID: owner, kind: "money_out",
-            amount: 1, correctsEventID: nil, createdAt: .now
+            amount: 1, correctsEventID: nil, createdAt: "2026-11-19T13:00:00.123456+00:00"
         )
         XCTAssertThrowsError(try SavingCloudLedgerReconciler.reconstruct(
             goalID: goal, ownerID: owner,
@@ -583,5 +583,22 @@ extension PersonalGoalTests {
         )) { error in
             XCTAssertEqual(error as? SavingCloudRecoveryError, .tooManyEntries)
         }
+    }
+}
+
+extension PersonalGoalTests {
+    func testIssue42CloudRecoveryAcceptsPostgresFractionalTimestamp() throws {
+        let user = UUID(), goal = UUID()
+        let data = """
+        [{"id":"\(UUID().uuidString)","goal_id":"\(goal.uuidString)",
+          "user_id":"\(user.uuidString)","amount":100000,"xp_earned":300,
+          "date":"2026-11-19T12:00:00.123456+00:00"}]
+        """.data(using: .utf8)!
+        let rows = try JSONDecoder().decode([SavingLedgerCloudContribution].self, from: data)
+        let snapshot = try SavingCloudLedgerReconciler.reconstruct(
+            goalID: goal, ownerID: user, contributions: rows, adjustments: []
+        )
+        XCTAssertEqual(snapshot.netRecorded, 100_000)
+        XCTAssertEqual(snapshot.earnedXP, 300)
     }
 }
