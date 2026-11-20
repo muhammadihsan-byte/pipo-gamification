@@ -351,6 +351,7 @@ struct PersonalGoalDetailView: View {
                             isProcessing: isLoadingPhoto,
                             onBack: onBack
                         )
+                        .accessibilityElement(children: .contain)
                         .accessibilityIdentifier("pipo.goal.photoHero")
 
                         details(for: goal)
