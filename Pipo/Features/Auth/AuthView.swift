@@ -18,14 +18,14 @@ struct AuthView: View {
     private let onSubmit: (AuthCredentials) -> Void
     private let onAppleSignIn: () -> Void
     private let onGoogleSignIn: () -> Void
-    private let onForgotPassword: () -> Void
+    private let onForgotPassword: (String) -> Void
 
     init(
         initialEmail: String = "",
         onSubmit: @escaping (AuthCredentials) -> Void,
         onAppleSignIn: @escaping () -> Void,
         onGoogleSignIn: @escaping () -> Void,
-        onForgotPassword: @escaping () -> Void
+        onForgotPassword: @escaping (String) -> Void
     ) {
         _email = State(initialValue: initialEmail)
         self.onSubmit = onSubmit
@@ -42,8 +42,10 @@ struct AuthView: View {
                 signInModePicker
                 credentialsForm
                 submitButton
-                providerDivider
-                providerButtons
+                if AuthProviderAvailability.socialSignInEnabled {
+                    providerDivider
+                    providerButtons
+                }
             }
             .padding(.horizontal, 24)
             .padding(.top, 12)
@@ -146,7 +148,13 @@ struct AuthView: View {
                         .foregroundStyle(PipoTheme.ink)
                     Spacer()
                     Button("Forgot Password?") {
-                        onForgotPassword()
+                        let address = email.trimmingCharacters(in: .whitespacesAndNewlines)
+                        guard address.contains("@"), !address.contains(" ") else {
+                            validationMessage = "Enter your email address to receive a reset link."
+                            return
+                        }
+                        validationMessage = nil
+                        onForgotPassword(address)
                     }
                     .font(.caption.weight(.medium))
                     .foregroundStyle(PipoTheme.pink)
@@ -273,12 +281,85 @@ private extension View {
     }
 }
 
+/// A verified recovery callback is required before presenting this editor.
+/// The sheet cannot swipe away into an authenticated dashboard.
+@MainActor
+struct PasswordResetView: View {
+    @State private var password = ""
+    @State private var confirmation = ""
+    @State private var feedback: String?
+    @State private var isWorking = false
+
+    let onSubmit: @MainActor (String) async throws -> Void
+    let onCancel: @MainActor () async throws -> Void
+
+    var body: some View {
+        NavigationStack {
+            VStack(alignment: .leading, spacing: 18) {
+                Text("Choose a new password")
+                    .font(.title2.weight(.bold))
+                    .foregroundStyle(PipoTheme.ink)
+                Text("Your password must be at least 8 characters.")
+                    .foregroundStyle(PipoTheme.muted)
+                SecureField("New password", text: $password)
+                    .textContentType(.newPassword)
+                    .authFieldStyle()
+                SecureField("Confirm new password", text: $confirmation)
+                    .textContentType(.newPassword)
+                    .authFieldStyle()
+                if let feedback {
+                    Text(feedback)
+                        .font(.footnote)
+                        .foregroundStyle(PipoTheme.deepPink)
+                        .accessibilityAddTraits(.isStaticText)
+                }
+                Button(isWorking ? "Updating…" : "UPDATE PASSWORD") {
+                    guard password.count >= 8 else {
+                        feedback = "Use at least 8 characters."
+                        return
+                    }
+                    guard password == confirmation else {
+                        feedback = "Passwords don't match."
+                        return
+                    }
+                    feedback = nil
+                    isWorking = true
+                    Task { @MainActor in
+                        defer { isWorking = false }
+                        do { try await onSubmit(password) }
+                        catch { feedback = error.localizedDescription }
+                    }
+                }
+                .buttonStyle(PrimaryActionButtonStyle())
+                .disabled(isWorking)
+                Spacer()
+            }
+            .padding(24)
+            .background(.white)
+            .toolbar {
+                ToolbarItem(placement: .topBarLeading) {
+                    Button("Cancel") {
+                        isWorking = true
+                        Task { @MainActor in
+                            defer { isWorking = false }
+                            do { try await onCancel() }
+                            catch { feedback = error.localizedDescription }
+                        }
+                    }
+                    .disabled(isWorking)
+                }
+            }
+        }
+        .interactiveDismissDisabled()
+    }
+}
+
 #Preview {
     AuthView(
         initialEmail: MockData.authEmail,
         onSubmit: { _ in },
         onAppleSignIn: {},
         onGoogleSignIn: {},
-        onForgotPassword: {}
+        onForgotPassword: { _ in }
     )
 }
