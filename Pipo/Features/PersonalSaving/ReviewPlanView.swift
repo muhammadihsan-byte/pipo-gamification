@@ -645,7 +645,13 @@ private struct PipoPlanRevisionReviewSheet: View {
         if goal.subItems.isEmpty { return true }
         let values = goal.subItems.compactMap { Int(exactly: $0.amount) }
         guard values.count == goal.subItems.count else { return false }
-        return values.reduce(0, +) == amount
+        var sum = 0
+        for value in values {
+            let (next, overflow) = sum.addingReportingOverflow(value)
+            guard !overflow else { return false }
+            sum = next
+        }
+        return sum == amount
     }
 
     var body: some View {
@@ -666,7 +672,8 @@ private struct PipoPlanRevisionReviewSheet: View {
                 Section("Before and after") {
                     LabeledContent("Already recorded", value: money(goal.currentAmount))
                     LabeledContent("Original target", value: money(goal.targetAmount))
-                    if let amount, amount > 0, targetDate >= Date.now {
+                    if let amount, amount > 0,
+                       Calendar.current.startOfDay(for: targetDate) >= Calendar.current.startOfDay(for: .now) {
                         LabeledContent("New target", value: money(amount))
                         LabeledContent("Still to record",
                                        value: money(max(Double(amount) - goal.currentAmount, 0)))
