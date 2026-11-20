@@ -514,3 +514,74 @@ extension PersonalGoalTests {
         ))
     }
 }
+
+
+extension PersonalGoalTests {
+    func testIssue42CloudRecoveryValidatesSignedOwnerAndPreservesXP() throws {
+        let owner = UUID(), goal = UUID(), originalID = UUID(), correctionID = UUID()
+        let json = JSONDecoder()
+        json.dateDecodingStrategy = .iso8601
+        let savingsData = """
+        [{"id":"\(UUID().uuidString)","goal_id":"\(goal.uuidString)",
+          "user_id":"\(owner.uuidString)","amount":1500000,
+          "xp_earned":300,"date":"2026-11-19T12:00:00Z"}]
+        """.data(using: .utf8)!
+        let correctionData = """
+        [
+          {"id":"\(originalID.uuidString)","goal_id":"\(goal.uuidString)",
+           "user_id":"\(owner.uuidString)","kind":"money_out","amount":500000,
+           "corrects_event_id":null,"created_at":"2026-11-19T13:00:00Z"},
+          {"id":"\(correctionID.uuidString)","goal_id":"\(goal.uuidString)",
+           "user_id":"\(owner.uuidString)","kind":"correction","amount":200000,
+           "corrects_event_id":"\(originalID.uuidString)","created_at":"2026-11-19T14:00:00Z"}
+        ]
+        """.data(using: .utf8)!
+        let contributions = try json.decode([SavingLedgerCloudContribution].self, from: savingsData)
+        let adjustments = try json.decode([SavingLedgerCloudAdjustment].self, from: correctionData)
+        let snapshot = try SavingCloudLedgerReconciler.reconstruct(
+            goalID: goal, ownerID: owner,
+            contributions: contributions, adjustments: adjustments
+        )
+        XCTAssertEqual(snapshot.netRecorded, 1_200_000)
+        XCTAssertEqual(snapshot.earnedXP, 300)
+        XCTAssertThrowsError(try SavingCloudLedgerReconciler.reconstruct(
+            goalID: goal, ownerID: UUID(),
+            contributions: contributions, adjustments: adjustments
+        ))
+    }
+
+    func testIssue42CloudRecoveryRejectsUnknownAdjustmentTypeAndFractionalAmount() throws {
+        let owner = UUID(), goal = UUID()
+        let json = JSONDecoder()
+        json.dateDecodingStrategy = .iso8601
+        let base = """
+        [{"id":"\(UUID().uuidString)","goal_id":"\(goal.uuidString)",
+          "user_id":"\(owner.uuidString)","kind":"money_out",
+          "amount":999,"corrects_event_id":null,
+          "created_at":"2026-11-19T13:00:00Z"}]
+        """
+        for altered in [base.replacingOccurrences(of: "money_out", with: "transfer"),
+                        base.replacingOccurrences(of: "999", with: "999.5")] {
+            let entries = try json.decode(
+                [SavingLedgerCloudAdjustment].self, from: altered.data(using: .utf8)!
+            )
+            XCTAssertThrowsError(try SavingCloudLedgerReconciler.reconstruct(
+                goalID: goal, ownerID: owner, contributions: [], adjustments: entries
+            ))
+        }
+    }
+
+    func testIssue42CloudRecoveryRejectsOverLimitPayloads() {
+        let owner = UUID(), goal = UUID()
+        let sample = SavingLedgerCloudAdjustment(
+            id: UUID(), goalID: goal, userID: owner, kind: "money_out",
+            amount: 1, correctsEventID: nil, createdAt: .now
+        )
+        XCTAssertThrowsError(try SavingCloudLedgerReconciler.reconstruct(
+            goalID: goal, ownerID: owner,
+            contributions: [], adjustments: Array(repeating: sample, count: 10_001)
+        )) { error in
+            XCTAssertEqual(error as? SavingCloudRecoveryError, .tooManyEntries)
+        }
+    }
+}
