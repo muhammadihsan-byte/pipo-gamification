@@ -184,7 +184,7 @@ struct PipoMilestonesDCard: View {
                     .font(.subheadline.weight(.semibold))
                     .foregroundStyle(Card44.accent)
                     .frame(minHeight: 44, alignment: .leading)
-                    .accessibilityIdentifier("pipo.card.milestones.openCollection")
+                    .accessibilityIdentifier("pipo.dashboard.journey.achievements")
             }
         }
         .accessibilityIdentifier("pipo.card.milestonesD")
@@ -605,11 +605,10 @@ struct PipoMoneyOutCardsQAShowcase: View {
     @State private var amount = "500000"
     @State private var note = ""
     @State private var route = PipoSavingRoute.keepDate
-    @State private var reviewed = false
+    @State private var reviewed = true
 
     var body: some View {
-        ScrollView {
-            VStack(alignment: .leading, spacing: 16) {
+        VStack(alignment: .leading, spacing: 16) {
                 Text("Design-only money-out previews")
                     .font(.headline)
                 Text("No saving history or bank balance will be changed here.")
@@ -630,9 +629,8 @@ struct PipoMoneyOutCardsQAShowcase: View {
                         laterDate: Calendar.current.date(byAdding: .month, value: 2, to: .now)
                     )
                 }
-            }
-            .padding(20)
         }
+        .padding(.vertical, 6)
     }
 }
 #endif
