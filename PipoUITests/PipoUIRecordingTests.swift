@@ -205,6 +205,30 @@ final class PipoUIRecordingTests: XCTestCase {
         attachOnboardingScreen("Dashboard B — confirmed saving milestone")
     }
 
+    /// #44 Approved Budget B visual and functional parity: one reused card
+    /// in Goal Detail with the real SwiftData breakdown of a DEBUG-only goal.
+    func testApprovedBudgetBreakdownBOnGoalDetail() {
+        continueAfterFailure = false
+        app.launchArguments = ["-pipo-dashboard-qa"]
+        app.launch()
+
+        let focus = app.buttons["pipo.dashboard.focusGoal"].firstMatch
+        XCTAssertTrue(focus.waitForExistence(timeout: 25))
+        focus.tap()
+
+        XCTAssertTrue(app.staticTexts["BUDGET CATEGORIES"].waitForExistence(timeout: 15),
+                      "Approved Budget B must appear in Goal Detail")
+        XCTAssertTrue(app.staticTexts["Travel & stay"].exists,
+                      "Actual item titles must be visible")
+        XCTAssertTrue(app.staticTexts["TOTAL Rp6.000.000"].exists,
+                      "Actual breakdown total must be visible")
+        XCTAssertFalse(app.staticTexts.matching(
+            NSPredicate(format: "label CONTAINS %@", "differs from this goal")
+        ).firstMatch.exists,
+                       "Matching breakdown must not report a mismatch")
+        attachOnboardingScreen("Approved Budget B — saved goal detail")
+    }
+
     /// Non-destructive P0 simulator acceptance: sign-in availability and
     /// account deletion confirmation. The fixture is DEBUG-only and has no
     /// backend Auth session. NEVER tap the destructive submit action.
