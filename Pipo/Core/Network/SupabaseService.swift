@@ -285,6 +285,76 @@ struct SavingLedgerCloudAdjustment: Decodable, Sendable {
     }
 }
 
+enum SavingMoneyOutRequestError: Error, Equatable {
+    case invalidAmount
+    case invalidNote
+    case invalidPreference
+    case mismatchedServerReceipt
+}
+
+/// Stable idempotency key must be created before the first send and reused
+/// unchanged after a timeout or a relaunch. NEVER regenerate it on retry.
+/// This does not move bank money; the server only records manual saving usage.
+struct SavingMoneyOutRPCRequest: Encodable, Sendable {
+    let requestID: UUID
+    let goalID: UUID
+    let amount: Int
+    let note: String?
+    let preference: String
+
+    init(requestID: UUID, goalID: UUID, amount: Int, note: String?,
+         preference: String) throws {
+        guard amount > 0, amount <= 9_999_999_999_999_999 else {
+            throw SavingMoneyOutRequestError.invalidAmount
+        }
+        guard ["keep_date", "keep_amount"].contains(preference) else {
+            throw SavingMoneyOutRequestError.invalidPreference
+        }
+        let trimmed = note?.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard (trimmed?.count ?? 0) <= 240 else {
+            throw SavingMoneyOutRequestError.invalidNote
+        }
+        self.requestID = requestID
+        self.goalID = goalID
+        self.amount = amount
+        self.note = trimmed?.isEmpty == true ? nil : trimmed
+        self.preference = preference
+    }
+
+    enum CodingKeys: String, CodingKey {
+        case requestID = "p_id"
+        case goalID = "p_goal_id"
+        case amount = "p_amount"
+        case note = "p_note"
+        case preference = "p_preference"
+    }
+}
+
+struct SavingMoneyOutRPCReceipt: Decodable, Sendable {
+    let id: UUID
+    let goalID: UUID
+    let userID: UUID
+    let kind: String
+    let amount: Double
+    let preference: String
+    let note: String?
+
+    enum CodingKeys: String, CodingKey {
+        case id, kind, amount, preference, note
+        case goalID = "goal_id"
+        case userID = "user_id"
+    }
+
+    func verify(request: SavingMoneyOutRPCRequest, ownerID: UUID) throws {
+        guard id == request.requestID, goalID == request.goalID, userID == ownerID,
+              kind == "money_out", amount.isFinite,
+              Int(exactly: amount) == request.amount,
+              preference == request.preference,
+              note == request.note
+        else { throw SavingMoneyOutRequestError.mismatchedServerReceipt }
+    }
+}
+
 enum SavingCloudRecoveryError: Error, Equatable {
     case invalidServerEntry
     case accountChanged
@@ -585,6 +655,30 @@ final class SupabaseService {
             .from("saving_transactions")
             .upsert(payloads, onConflict: "id")
             .execute()
+    }
+
+    /// Authenticated, idempotent RPC adapter for the proposed atomic server
+    /// function. NOT connected to any production button until DB migration,
+    /// crash-safe intent persistence and verified reconciliation are complete.
+    func submitVerifiedMoneyOut(
+        _ request: SavingMoneyOutRPCRequest, authenticatedUserID: UUID
+    ) async throws -> SavingMoneyOutRPCReceipt {
+        guard client.auth.currentUser?.id == authenticatedUserID else {
+            throw SupabaseServiceError.notAuthenticated
+        }
+        let receipt = try await performMoneyOutRPC(request)
+        guard client.auth.currentUser?.id == authenticatedUserID else {
+            throw SavingCloudRecoveryError.accountChanged
+        }
+        try receipt.verify(request: request, ownerID: authenticatedUserID)
+        return receipt
+    }
+
+    private nonisolated func performMoneyOutRPC(
+        _ request: SavingMoneyOutRPCRequest
+    ) async throws -> SavingMoneyOutRPCReceipt {
+        try await client.rpc("record_money_out", params: request)
+            .execute().value
     }
 
     /// Read-only cloud recovery preview, intentionally NOT called by normal
