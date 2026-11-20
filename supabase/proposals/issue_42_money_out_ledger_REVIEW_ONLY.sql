@@ -213,6 +213,43 @@ $money_out_body$;
 revoke all on function public.correct_money_out(uuid,uuid,numeric,text) from public,anon;
 grant execute on function public.correct_money_out(uuid,uuid,numeric,text) to authenticated;
 
+-- Read contributions and adjustments in ONE PostgreSQL statement snapshot,
+-- not two independent PostgREST requests which may race with another device.
+-- SECURITY INVOKER preserves the owning account's RLS policies.
+create or replace function public.get_saving_ledger_snapshot(p_goal_id uuid)
+returns jsonb
+language sql stable security invoker set search_path = ''
+as $ledger_snapshot$
+    select jsonb_build_object(
+       'goal_id', g.id,
+       'user_id', g.user_id,
+       'contributions', coalesce((
+           select jsonb_agg(to_jsonb(s) order by s.date, s.id)
+           from (
+               select id,goal_id,user_id,amount,xp_earned,date
+               from public.saving_transactions
+               where goal_id = g.id and user_id = g.user_id
+               order by date,id
+               limit 10001
+           ) s
+       ), '[]'::jsonb),
+       'adjustments', coalesce((
+           select jsonb_agg(to_jsonb(a) order by a.created_at, a.id)
+           from (
+               select id,goal_id,user_id,kind,amount,corrects_event_id,created_at
+               from public.saving_adjustments
+               where goal_id = g.id and user_id = g.user_id
+               order by created_at,id
+               limit 10001
+           ) a
+       ), '[]'::jsonb)
+    )
+    from public.saving_goals g
+    where g.id = p_goal_id and g.user_id = (select auth.uid())
+$ledger_snapshot$;
+revoke all on function public.get_saving_ledger_snapshot(uuid) from public,anon;
+grant execute on function public.get_saving_ledger_snapshot(uuid) to authenticated;
+
 -- Still a design proposal. Client direct INSERT, UPDATE, DELETE remains revoked.
 -- Security reviewer must validate correction idempotency with intervening edits,
 -- account isolation, and migrations on a disposable test project before applying.
