@@ -344,6 +344,20 @@ struct DashboardView: View {
 
     private var homeDashboard: some View {
         VStack(alignment: .leading, spacing: 16) {
+            #if DEBUG
+            if ProcessInfo.processInfo.arguments.contains("-pipo-allcards-qa"),
+               let focusGoal {
+                PipoApprovedCardsGalleryQA(
+                    goal: focusGoal,
+                    groupGoal: ownedGoals.first(where: { $0.isGroupGoal }),
+                    transactions: logs(for: focusGoal),
+                    earnedIDs: Set(currentProfile?.unlockedBadgeIds ?? []),
+                    onOpenCollection: { showingAchievements = true },
+                    onCreateGoal: onCreateGoal,
+                    onSeeJourney: { selectedPage = .journey }
+                )
+            }
+            #endif
             if let focusGoal {
                 featuredGoalCard(focusGoal)
                 activityAndAchievements(for: focusGoal)
