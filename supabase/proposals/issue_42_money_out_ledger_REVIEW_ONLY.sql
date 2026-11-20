@@ -10,12 +10,13 @@ create table if not exists public.saving_adjustments (
     note text check (note is null or char_length(note) <= 240),
     preference text check (preference in ('keep_date','keep_amount')),
     corrects_event_id uuid references public.saving_adjustments(id),
+    corrected_amount numeric(18,2),
     created_at timestamptz not null default now(),
     constraint adjustment_owned_goal foreign key (goal_id,user_id)
        references public.saving_goals(id,user_id) on delete cascade,
     constraint adjustment_kind_shape check (
-       (kind = 'money_out' and amount > 0 and corrects_event_id is null and preference is not null)
-       or (kind = 'correction' and corrects_event_id is not null and preference is null)
+       (kind = 'money_out' and amount > 0 and corrects_event_id is null and preference is not null and corrected_amount is null)
+       or (kind = 'correction' and corrects_event_id is not null and preference is null and corrected_amount > 0)
     )
 );
 create index if not exists saving_adjustments_owner_goal_idx
@@ -142,11 +143,7 @@ begin
            and v_prior.kind = 'correction'
            and v_prior.corrects_event_id = p_original_id
            and v_prior.note is not distinct from nullif(btrim(p_note),'')
-           and v_original.amount -
-               coalesce((select sum(amount) from public.saving_adjustments
-                         where corrects_event_id = p_original_id
-                           and id <> p_id),0) -
-               v_prior.amount = p_corrected_amount then
+           and v_prior.corrected_amount = p_corrected_amount then
             return v_prior;
         end if;
         raise exception 'Conflicting correction idempotency key' using errcode = '23505';
@@ -172,9 +169,9 @@ begin
         raise exception 'Correction exceeds available balance' using errcode = '22003';
     end if;
     insert into public.saving_adjustments
-       (id,goal_id,user_id,kind,amount,note,corrects_event_id)
+       (id,goal_id,user_id,kind,amount,note,corrects_event_id,corrected_amount)
     values (p_id,v_original.goal_id,v_owner,'correction',v_delta,
-            nullif(btrim(p_note),''),p_original_id)
+            nullif(btrim(p_note),''),p_original_id,p_corrected_amount)
     returning * into v_event;
     return v_event;
 end;
