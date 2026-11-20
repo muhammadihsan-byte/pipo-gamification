@@ -309,9 +309,13 @@ struct PersonalGoalDetailView: View {
     private let recordSaving: () -> Void
 
     @Query private var goals: [PersonalGoal]
+    @Query private var transactions: [SavingTransaction]
+    @Query private var profiles: [UserProfile]
     @Environment(AuthStateManager.self) private var authStateManager
+    @Environment(NavigationManager.self) private var navigationManager
     @Environment(\.modelContext) private var modelContext
     @State private var lifecycleError: String?
+    @State private var showingSavingJournal = false
 
     init(goalID: UUID, onBack: @escaping () -> Void, recordSaving: @escaping () -> Void) {
         _goals = Query(filter: #Predicate<PersonalGoal> { $0.id == goalID })
@@ -342,6 +346,26 @@ struct PersonalGoalDetailView: View {
         .background(.white)
         .foregroundStyle(PipoTheme.ink)
         .toolbar(.hidden, for: .navigationBar)
+        .sheet(isPresented: $showingSavingJournal) {
+            NavigationStack {
+                ScrollView {
+                    if let goal = goals.first,
+                       AccountScope.owns(goal, userID: authStateManager.userID) {
+                        PipoActivityHistoryDCard(
+                            transactions: ownedHistory(for: goal),
+                            titleForGoal: { _ in goal.title }
+                        )
+                        .padding(20)
+                    }
+                }
+                .navigationTitle("Saving journal")
+                .toolbar {
+                    ToolbarItem(placement: .confirmationAction) {
+                        Button("Done") { showingSavingJournal = false }
+                    }
+                }
+            }
+        }
         .alert("Goal not updated", isPresented: Binding(
             get: { lifecycleError != nil },
             set: { if !$0 { lifecycleError = nil } }
@@ -354,18 +378,14 @@ struct PersonalGoalDetailView: View {
 
     private func details(for goal: PersonalGoal) -> some View {
         VStack(alignment: .leading, spacing: 18) {
-            VStack(alignment: .leading, spacing: 6) {
-                Text(goal.title).font(.largeTitle.bold()).accessibilityAddTraits(.isHeader)
-                Text(goal.categoryTitle).foregroundStyle(PipoTheme.muted)
-            }
+            PipoGoalFocusBCard(goal: goal)
 
+            // Only the Focus B card contains a savings progress rail.
+            // The summary below is tabular and must not duplicate that rail.
             TicketCard {
                 VStack(alignment: .leading, spacing: 12) {
                     LabeledContent("Status", value: goal.lifecycleState.title)
                     LabeledContent("Saved", value: money(goal.currentAmount))
-                    ProgressView(value: goal.progress)
-                        .tint(PipoTheme.green)
-                        .accessibilityLabel("Saving progress")
                     LabeledContent("Target", value: money(goal.targetAmount))
                     LabeledContent("Target date", value: dateLabel(goal.targetDate))
                     if let override = goal.plannedContributionOverride {
@@ -376,6 +396,18 @@ struct PersonalGoalDetailView: View {
                 .font(.subheadline)
             }
 
+            PipoGoalProgressBCard(
+                quarterWayEarned: UserProfile.existing(
+                    for: authStateManager.userID, in: profiles
+                )?.unlockedBadgeIds.contains(PipoBadge.quarterWay.rawValue) ?? false,
+                onOpenCollection: {
+                    navigationManager.requestAchievementsOpen()
+                    onBack()
+                }
+            )
+
+            PipoInspirationCCard(goal: goal)
+
             if !goal.subItems.isEmpty {
                 PipoBudgetBreakdownCard(
                     lines: goal.subItems.map {
@@ -383,6 +415,16 @@ struct PersonalGoalDetailView: View {
                     },
                     targetAmount: goal.targetAmount
                 )
+            }
+
+            PipoActivityHistoryDCard(
+                transactions: ownedHistory(for: goal),
+                titleForGoal: { _ in goal.title }
+            )
+            if goal.lifecycleState == .completed {
+                PipoCompletionBCard(goal: goal) {
+                    showingSavingJournal = true
+                }
             }
 
             if goal.canRecordSaving {
@@ -420,6 +462,13 @@ struct PersonalGoalDetailView: View {
                     .foregroundStyle(PipoTheme.green)
             }
         }
+    }
+
+    private func ownedHistory(for goal: PersonalGoal) -> [SavingTransaction] {
+        guard let owner = authStateManager.userID, goal.ownerUserID == owner else { return [] }
+        return transactions
+            .filter { $0.userID == owner && $0.goalId == goal.id }
+            .sorted { $0.date > $1.date }
     }
 
     private func changeLifecycle(of goal: PersonalGoal, to state: GoalLifecycleState) {
