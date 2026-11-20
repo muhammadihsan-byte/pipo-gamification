@@ -18,7 +18,7 @@ Visual reference: https://www.figma.com/design/tce3nRBcRwyObJMwQzA2rK/Gamificati
 | Building Consistency | 3-planned | Three distinct planned contribution days on one goal | Active |
 | Rhythm Established | 4-periods | Four consecutive planned periods on one goal | Active |
 | Back on Track | recovery | Contribute after a fully missed scheduled period | Active |
-| Goal Bonus | extra-save | Additional non-planned contribution after previous activity | Active |
+| Goal Bonus | extra-save | An additional saving within an already contributed scheduled period | Active |
 | Realistic Plan | adapt-go | Plan revision + later saving | Waiting for plan-edit workflow |
 | Next Goal | next-goal | New goal after completing one | Waiting for goal lifecycle event |
 | Quarter Way | quarter-way | Contribution crosses 25% | Active |

@@ -333,8 +333,12 @@ enum AchievementEngine {
               goal.ownerUserID == userID,
               transaction.userID == userID,
               transaction.goalId == goal.id else { return [] }
-        let existing = history.filter { $0.userID == userID && $0.goalId == goal.id &&
-            $0.id != transaction.id && $0.date <= transaction.date }
+        // History includes every owned goal: "First Step" is an account-wide first,
+        // while rhythm, planned and recovery rules remain scoped to this goal.
+        let accountHistory = history.filter {
+            $0.userID == userID && $0.id != transaction.id && $0.date <= transaction.date
+        }
+        let existing = accountHistory.filter { $0.goalId == goal.id }
         let priorDates = existing.map(\.date)
         let all = existing + [transaction]
         let allDates = all.map(\.date)
@@ -348,7 +352,7 @@ enum AchievementEngine {
             asOf: transaction.date, calendar: calendar
         )
 
-        var eligible: [PipoBadge] = [.firstSave]
+        var eligible: [PipoBadge] = accountHistory.isEmpty ? [.firstSave] : []
         if SavingConsistency.isPlannedContribution(date: transaction.date,
                                                   amount: transaction.amount,
                                                   goal: goal, calendar: calendar) {
@@ -359,9 +363,17 @@ enum AchievementEngine {
         if SavingConsistency.isRecovery(priorDates: priorDates, newDate: transaction.date,
                                        rhythm: goal.rhythm, startDate: goal.startDate,
                                        calendar: calendar) { eligible.append(.recovery) }
-        if !existing.isEmpty &&
-            !SavingConsistency.isPlannedContribution(date: transaction.date, amount: transaction.amount,
-                                                     goal: goal, calendar: calendar) {
+        // An extra is a second contribution in a period already containing a
+        // saving. An overdue catch-up by itself must not be mislabeled "bonus".
+        if let currentPeriod = SavingConsistency.periodIndex(
+            for: transaction.date, rhythm: goal.rhythm,
+            startDate: goal.startDate, calendar: calendar
+        ), existing.contains(where: {
+            SavingConsistency.periodIndex(
+                for: $0.date, rhythm: goal.rhythm,
+                startDate: goal.startDate, calendar: calendar
+            ) == currentPeriod
+        }) {
             eligible.append(.extraSave)
         }
         for (badge, threshold) in [

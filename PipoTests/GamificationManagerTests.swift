@@ -338,8 +338,59 @@ final class GamificationManagerTests: XCTestCase {
             history: [first], previousAmount: 100
         )
         XCTAssertTrue(earned.contains(.recovery))
-        XCTAssertTrue(earned.contains(.extraSave))
+        XCTAssertFalse(earned.contains(.extraSave))
         XCTAssertFalse(earned.contains(.planMatch))
+    }
+
+
+    @MainActor
+    func testFirstStepRequiresTheFirstContributionAcrossAllAccountGoals() {
+        let owner = UUID()
+        let profile = UserProfile(userID: owner)
+        let previousGoal = UUID()
+        let goal = PersonalGoal(
+            title: "Trip", category: .trip, targetAmount: 1_000,
+            startDate: makeDate(day: 1), targetDate: makeDate(day: 31),
+            ownerUserID: owner
+        )
+        let existing = SavingTransaction(
+            goalId: previousGoal, amount: 80,
+            date: makeDate(day: 2), userID: owner
+        )
+        let next = SavingTransaction(
+            goalId: goal.id, amount: 100,
+            date: makeDate(day: 3), userID: owner
+        )
+        goal.currentAmount = 100
+        let earned = AchievementEngine.grant(
+            profile: profile, goal: goal, transaction: next,
+            history: [existing], previousAmount: 0
+        )
+        XCTAssertFalse(earned.contains(.firstSave))
+    }
+
+    @MainActor
+    func testExtraSavingRequiresAnotherContributionInTheSamePeriod() {
+        let owner = UUID()
+        let profile = UserProfile(userID: owner)
+        let goal = PersonalGoal(
+            title: "Trip", category: .trip, targetAmount: 1_000,
+            startDate: makeDate(day: 1), targetDate: makeDate(day: 31),
+            rhythm: .weekly, ownerUserID: owner
+        )
+        let first = SavingTransaction(
+            goalId: goal.id, amount: 75, date: makeDate(day: 9), userID: owner
+        )
+        let extra = SavingTransaction(
+            goalId: goal.id, amount: 50,
+            date: makeDate(day: 10), userID: owner
+        )
+        goal.currentAmount = 125
+        let earned = AchievementEngine.grant(
+            profile: profile, goal: goal, transaction: extra,
+            history: [first], previousAmount: 75
+        )
+        XCTAssertTrue(earned.contains(.extraSave))
     }
 
     @MainActor

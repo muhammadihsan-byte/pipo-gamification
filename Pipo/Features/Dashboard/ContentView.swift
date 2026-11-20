@@ -1023,7 +1023,7 @@ struct DashboardView: View {
             transaction.userID = userID
             newlyUnlocked = AchievementEngine.grant(
                 profile: profile, goal: goal, transaction: transaction,
-                history: priorGoalTransactions, previousAmount: previousCurrentAmount
+                history: ownedTransactions, previousAmount: previousCurrentAmount
             )
         } catch {
             profile.userID = previousUserID
