@@ -16,6 +16,7 @@ struct RootView: View {
     @State private var completedOnboardingAccountID: UUID?
     @Environment(\.modelContext) private var modelContext
     @Query private var localTransactions: [SavingTransaction]
+    @Query private var localGoals: [PersonalGoal]
 
     private let supabaseConfigurationError: String?
 
@@ -48,7 +49,12 @@ struct RootView: View {
         // A fixed test-only user lets remote QA prove per-account personalization
         // without using credentials, network calls or a real customer account.
         #if DEBUG
-        let onboardingQAUserID = (ProcessInfo.processInfo.arguments.contains("-pipo-onboarding-qa") || ProcessInfo.processInfo.arguments.contains("-pipo-onboarding-qa-returning"))
+        let args = ProcessInfo.processInfo.arguments
+        let qaSignedIn = args.contains("-pipo-onboarding-qa")
+            || args.contains("-pipo-onboarding-qa-returning")
+            || args.contains("-pipo-visual-qa")
+            || args.contains("-pipo-dashboard-qa")
+        let onboardingQAUserID = qaSignedIn
             ? UUID(uuidString: "99999999-9999-4999-8999-999999999999")
             : nil
         #else
@@ -86,6 +92,11 @@ struct RootView: View {
         .environment(subscriptionManager)
         .environment(storeKitManager)
         .tint(PipoTheme.green)
+        .task {
+            // Restore the active widget account even when the initial screen
+            // is an authenticated simulator fixture.
+            updateWidgetAccount(authStateManager.userID)
+        }
         .task {
             #if DEBUG
             if ProcessInfo.processInfo.arguments.contains("-pipo-visual-qa")
@@ -125,18 +136,25 @@ struct RootView: View {
         }
         .onChange(of: authStateManager.authState) { _, authState in
             if authState == .unauthenticated {
-                navigationManager.popToRoot()
+                navigationManager.resetAccountContext()
                 clearWidgetSnapshot()
             } else {
-                navigationManager.popToRoot()
+                navigationManager.resetAccountContext()
                 // Onboarding runs after authentication, never before it.
                 // Account-scoped completion state is read by rootContent.
             }
         }
         .onChange(of: authStateManager.userID) { _, userID in
+            // Invalidate widget content and pending deposit/milestone routes
+            // BEFORE exposing the new account's dashboard.
+            navigationManager.resetAccountContext()
+            updateWidgetAccount(userID)
             guard let userID else { return }
-            let transactions = localTransactions.filter { $0.userID == userID }
+            let transactions = AccountScope.visibleTransactions(
+                localTransactions, goals: localGoals, userID: userID
+            )
             Task {
+                guard authStateManager.userID == userID else { return }
                 do {
                     try await storeKitManager.restorePurchasedSlots(
                         userID: userID,
@@ -147,10 +165,13 @@ struct RootView: View {
                     noticeMessage = "Purchased slots could not sync: \(error.localizedDescription)"
                 }
 
-                guard let supabaseService, !transactions.isEmpty else { return }
+                guard authStateManager.userID == userID,
+                      let supabaseService,
+                      !transactions.isEmpty else { return }
                 do {
                     try await supabaseService.syncTransactions(transactions)
                 } catch {
+                    guard authStateManager.userID == userID else { return }
                     noticeMessage = "Signed in, but local savings could not sync: \(error.localizedDescription)"
                 }
             }
@@ -170,6 +191,13 @@ struct RootView: View {
                     let goalID = UUID(uuidString: goalIDString)
                 else {
                     noticeMessage = "The widget link does not include a valid saving goal."
+                    return
+                }
+                guard authStateManager.authState == .authenticated,
+                      AccountScope.visibleGoals(localGoals, userID: authStateManager.userID)
+                        .contains(where: { $0.id == goalID && !$0.isGroupGoal && $0.progress < 1 })
+                else {
+                    noticeMessage = "This saving goal isn't available for the signed-in account."
                     return
                 }
                 navigationManager.requestDeposit(goalID: goalID)
@@ -274,20 +302,25 @@ struct RootView: View {
                 choosingPlan = true
             },
             onSavingCompleted: { transaction, goal, xpEarned, streakDays in
+                guard let userID = authStateManager.userID,
+                      AccountScope.owns(goal, userID: userID),
+                      transaction.userID == userID else { return }
                 navigationManager.transactionDidComplete(
                     xpEarned: xpEarned,
                     streakDays: streakDays
                 )
                 guard let supabaseService else { return }
                 Task {
+                    guard authStateManager.userID == userID else { return }
                     do {
                         try await supabaseService.syncTransactions([transaction])
                     } catch {
+                        guard authStateManager.userID == userID else { return }
                         noticeMessage = "Saved locally, but transaction sync failed: \(error.localizedDescription)"
                         return
                     }
 
-                    guard goal.isGroupGoal else {
+                    guard authStateManager.userID == userID, goal.isGroupGoal else {
                         return
                     }
                     do {
@@ -297,6 +330,7 @@ struct RootView: View {
                             targetAmount: goal.targetAmount
                         )
                     } catch {
+                        guard authStateManager.userID == userID else { return }
                         noticeMessage = "Transaction synced, but group progress could not update: \(error.localizedDescription)"
                     }
                 }
@@ -340,10 +374,17 @@ struct RootView: View {
     }
 
     private func clearWidgetSnapshot() {
+        updateWidgetAccount(nil)
+    }
+
+    private func updateWidgetAccount(_ userID: UUID?) {
         do {
-            try WidgetSharedData.save(.empty)
+            try WidgetSharedData.activate(userID: userID)
+            if userID == nil {
+                try WidgetSharedData.save(.empty)
+            }
         } catch {
-            noticeMessage = "Widget data could not be cleared: \(error.localizedDescription)"
+            noticeMessage = "Widget account data could not be updated: \(error.localizedDescription)"
         }
         WidgetCenter.shared.reloadAllTimelines()
     }
