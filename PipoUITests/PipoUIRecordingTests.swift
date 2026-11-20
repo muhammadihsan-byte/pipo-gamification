@@ -186,8 +186,9 @@ final class PipoUIRecordingTests: XCTestCase {
 
         tapButton("pipo.dashboard.tab.profile")
         XCTAssertTrue(app.staticTexts["Your space"].waitForExistence(timeout: 12))
-        XCTAssertTrue(app.staticTexts["Total XP"].exists)
         attachOnboardingScreen("Dashboard B — profile data")
+        XCTAssertTrue(app.staticTexts["pipo.dashboard.profile.xpLabel"].exists,
+                      "Profile XP label must be independently accessible")
 
         tapButton("pipo.dashboard.tab.home")
         tapButton("pipo.dashboard.recordSaving")

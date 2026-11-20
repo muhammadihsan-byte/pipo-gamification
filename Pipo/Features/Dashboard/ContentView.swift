@@ -709,7 +709,13 @@ struct DashboardView: View {
                         .font(.title3.bold())
                     LabeledContent("Active goals", value: "\(activeGoals.count)")
                     LabeledContent("Completed goals", value: "\(completedGoals.count)")
-                    LabeledContent("Total XP", value: "\(currentProfile?.totalXP ?? 0)")
+                    HStack {
+                        Text("Total XP")
+                            .accessibilityIdentifier("pipo.dashboard.profile.xpLabel")
+                        Spacer()
+                        Text("\(currentProfile?.totalXP ?? 0)")
+                            .fontWeight(.semibold)
+                    }
                     LabeledContent("Level", value: "\(currentProfile?.currentLevel ?? 1)")
                 }
                 .font(.subheadline)
