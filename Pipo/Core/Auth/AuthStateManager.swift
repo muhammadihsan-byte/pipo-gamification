@@ -75,6 +75,12 @@ enum AccountDeletionLocalData {
         in context: ModelContext,
         defaults: UserDefaults = .standard
     ) throws {
+        // Local deletion is forbidden until the backend reported success.
+        guard (defaults.stringArray(forKey: pendingKey) ?? []).contains(
+            userID.uuidString.lowercased()
+        ) else {
+            throw AccountDeletionLocalError.serverDeletionNotConfirmed
+        }
         let transactions = try context.fetch(FetchDescriptor<SavingTransaction>())
         let goals = try context.fetch(FetchDescriptor<PersonalGoal>())
         let profiles = try context.fetch(FetchDescriptor<UserProfile>())
@@ -104,5 +110,13 @@ enum AccountDeletionLocalData {
             guard let userID = UUID(uuidString: raw) else { continue }
             try? complete(for: userID, in: context, defaults: defaults)
         }
+    }
+}
+
+enum AccountDeletionLocalError: LocalizedError {
+    case serverDeletionNotConfirmed
+
+    var errorDescription: String? {
+        "The server has not confirmed account deletion. Local data is preserved."
     }
 }
