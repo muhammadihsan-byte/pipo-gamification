@@ -169,6 +169,10 @@ final class PipoUIRecordingTests: XCTestCase {
                       "Focus goal must be a separately accessible button")
         XCTAssertTrue(focusButton.label.contains("Bali holiday"),
                       "The most advanced active personal goal should be featured")
+        XCTAssertTrue(focusButton.label.contains("personal saving goal"), focusButton.label)
+        XCTAssertTrue(focusButton.label.contains("recorded"), focusButton.label)
+        XCTAssertTrue(focusButton.label.contains("percent complete"), focusButton.label)
+        XCTAssertTrue(focusButton.label.contains("active"), focusButton.label)
         XCTAssertTrue(app.buttons["pipo.dashboard.recordSaving"].waitForExistence(timeout: 12),
                       "Record a saving must remain a separately accessible action")
         XCTAssertTrue(app.staticTexts["60% complete"].exists)
