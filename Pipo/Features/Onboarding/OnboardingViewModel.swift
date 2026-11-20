@@ -77,6 +77,10 @@ enum OnboardingProfileStore {
         return try? JSONDecoder().decode(OnboardingPersonalization.self, from: data)
     }
 
+    static func delete(for userID: UUID, in defaults: UserDefaults = .standard) {
+        defaults.removeObject(forKey: key(for: userID))
+    }
+
     @discardableResult
     static func save(_ personalization: OnboardingPersonalization, for userID: UUID) -> Bool {
         guard let data = try? JSONEncoder().encode(personalization) else { return false }
