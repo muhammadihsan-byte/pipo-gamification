@@ -316,6 +316,7 @@ struct PersonalGoalDetailView: View {
     @Environment(\.modelContext) private var modelContext
     @State private var lifecycleError: String?
     @State private var showingSavingJournal = false
+    @State private var showingMoneyOutPreview = false
 
     init(goalID: UUID, onBack: @escaping () -> Void, recordSaving: @escaping () -> Void) {
         _goals = Query(filter: #Predicate<PersonalGoal> { $0.id == goalID })
@@ -364,6 +365,18 @@ struct PersonalGoalDetailView: View {
                         Button("Done") { showingSavingJournal = false }
                     }
                 }
+            }
+        }
+        .sheet(isPresented: $showingMoneyOutPreview) {
+            if let goal = goals.first,
+               AccountScope.owns(goal, userID: authStateManager.userID) {
+                PipoMoneyOutReviewSheet(
+                    availableAmount: goal.currentAmount,
+                    targetAmount: goal.targetAmount,
+                    currentPlannedAmount: goal.plannedContributionOverride
+                        ?? (goal.rhythm == .flexible ? nil : (Int(goal.targetAmount) > 0 ? max(1, Int(goal.targetAmount) / 20) : nil)),
+                    onClose: { showingMoneyOutPreview = false }
+                )
             }
         }
         .alert("Goal not updated", isPresented: Binding(
@@ -425,6 +438,18 @@ struct PersonalGoalDetailView: View {
                 PipoCompletionBCard(goal: goal) {
                     showingSavingJournal = true
                 }
+            }
+
+            // Review-only until #42's atomic account-scoped ledger is deployed.
+            // Never imply this moves money from a bank or saves a withdrawal.
+            if goal.currentAmount > 0 && !goal.isGroupGoal {
+                Button("Review money used elsewhere") {
+                    showingMoneyOutPreview = true
+                }
+                .font(.subheadline.bold())
+                .foregroundStyle(PipoTheme.deepPink)
+                .frame(maxWidth: .infinity, minHeight: 44)
+                .accessibilityIdentifier("pipo.goal.moneyOutPreview")
             }
 
             if goal.canRecordSaving {
@@ -511,4 +536,87 @@ func scheduleDetails(_ schedule: PersonalSavingSchedule, override: Int? = nil) -
         ? "Make one planned contribution on \(dateLabel(schedule.firstDate))."
         : "\(schedule.count) planned contributions from \(dateLabel(schedule.firstDate)) to \(dateLabel(schedule.lastDate))."
     return "\(timeline) Aim to save \(amount) each time. Your last contribution may be smaller."
+}
+
+
+/// Issue #42 preview: uses exactly the approved three D-family cards.
+/// This does not write transactions, alter XP or claim to withdraw bank funds.
+/// The final confirmation stays gated until the Supabase atomic ledger exists.
+private struct PipoMoneyOutReviewSheet: View {
+    let availableAmount: Double
+    let targetAmount: Double
+    let currentPlannedAmount: Int?
+    let onClose: () -> Void
+
+    @State private var amountText = ""
+    @State private var note = ""
+    @State private var reviewed = false
+    @State private var route: PipoSavingRoute = .keepDate
+
+    private var validAmount: Double? {
+        PipoMoneyOutPreview.amount(from: amountText, available: availableAmount)
+    }
+
+    private var preview: MoneyOutFinancialPreview? {
+        guard let validAmount,
+              let available = Int(exactly: availableAmount),
+              let target = Int(exactly: targetAmount),
+              let takenOut = Int(exactly: validAmount),
+              let perPeriod = currentPlannedAmount, perPeriod > 0
+        else { return nil }
+        return try? MoneyOutFinancialPreview.calculate(
+            netRecorded: available, target: target, moneyTakenOut: takenOut,
+            futurePeriods: 20, currentPerPeriod: perPeriod
+        )
+    }
+
+    var body: some View {
+        NavigationStack {
+            ScrollView {
+                VStack(alignment: .leading, spacing: 16) {
+                    Text("Pipo only records money you tell it about. Nothing moves from your bank.")
+                        .font(.footnote)
+                        .foregroundStyle(PipoTheme.muted)
+                    PipoInputEditingDCard(
+                        amount: $amountText, note: $note,
+                        available: availableAmount,
+                        onReview: { reviewed = true }
+                    )
+                    if reviewed, let validAmount {
+                        PipoFinancialImpactDCard(
+                            before: availableAmount,
+                            amountUsed: validAmount,
+                            xpEarnedSoFar: 0
+                        )
+                        // 20 periods is a test fixture, not a real schedule.
+                        // Never show a fabricated future date or suggestion.
+                        PipoSavingDecisionsDCard(
+                            selection: $route,
+                            suggestedAmount: nil,
+                            laterDate: nil
+                        )
+                        Text(preview == nil
+                             ? "A valid future schedule is required before these options can be estimated."
+                             : "This review is a preview only. Your recorded savings have not changed.")
+                            .font(.footnote)
+                            .foregroundStyle(PipoTheme.muted)
+                        Button("Saving changes isn't available yet") {}
+                            .buttonStyle(PrimaryActionButtonStyle())
+                            .disabled(true)
+                            .accessibilityHint("Requires a secure, account-verified money-out ledger.")
+                    }
+                }
+                .padding(20)
+                .frame(maxWidth: 520)
+                .frame(maxWidth: .infinity)
+            }
+            .navigationTitle("Money used elsewhere")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .confirmationAction) {
+                    Button("Done", action: onClose)
+                }
+            }
+        }
+    }
 }
