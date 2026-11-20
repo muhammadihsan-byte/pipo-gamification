@@ -348,6 +348,7 @@ struct PersonalGoalDetailView: View {
                             goalTitle: goal.title,
                             heroHeight: min(280, max(190, geometry.size.height * 0.37)),
                             selectedPhoto: $selectedPhoto,
+                            isProcessing: isLoadingPhoto,
                             onBack: onBack
                         )
                         .accessibilityIdentifier("pipo.goal.photoHero")
@@ -660,6 +661,7 @@ private struct PipoGoalPhotoHero: View {
     let goalTitle: String
     let heroHeight: CGFloat
     @Binding var selectedPhoto: PhotosPickerItem?
+    let isProcessing: Bool
     let onBack: () -> Void
     @State private var index = 0
 
@@ -737,6 +739,7 @@ private struct PipoGoalPhotoHero: View {
                             .frame(minHeight: 44)
                     }
                     .accessibilityIdentifier("pipo.goal.photoPicker")
+                    .disabled(isProcessing)
                 }
                 .foregroundStyle(.white)
                 .buttonStyle(.plain)
@@ -749,7 +752,13 @@ private struct PipoGoalPhotoHero: View {
 
                 Spacer(minLength: 0)
 
-                if photos.count > 1 {
+                if isProcessing {
+                    ProgressView("Saving photo")
+                        .tint(.white)
+                        .padding(12)
+                        .background(Color.black.opacity(0.65), in: Capsule())
+                        .padding(.bottom, 12)
+                } else if photos.count > 1 {
                     Button {
                         index = (index + 1) % photos.count
                     } label: {
