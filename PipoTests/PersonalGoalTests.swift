@@ -39,6 +39,44 @@ final class PersonalGoalTests: XCTestCase {
         ]))
     }
 
+    func testAllCardsMoneyOutDraftRejectsInvalidAndOverAvailableAmounts() {
+        XCTAssertEqual(PipoMoneyOutPreview.amount(from: "500000", available: 1_500_000), 500_000)
+        XCTAssertNil(PipoMoneyOutPreview.amount(from: "0", available: 1_500_000))
+        XCTAssertNil(PipoMoneyOutPreview.amount(from: "-1", available: 1_500_000))
+        XCTAssertNil(PipoMoneyOutPreview.amount(from: "1500001", available: 1_500_000))
+        XCTAssertNil(PipoMoneyOutPreview.amount(from: "100", available: -.infinity))
+        XCTAssertNil(PipoMoneyOutPreview.amount(from: "invalid", available: 1_500_000))
+    }
+
+    func testAllCardsImpactIsPureAndDoesNotErasePriorSavingOrXP() {
+        let goal = PersonalGoal(
+            title: "Bali", category: .trip, targetAmount: 6_000_000,
+            currentAmount: 1_500_000, targetDate: .now
+        )
+        let profile = UserProfile(totalXP: 600)
+        let previousAmount = goal.currentAmount
+        let previousXP = profile.totalXP
+        XCTAssertEqual(PipoMoneyOutPreview.impact(before: goal.currentAmount, used: 500_000),
+                       1_000_000)
+        XCTAssertNil(PipoMoneyOutPreview.impact(before: goal.currentAmount, used: 1_500_001))
+        XCTAssertNil(PipoMoneyOutPreview.impact(before: goal.currentAmount, used: -1))
+        XCTAssertNil(PipoMoneyOutPreview.impact(before: .infinity, used: 500_000))
+        XCTAssertEqual(goal.currentAmount, previousAmount, "Preview must never mutate a real goal")
+        XCTAssertEqual(profile.totalXP, previousXP, "Preview must never erase earned XP")
+    }
+
+    func testApprovedCompletionAndFocusAreDerivedFromRealProgress() {
+        let active = PersonalGoal(
+            title: "Weekend", category: .trip, targetAmount: 1_000,
+            currentAmount: 999, targetDate: .now
+        )
+        XCTAssertFalse(active.lifecycleState == .completed)
+        XCTAssertEqual(active.progress, 0.999)
+        active.currentAmount = 1_000
+        XCTAssertTrue(active.lifecycleState == .completed)
+        XCTAssertEqual(active.progress, 1)
+    }
+
     func testProgressAndRemainingAmountAreBoundedByTarget() {
         let goal = PersonalGoal(
             title: "Emergency fund",
