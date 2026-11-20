@@ -384,3 +384,49 @@ extension PersonalGoalTests {
         XCTAssertEqual(review.members.map(\.status), [.accepted])
     }
 }
+
+ 
+extension PersonalGoalTests {
+    func testIssue42TargetRevisionKeepsRecordedSavingsIntact() throws {
+        let before = 1_500_000
+        let preview = try PlanFinancialPreview.revisedTarget(
+            netRecorded: before, target: 6_600_000,
+            futurePeriods: 20, breakdown: [3_600_000, 3_000_000]
+        )
+        XCTAssertEqual(preview.netRecorded, before)
+        XCTAssertEqual(preview.remaining, 5_100_000)
+        XCTAssertEqual(preview.proposedPerPeriod, 255_000)
+    }
+
+    func testIssue42MoneyOutIndependentKeepDateAndKeepAmount() throws {
+        let preview = try MoneyOutFinancialPreview.calculate(
+            netRecorded: 1_500_000, target: 6_000_000,
+            moneyTakenOut: 500_000, futurePeriods: 20,
+            currentPerPeriod: 225_000
+        )
+        XCTAssertEqual(preview.revisedNetRecorded, 1_000_000)
+        XCTAssertEqual(preview.remaining, 5_000_000)
+        XCTAssertEqual(preview.keepDatePerPeriod, 250_000)
+        XCTAssertEqual(preview.keepAmountPeriods, 23)
+        XCTAssertEqual(preview.keepAmountFinalContribution, 50_000)
+    }
+
+    func testIssue42InsufficientSavingsAndInvalidAmountsFailClosed() {
+        XCTAssertThrowsError(try MoneyOutFinancialPreview.calculate(
+            netRecorded: 1_500_000, target: 6_000_000,
+            moneyTakenOut: 2_000_000, futurePeriods: 20,
+            currentPerPeriod: 225_000
+        )) { error in
+            XCTAssertEqual(error as? PlanFinancialPreviewError, .insufficientSavings)
+        }
+        XCTAssertThrowsError(try MoneyOutFinancialPreview.calculate(
+            netRecorded: 1_500_000, target: 6_000_000,
+            moneyTakenOut: 0, futurePeriods: 20,
+            currentPerPeriod: 225_000
+        ))
+        XCTAssertThrowsError(try PlanFinancialPreview.revisedTarget(
+            netRecorded: 1_500_000, target: 6_600_000,
+            futurePeriods: 20, breakdown: [3_000_000]
+        ))
+    }
+}
