@@ -1092,19 +1092,23 @@ struct DashboardView: View {
         let goal = ownedGoals.first {
             !$0.isGroupGoal && $0.currentAmount < $0.targetAmount
         }
-        let lastSavingDate = goal.flatMap { goal in
-            [
-                latestTransaction.flatMap { $0.goalId == goal.id ? $0 : nil },
-                ownedTransactions.first(where: { $0.goalId == goal.id })
-            ]
-                .compactMap { $0?.date }
-                .max()
-        }
+        let widgetHistory: [SavingTransaction] = goal.map { goal in
+            var history = logs(for: goal)
+            if let latestTransaction,
+               latestTransaction.userID == userID,
+               latestTransaction.goalId == goal.id,
+               !history.contains(where: { $0.id == latestTransaction.id }) {
+                // @Query can publish after the save callback; include it once now.
+                history.append(latestTransaction)
+            }
+            return history
+        } ?? []
+        let lastSavingDate = widgetHistory.map(\.date).max()
 
         let snapshot = WidgetSnapshot(
             streakDays: goal.map {
                 SavingConsistency.consecutivePeriods(
-                    dates: logs(for: $0).map(\.date),
+                    dates: widgetHistory.map(\.date),
                     rhythm: $0.rhythm, startDate: $0.startDate
                 )
             } ?? 0,
@@ -1126,7 +1130,7 @@ struct DashboardView: View {
                 case .flexible: nil
                 }
             },
-            recordedCount: goal.map { logs(for: $0).count } ?? 0
+            recordedCount: widgetHistory.count
         )
 
         do {
