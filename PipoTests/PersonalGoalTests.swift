@@ -455,3 +455,62 @@ extension PersonalGoalTests {
         ))
     }
 }
+
+
+extension PersonalGoalTests {
+    func testIssue42LedgerReconstructsMoneyOutAndCorrectionWithoutXPLoss() throws {
+        let owner = UUID(), goal = UUID(), original = UUID()
+        let saving = SavingTransaction(goalId: goal, amount: 1_500_000,
+                                       xpEarned: 300, userID: owner)
+        let events = [
+            SavingAdjustmentEvent(id: original, goalID: goal, userID: owner,
+                                  kind: .moneyOut, amount: 500_000,
+                                  correctsEventID: nil, date: .now),
+            SavingAdjustmentEvent(id: UUID(), goalID: goal, userID: owner,
+                                  kind: .correction, amount: 200_000,
+                                  correctsEventID: original, date: .now)
+        ]
+        let snapshot = try SavingLedgerSnapshot.reconstruct(
+            goalID: goal, ownerID: owner, savings: [saving], adjustments: events
+        )
+        XCTAssertEqual(snapshot.netRecorded, 1_200_000)
+        XCTAssertEqual(snapshot.earnedXP, 300)
+    }
+
+    func testIssue42LedgerRejectsForeignAccountAndDuplicateRetry() throws {
+        let owner = UUID(), goal = UUID(), eventID = UUID()
+        let saving = SavingTransaction(goalId: goal, amount: 900_000,
+                                       xpEarned: 300, userID: owner)
+        let one = SavingAdjustmentEvent(id: eventID, goalID: goal, userID: owner,
+                                        kind: .moneyOut, amount: 100_000,
+                                        correctsEventID: nil, date: .now)
+        XCTAssertThrowsError(try SavingLedgerSnapshot.reconstruct(
+            goalID: goal, ownerID: UUID(), savings: [saving], adjustments: [one]
+        ))
+        XCTAssertThrowsError(try SavingLedgerSnapshot.reconstruct(
+            goalID: goal, ownerID: owner, savings: [saving], adjustments: [one, one]
+        )) { error in
+            XCTAssertEqual(error as? SavingLedgerError, .duplicateEvent)
+        }
+    }
+
+    func testIssue42LedgerCannotOverdrawOrAttachCorrectionToMissingEvent() {
+        let owner = UUID(), goal = UUID()
+        let saving = SavingTransaction(goalId: goal, amount: 100_000,
+                                       xpEarned: 300, userID: owner)
+        let tooMuch = SavingAdjustmentEvent(id: UUID(), goalID: goal, userID: owner,
+                                            kind: .moneyOut, amount: 150_000,
+                                            correctsEventID: nil, date: .now)
+        XCTAssertThrowsError(try SavingLedgerSnapshot.reconstruct(
+            goalID: goal, ownerID: owner, savings: [saving], adjustments: [tooMuch]
+        ))
+        let orphanCorrection = SavingAdjustmentEvent(
+            id: UUID(), goalID: goal, userID: owner, kind: .correction,
+            amount: 25_000, correctsEventID: UUID(), date: .now
+        )
+        XCTAssertThrowsError(try SavingLedgerSnapshot.reconstruct(
+            goalID: goal, ownerID: owner, savings: [saving],
+            adjustments: [orphanCorrection]
+        ))
+    }
+}
