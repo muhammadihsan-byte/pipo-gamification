@@ -193,6 +193,22 @@ jobs:
         shell: bash
         run: bash scripts/check-privacy-manifest.sh "$RUNNER_TEMP/PipoDerivedData"
 
+      - name: Approved Card #44 Budget B visual and interaction QA
+        if: github.event_name == 'pull_request' && github.head_ref == 'feat/pipo-p1-card-parity-foundation'
+        shell: bash
+        run: |
+          set -euo pipefail
+          xcodebuild \
+            -project "$XCODE_PROJECT" \
+            -scheme "$XCODE_SCHEME" \
+            -destination "id=$SIMULATOR_UDID" \
+            -derivedDataPath "$RUNNER_TEMP/PipoDerivedData" \
+            -resultBundlePath "$RUNNER_TEMP/PipoCardParityResults.xcresult" \
+            -only-testing:PipoUITests/PipoUIRecordingTests/testApprovedBudgetBreakdownBOnGoalDetail \
+            CODE_SIGNING_ALLOWED=NO \
+            CODE_SIGNING_REQUIRED=NO \
+            test 2>&1 | tee validation/card-parity-qa.log
+
       - name: Dashboard B — one controlled native iOS visual QA recording
         if: github.event_name == 'pull_request' && (github.head_ref == 'feat/pipo-dashboard-b' || github.head_ref == 'feat/pipo-p0-release-hardening')
         shell: bash
@@ -269,7 +285,7 @@ jobs:
         if: always()
         shell: bash
         run: |
-          for bundle in "$RUNNER_TEMP/PipoTestResults.xcresult" "$RUNNER_TEMP/PipoDashboardResults.xcresult" "$RUNNER_TEMP/PipoAuthQAResults.xcresult"; do
+          for bundle in "$RUNNER_TEMP/PipoTestResults.xcresult" "$RUNNER_TEMP/PipoDashboardResults.xcresult" "$RUNNER_TEMP/PipoAuthQAResults.xcresult" "$RUNNER_TEMP/PipoCardParityResults.xcresult"; do
             if test -d "$bundle"; then
               name="$(basename "$bundle" .xcresult)"
               mkdir -p "validation/visual-qa/$name"
@@ -290,5 +306,6 @@ jobs:
             ${{ runner.temp }}/PipoTestResults.xcresult
             ${{ runner.temp }}/PipoDashboardResults.xcresult
             ${{ runner.temp }}/PipoAuthQAResults.xcresult
+            ${{ runner.temp }}/PipoCardParityResults.xcresult
           if-no-files-found: warn
           retention-days: 7
