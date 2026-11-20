@@ -251,3 +251,28 @@ struct MoneyOutFinancialPreview: Equatable {
                      keepAmountFinalContribution: finalContribution)
     }
 }
+
+
+/// A correction replaces the *effect* of a previous money-out entry without
+/// fabricating a new saving or mutating historical XP. Preview only.
+struct MoneyOutCorrectionPreview: Equatable {
+    let correctedNetRecorded: Int
+    let adjustmentDelta: Int
+
+    static func calculate(
+        currentNetRecorded: Int,
+        originalMoneyOut: Int,
+        correctedMoneyOut: Int
+    ) throws -> MoneyOutCorrectionPreview {
+        guard currentNetRecorded >= 0 else { throw PlanFinancialPreviewError.invalidBalance }
+        guard originalMoneyOut > 0, correctedMoneyOut > 0 else {
+            throw PlanFinancialPreviewError.invalidAmount
+        }
+        // Reversal is positive when the original money-out was overstated.
+        let (delta, overflow) = originalMoneyOut.subtractingReportingOverflow(correctedMoneyOut)
+        guard !overflow else { throw PlanFinancialPreviewError.invalidAmount }
+        let (net, netOverflow) = currentNetRecorded.addingReportingOverflow(delta)
+        guard !netOverflow, net >= 0 else { throw PlanFinancialPreviewError.insufficientSavings }
+        return .init(correctedNetRecorded: net, adjustmentDelta: delta)
+    }
+}
