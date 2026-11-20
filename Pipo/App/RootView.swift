@@ -30,6 +30,11 @@ struct RootView: View {
 
     private var needsOnboarding: Bool {
         #if DEBUG
+        // Returning-user simulator fixtures must not depend on whether a
+        // previous test happened to create an onboarding profile.
+        if ProcessInfo.processInfo.arguments.contains("-pipo-dashboard-qa") {
+            return false
+        }
         if ProcessInfo.processInfo.arguments.contains("-pipo-onboarding-qa") {
             return !hasFinishedOnboardingQA
         }
