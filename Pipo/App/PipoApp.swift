@@ -131,7 +131,7 @@ private enum PipoDashboardQA {
             totalXP: 900,
             currentLevel: 1,
             streakDays: 3,
-            unlockedBadgeIds: ["first-save", "plan-match"]
+            unlockedBadgeIds: ["first-save", "plan-match", "quarter-way"]
         ))
         do {
             try context.save()
