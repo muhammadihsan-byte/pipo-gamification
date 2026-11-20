@@ -1,0 +1,29 @@
+name: Account Deletion Security Tests
+
+on:
+  pull_request:
+    branches:
+      - main
+    paths:
+      - "supabase/functions/delete-account/**"
+      - ".github/workflows/account-deletion-security.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  delete-account:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Install Deno runtime
+        uses: denoland/setup-deno@v2
+        with:
+          deno-version: v2.x
+      - name: Type-check deletion handler
+        run: deno check supabase/functions/delete-account/handler.ts supabase/functions/delete-account/index.ts
+      - name: Verify caller ownership and failure behavior
+        run: deno test supabase/functions/delete-account/handler.test.ts

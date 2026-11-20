@@ -23,6 +23,7 @@ private enum DashboardPage: String, CaseIterable, Identifiable {
 @MainActor
 struct DashboardView: View {
     private let onCreateGoal: () -> Void
+    private let onDeleteAccount: () -> Void
     private let onSavingCompleted: (SavingTransaction, PersonalGoal, Int, Int, [PipoBadge]) -> Void
 
     @Environment(\.modelContext) private var modelContext
@@ -53,11 +54,13 @@ struct DashboardView: View {
 
     init(
         onCreateGoal: @escaping () -> Void,
+        onDeleteAccount: @escaping () -> Void = {},
         onSavingCompleted: @escaping (SavingTransaction, PersonalGoal, Int, Int, [PipoBadge]) -> Void = {
             _, _, _, _, _ in
         }
     ) {
         self.onCreateGoal = onCreateGoal
+        self.onDeleteAccount = onDeleteAccount
         self.onSavingCompleted = onSavingCompleted
     }
 
@@ -112,7 +115,7 @@ struct DashboardView: View {
         VStack(spacing: 0) {
             ScrollView {
                 VStack(alignment: .leading, spacing: 20) {
-                    if ownedGoals.isEmpty {
+                    if ownedGoals.isEmpty && selectedPage == .home {
                         welcomeHeader
                         firstGoalWelcomeCard
                     } else {
@@ -139,9 +142,9 @@ struct DashboardView: View {
                 .padding(.bottom, 24)
             }
             .scrollBounceBehavior(.basedOnSize)
-            if !ownedGoals.isEmpty {
-                bottomNavigation
-            }
+            // Account and privacy controls must remain reachable even for
+            // newly onboarded users who have not created a saving goal.
+            bottomNavigation
         }
         .background(Color.white)
         .toolbar(.hidden, for: .navigationBar)
@@ -763,6 +766,23 @@ struct DashboardView: View {
             Text("Pipo doesn't move money. Your savings are recorded by you.")
                 .font(.footnote)
                 .foregroundStyle(PipoTheme.muted)
+            Divider()
+                .padding(.top, 6)
+            VStack(alignment: .leading, spacing: 10) {
+                Text("Account & privacy")
+                    .font(.headline)
+                    .foregroundStyle(PipoTheme.ink)
+                Text("Deleting your Pipo account permanently removes your saved goals, saving history and profile. This does not move or withdraw money.")
+                    .font(.footnote)
+                    .foregroundStyle(PipoTheme.muted)
+                Button(role: .destructive, action: onDeleteAccount) {
+                    Label("Delete my account", systemImage: "trash")
+                        .font(.subheadline.weight(.semibold))
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .padding(.vertical, 10)
+                }
+                .accessibilityIdentifier("pipo.profile.deleteAccount")
+            }
         }
     }
 

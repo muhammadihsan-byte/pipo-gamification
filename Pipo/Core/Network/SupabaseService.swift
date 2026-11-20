@@ -237,6 +237,18 @@ struct GroupGoalProgressUpdate: Codable, Equatable, Sendable {
     }
 }
 
+/// The server function must verify a live user session and derive the user ID
+/// from Supabase Auth. A response alone does not represent local cleanup.
+struct AccountDeletionResponse: Decodable, Sendable {
+    let deleted: Bool
+    let userID: UUID
+
+    enum CodingKeys: String, CodingKey {
+        case deleted
+        case userID = "user_id"
+    }
+}
+
 struct UserProfileSlotBalancePayload: Codable, Equatable, Sendable {
     let userID: UUID
     let purchasedPersonalSlots: Int
@@ -257,6 +269,7 @@ enum SupabaseServiceError: LocalizedError {
     case goalNotOwnedOrNotPersonal
     case invalidSavingGoal
     case invalidOrUnownedTransaction
+    case deletionNotConfirmed
 
     var errorDescription: String? {
         switch self {
@@ -274,6 +287,8 @@ enum SupabaseServiceError: LocalizedError {
             "This goal has invalid details and cannot be backed up yet."
         case .invalidOrUnownedTransaction:
             "A saving entry is invalid or does not belong to an owned personal goal."
+        case .deletionNotConfirmed:
+            "Pipo could not confirm account deletion. Your local data was not removed."
         }
     }
 }
@@ -337,6 +352,32 @@ final class SupabaseService {
             redirectTo: configuration.redirectURL
         )
         authStateManager.signIn(userID: session.user.id)
+    }
+
+    /// Never use a service-role key in the app. The backend's authenticated
+    /// delete-account function chooses the user from the verified bearer token.
+    func deleteCurrentAccount(accountID: UUID) async throws {
+        guard client.auth.currentUser?.id == accountID else {
+            throw SupabaseServiceError.notAuthenticated
+        }
+        // The expected UUID is only a fail-closed consistency check. The
+        // server MUST derive deletion authority from the verified bearer JWT.
+        let result: AccountDeletionResponse = try await client.functions.invoke(
+            "delete-account",
+            options: FunctionInvokeOptions(
+                body: ["expected_user_id": accountID.uuidString.lowercased()]
+            )
+        )
+        guard result.deleted, result.userID == accountID else {
+            throw SupabaseServiceError.deletionNotConfirmed
+        }
+    }
+
+    /// Auth user has been deleted server-side; sign out the cached SDK session
+    /// best-effort even if Auth no longer recognizes the deleted identity.
+    func discardDeletedSession(using authStateManager: AuthStateManager) async {
+        try? await client.auth.signOut()
+        authStateManager.signOut()
     }
 
     func signOut(authStateManager: AuthStateManager) async throws {

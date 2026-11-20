@@ -11,6 +11,8 @@ struct RootView: View {
     @State private var storeKitManager: StoreKitManager
     @State private var supabaseService: SupabaseService?
     @State private var choosingPlan = false
+    @State private var showingAccountDeletion = false
+    @State private var isDeletingAccount = false
     @State private var noticeMessage: String?
     @State private var hasFinishedOnboardingQA = false
     @State private var completedOnboardingAccountID: UUID?
@@ -99,6 +101,11 @@ struct RootView: View {
         .environment(storeKitManager)
         .tint(PipoTheme.green)
         .task {
+            // Complete a previously confirmed server deletion if the device
+            // failed to save its local cleanup before app termination.
+            AccountDeletionLocalData.retryPending(in: modelContext)
+        }
+        .task {
             // Restore the active widget account even when the initial screen
             // is an authenticated simulator fixture.
             updateWidgetAccount(authStateManager.userID)
@@ -158,14 +165,14 @@ struct RootView: View {
             // Invalidate widget content and pending deposit/milestone routes
             // BEFORE exposing the new account's dashboard.
             navigationManager.resetAccountContext()
-            noticeMessage = nil
+            if !isDeletingAccount { noticeMessage = nil }
             // Entitlements from account A must not remain usable by account B
             // while B's StoreKit profile restoration is pending.
             subscriptionManager.updateEntitlements(
                 purchasedPersonalSlots: 0, purchasedGroupSlots: 0
             )
             updateWidgetAccount(userID)
-            guard let userID else { return }
+            guard let userID, !isDeletingAccount else { return }
             // Do not wait for StoreKit before retrying local-only goal sync.
             enqueuePersonalSavingsSync(for: userID)
             Task {
@@ -186,11 +193,13 @@ struct RootView: View {
         .onChange(of: scenePhase) { _, phase in
             // A failed offline write remains local; retry on foreground,
             // without inventing a successful server sync or a timer.
-            if phase == .active, let userID = authStateManager.userID {
+            if phase == .active, !isDeletingAccount,
+               let userID = authStateManager.userID {
                 enqueuePersonalSavingsSync(for: userID, showFailure: false)
             }
         }
         .onOpenURL { url in
+            guard !isDeletingAccount else { return }
             if url.scheme == "pipo", url.host == "log-deposit" {
                 guard
                     let goalIDString = URLComponents(
@@ -229,6 +238,9 @@ struct RootView: View {
                     noticeMessage = error.localizedDescription
                 }
             }
+        }
+        .sheet(isPresented: $showingAccountDeletion) {
+            AccountDeletionConfirmationView(onDelete: performAccountDeletion)
         }
         .sheet(isPresented: $navigationManager.isMilestonePresented) {
             ConsistencyMilestoneView(
@@ -312,8 +324,14 @@ struct RootView: View {
             onCreateGoal: {
                 choosingPlan = true
             },
+            onDeleteAccount: {
+                guard authStateManager.authState == .authenticated,
+                      authStateManager.userID != nil else { return }
+                showingAccountDeletion = true
+            },
             onSavingCompleted: { transaction, goal, xpEarned, streakDays, badges in
-                guard let userID = authStateManager.userID,
+                guard !isDeletingAccount,
+                      let userID = authStateManager.userID,
                       AccountScope.owns(goal, userID: userID),
                       transaction.userID == userID else { return }
                 navigationManager.transactionDidComplete(
@@ -343,6 +361,43 @@ struct RootView: View {
             Button("Group saving") { navigationManager.navigate(to: .createGroupPlan) }
             Button("Cancel", role: .cancel) {}
         }
+    }
+
+    /// No local data is removed unless the authenticated server endpoint
+    /// explicitly confirms hard deletion of this exact Auth user.
+    private func performAccountDeletion() async throws {
+        guard !isDeletingAccount,
+              let userID = authStateManager.userID,
+              authStateManager.authState == .authenticated,
+              let supabaseService
+        else {
+            throw SupabaseServiceError.notAuthenticated
+        }
+
+        isDeletingAccount = true
+        defer { isDeletingAccount = false }
+        try await supabaseService.deleteCurrentAccount(accountID: userID)
+
+        // The Auth identity is gone. If saving the local store fails, persist
+        // the deleted ID so cleanup can retry offline on the next launch.
+        AccountDeletionLocalData.markServerDeleted(userID)
+        storeKitManager.discardDeletedAccountPurchaseContext(userID)
+        var localCleanupFailure: Error?
+        do {
+            try AccountDeletionLocalData.complete(for: userID, in: modelContext)
+        } catch {
+            localCleanupFailure = error
+        }
+
+        var widgetCleared = true
+        if authStateManager.userID == userID {
+            await supabaseService.discardDeletedSession(using: authStateManager)
+            widgetCleared = updateWidgetAccount(nil)
+        }
+        showingAccountDeletion = false
+        noticeMessage = localCleanupFailure == nil && widgetCleared
+            ? "Your Pipo account and its saved data were deleted."
+            : "Your Pipo account was deleted on the server. Some device data or widget content could not be cleared; Pipo will retry cleanup when you next open the app."
     }
 
     private func authenticate(_ credentials: AuthCredentials) {
@@ -378,7 +433,8 @@ struct RootView: View {
     private func enqueuePersonalSavingsSync(
         for userID: UUID, showFailure: Bool = true
     ) {
-        guard authStateManager.authState == .authenticated,
+        guard !isDeletingAccount,
+              authStateManager.authState == .authenticated,
               authStateManager.userID == userID,
               let supabaseService else { return }
 
@@ -415,16 +471,20 @@ struct RootView: View {
         updateWidgetAccount(nil)
     }
 
-    private func updateWidgetAccount(_ userID: UUID?) {
+    @discardableResult
+    private func updateWidgetAccount(_ userID: UUID?) -> Bool {
+        var success = true
         do {
             try WidgetSharedData.activate(userID: userID)
             if userID == nil {
                 try WidgetSharedData.save(.empty)
             }
         } catch {
+            success = false
             noticeMessage = "Widget account data could not be updated: \(error.localizedDescription)"
         }
         WidgetCenter.shared.reloadAllTimelines()
+        return success
     }
 
     private func beginOAuthSignIn(provider: Provider) {
@@ -487,6 +547,87 @@ struct RootView: View {
         }
     }
 
+}
+
+/// Destructive action is deliberately separate from the profile entry point.
+/// Typing DELETE prevents an accidental single-tap loss of saving history.
+@MainActor
+private struct AccountDeletionConfirmationView: View {
+    let onDelete: @MainActor () async throws -> Void
+
+    @State private var confirmation = ""
+    @State private var isWorking = false
+    @State private var errorMessage: String?
+    @Environment(\.dismiss) private var dismiss
+
+    var body: some View {
+        NavigationStack {
+            ScrollView {
+                VStack(alignment: .leading, spacing: 18) {
+                    Image(systemName: "exclamationmark.triangle.fill")
+                        .font(.system(size: 38))
+                        .foregroundStyle(.red)
+                        .accessibilityHidden(true)
+                    Text("Delete your Pipo account?")
+                        .font(.title2.bold())
+                        .foregroundStyle(PipoTheme.ink)
+                    Text("This permanently deletes your Pipo account, your synced personal goals and saving entries, your locally saved personal and group plans, achievements, and personalization. Your widget data will also be cleared.")
+                        .font(.subheadline)
+                        .foregroundStyle(PipoTheme.ink)
+                    Text("Pipo does not hold your money. Deleting your account will not move money or cancel payments made outside Pipo. This cannot be undone.")
+                        .font(.footnote)
+                        .foregroundStyle(PipoTheme.muted)
+                    Text("Type DELETE to confirm")
+                        .font(.subheadline.weight(.semibold))
+                    TextField("DELETE", text: $confirmation)
+                        .textInputAutocapitalization(.characters)
+                        .autocorrectionDisabled()
+                        .textFieldStyle(.roundedBorder)
+                        .accessibilityIdentifier("pipo.deleteAccount.confirmation")
+                    if let errorMessage {
+                        Text(errorMessage)
+                            .font(.footnote)
+                            .foregroundStyle(.red)
+                            .accessibilityIdentifier("pipo.deleteAccount.error")
+                    }
+                    Button(role: .destructive) {
+                        isWorking = true
+                        errorMessage = nil
+                        Task { @MainActor in
+                            defer { isWorking = false }
+                            do {
+                                try await onDelete()
+                            } catch {
+                                // Failed server deletion leaves local data intact.
+                                errorMessage = "Deletion was not confirmed. \(error.localizedDescription)"
+                            }
+                        }
+                    } label: {
+                        HStack {
+                            if isWorking { ProgressView() }
+                            Text(isWorking ? "Deleting account…" : "Delete account permanently")
+                        }
+                        .frame(maxWidth: .infinity)
+                    }
+                    .buttonStyle(.borderedProminent)
+                    .tint(.red)
+                    .disabled(isWorking || confirmation != "DELETE")
+                    .accessibilityIdentifier("pipo.deleteAccount.submit")
+                    Button("Keep my account") {
+                        dismiss()
+                    }
+                    .frame(maxWidth: .infinity)
+                    .disabled(isWorking)
+                    .accessibilityIdentifier("pipo.deleteAccount.cancel")
+                }
+                .padding(24)
+            }
+            .background(.white)
+            .navigationTitle("Account deletion")
+            .navigationBarTitleDisplayMode(.inline)
+            .interactiveDismissDisabled(isWorking)
+        }
+    }
 }
 
 struct RootView_Previews: PreviewProvider {

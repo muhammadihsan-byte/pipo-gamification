@@ -363,6 +363,18 @@ final class StoreKitManager {
         hasPendingPurchase = true
     }
 
+    /// An already-deleted Pipo account cannot leave its Apple purchase
+    /// context for a different Pipo account. Does not finish/refund a purchase.
+    func discardDeletedAccountPurchaseContext(_ userID: UUID) {
+        transactionUpdatesTask?.cancel()
+        transactionUpdatesTask = nil
+        if defaults.string(forKey: pendingPurchaseUserIDKey)
+            .flatMap(UUID.init(uuidString:)) == userID {
+            clearPendingPurchase()
+            purchaseStatusMessage = nil
+        }
+    }
+
     private func clearPendingPurchase() {
         defaults.removeObject(forKey: pendingPurchaseUserIDKey)
         defaults.removeObject(forKey: pendingPurchaseGroupKey)

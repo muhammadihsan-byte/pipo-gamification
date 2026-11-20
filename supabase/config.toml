@@ -1,0 +1,5 @@
+# Pipo account deletion is authenticated-only. A valid user JWT is required
+# by the Supabase Edge gateway before entering our function. The function
+# independently verifies the caller against /auth/v1/user.
+[functions.delete-account]
+verify_jwt = true
