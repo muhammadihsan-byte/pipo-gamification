@@ -317,6 +317,7 @@ struct PersonalGoalDetailView: View {
     @State private var lifecycleError: String?
     @State private var showingSavingJournal = false
     @State private var showingMoneyOutPreview = false
+    @State private var showingPlanRevisionPreview = false
 
     init(goalID: UUID, onBack: @escaping () -> Void, recordSaving: @escaping () -> Void) {
         _goals = Query(filter: #Predicate<PersonalGoal> { $0.id == goalID })
@@ -364,6 +365,14 @@ struct PersonalGoalDetailView: View {
                     ToolbarItem(placement: .confirmationAction) {
                         Button("Done") { showingSavingJournal = false }
                     }
+                }
+            }
+        }
+        .sheet(isPresented: $showingPlanRevisionPreview) {
+            if let goal = goals.first,
+               AccountScope.owns(goal, userID: authStateManager.userID) {
+                PipoPlanRevisionReviewSheet(goal: goal) {
+                    showingPlanRevisionPreview = false
                 }
             }
         }
@@ -439,6 +448,16 @@ struct PersonalGoalDetailView: View {
                 PipoCompletionBCard(goal: goal) {
                     showingSavingJournal = true
                 }
+            }
+
+            if !goal.isGroupGoal {
+                Button("Review plan changes") {
+                    showingPlanRevisionPreview = true
+                }
+                .font(.subheadline.bold())
+                .foregroundStyle(PipoTheme.deepPink)
+                .frame(maxWidth: .infinity, minHeight: 44)
+                .accessibilityIdentifier("pipo.goal.planRevisionPreview")
             }
 
             // Review-only until #42's atomic account-scoped ledger is deployed.
@@ -601,6 +620,83 @@ private struct PipoMoneyOutReviewSheet: View {
                 ToolbarItem(placement: .confirmationAction) {
                     Button("Done", action: onClose)
                 }
+            }
+        }
+    }
+}
+
+
+/// Review-only plan editor. It must not persist changes until versioned,
+/// future-only plan updates and stale-write handling are implemented.
+private struct PipoPlanRevisionReviewSheet: View {
+    let goal: PersonalGoal
+    let onClose: () -> Void
+
+    @State private var targetText = ""
+    @State private var targetDate = Date.now
+    @State private var rhythm: SavingRhythm = .weekly
+
+    private var amount: Int? {
+        PersonalPlanFormatting.parseRupiah(targetText)
+    }
+
+    private var budgetMatches: Bool {
+        guard let amount else { return false }
+        if goal.subItems.isEmpty { return true }
+        let values = goal.subItems.compactMap { Int(exactly: $0.amount) }
+        guard values.count == goal.subItems.count else { return false }
+        return values.reduce(0, +) == amount
+    }
+
+    var body: some View {
+        NavigationStack {
+            Form {
+                Section("Your revised plan") {
+                    TextField("Target in IDR", text: $targetText)
+                        .keyboardType(.numberPad)
+                        .accessibilityIdentifier("pipo.plan.preview.target")
+                    DatePicker("Target date", selection: $targetDate,
+                               in: Date.now..., displayedComponents: .date)
+                    Picker("Saving rhythm", selection: $rhythm) {
+                        ForEach(SavingRhythm.allCases) { item in
+                            Text(item.rawValue).tag(item)
+                        }
+                    }
+                }
+                Section("Before and after") {
+                    LabeledContent("Already recorded", value: money(goal.currentAmount))
+                    LabeledContent("Original target", value: money(goal.targetAmount))
+                    if let amount, amount > 0, targetDate >= Date.now {
+                        LabeledContent("New target", value: money(amount))
+                        LabeledContent("Still to record",
+                                       value: money(max(Double(amount) - goal.currentAmount, 0)))
+                    } else {
+                        Text("Choose a future date and a valid target.")
+                            .foregroundStyle(PipoTheme.muted)
+                    }
+                    if !budgetMatches {
+                        Text("Your budget items must add up exactly to the new target. Edit the breakdown before saving.")
+                            .foregroundStyle(PipoTheme.deepPink)
+                    }
+                }
+                Section {
+                    Text("Preview only. Past contributions, XP and rhythm history are untouched. The change is not saved.")
+                        .font(.footnote)
+                    Button("Save plan changes — coming after secure sync") {}
+                        .disabled(true)
+                }
+            }
+            .navigationTitle("Manage plan")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .confirmationAction) {
+                    Button("Done", action: onClose)
+                }
+            }
+            .onAppear {
+                targetText = String(Int(goal.targetAmount))
+                targetDate = max(goal.targetDate, Date.now)
+                rhythm = goal.rhythm
             }
         }
     }
