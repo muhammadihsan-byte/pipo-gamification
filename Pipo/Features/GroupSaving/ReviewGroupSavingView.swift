@@ -73,11 +73,12 @@ extension GroupPlanDraft {
 
 extension GroupSavingReviewData {
     @MainActor
-    func insertGoal(in context: ModelContext) throws {
+    func insertGoal(in context: ModelContext, ownerUserID: UUID) throws {
         let goal = PersonalGoal(title: title, category: modelCategory, customCategory: category,
                                 targetAmount: targetAmount, startDate: plannedStartDate,
                                 targetDate: targetDate, rhythm: modelRhythm,
-                                preferredSavingDay: preferredDay, isGroupGoal: true)
+                                preferredSavingDay: preferredDay, isGroupGoal: true,
+                                ownerUserID: ownerUserID)
         if let details { goal.groupDetails = try JSONEncoder().encode(details) }
         goal.goalPhoto = goalPhoto
         goal.groupPhoto = groupPhoto
@@ -217,25 +218,32 @@ struct ReviewGroupSavingView: View {
     }
 
     private func confirmCreation() {
-        let profile = UserProfile.existing(for: auth.userID, in: profiles)
+        guard let userID = auth.userID else {
+            busy = false
+            error = "Sign in to create a group saving goal."
+            return
+        }
+        let profile = UserProfile.existing(for: userID, in: profiles)
         subscription.updateEntitlements(purchasedPersonalSlots: profile?.purchasedPersonalSlots ?? 0,
                                         purchasedGroupSlots: profile?.purchasedGroupSlots ?? 0)
         // Isolate this transaction from pending edits elsewhere in the app.
         let writer = ModelContext(context.container)
         writer.autosaveEnabled = false
         do {
-            let count = try writer.fetchCount(FetchDescriptor<PersonalGoal>(predicate: #Predicate { $0.isGroupGoal }))
+            let existingGoals = try writer.fetch(FetchDescriptor<PersonalGoal>())
+            let count = AccountScope.visibleGoals(existingGoals, userID: userID)
+                .filter { $0.isGroupGoal && $0.progress < 1 }.count
             guard subscription.canCreateGoal(isGroup: true, activeCount: count) else {
                 busy = false
                 showPaywall = true
                 return
             }
             let savedProfiles = try writer.fetch(FetchDescriptor<UserProfile>())
-            let owner = UserProfile.existing(for: auth.userID, in: savedProfiles) ?? UserProfile(userID: auth.userID)
+            let owner = UserProfile.existing(for: userID, in: savedProfiles) ?? UserProfile(userID: userID)
             if owner.modelContext == nil { writer.insert(owner) }
-            owner.userID = auth.userID
+            owner.userID = userID
             owner.activeGroupGoalsCount = count + 1
-            try review.insertGoal(in: writer)
+            try review.insertGoal(in: writer, ownerUserID: userID)
             try writer.save()
             onCreate()
         } catch {
