@@ -15,9 +15,9 @@
 - Legacy ownerless rows remain quarantined: do **not** claim they belong to the deleting user. They require a separate identity-verified legacy data resolution.
 - If local SwiftData cleanup fails after the server succeeds, persist the server-confirmed deleted UUID and retry only that account's cleanup on next launch.
 
-## Backend deployment — NOT DONE
+## Backend deployment — COMPLETE; live user acceptance still OPEN
 
-The function is **source only** at `supabase/functions/delete-account/`; it has **not** been deployed. Deploy only after separate explicit owner approval and security review.
+The function is deployed as **version 1, ACTIVE, JWT verification on** in Supabase project `jdboaaiiwkblxvejnhol`. It was inspected after deployment and passed its unit security suite. This does **not** establish that authenticated A/B deletion, session invalidation or remote cascading have been tested on a real account.
 
 - Function name: `delete-account`
 - Entrypoint: `index.ts`
@@ -33,7 +33,7 @@ The function is **source only** at `supabase/functions/delete-account/`; it has 
 Use only disposable accounts with explicit test consent. Never delete a real customer's account during QA.
 
 - [ ] Source iOS CI and Deno adversarial tests pass on the **exact** PR head.
-- [ ] Backend function deployed only after explicit owner approval; JWT verification still on.
+- [x] Backend version 1 deployed with `verify_jwt=true` (20 Nov 2026).
 - [ ] On a signed iPhone, sign up test account A, save personal and group plans, create a transaction and onboarding nickname; then verify the profile delete entry is reachable.
 - [ ] On a brand-new account with **no goals**, verify Profile → Delete account works.
 - [ ] Cancel and incorrect confirmation produce zero network deletion calls; a stale confirmation for account A cannot delete a now-active account B.
@@ -48,6 +48,6 @@ Use only disposable accounts with explicit test consent. Never delete a real cus
 
 ## Release and merge boundaries
 
-- PR #34 (password recovery) remains independent and unmerged; it is not silently included.
-- This PR contains **no** deployed Edge Function, SQL schema change, real user deletion, App Store/TestFlight release or merge.
-- Review both PRs and their exact CI results separately. Account deletion is **not production-operational** until the function is deployed and verified end-to-end.
+- PR #35 and PR #36 are merged into `main`, and PR #34 was superseded instead of force-merged.
+- The account-deletion Edge Function is deployed but **still not verified with a real disposable Auth account**. No customer deletion or TestFlight/App Store submission was performed as part of this QA work.
+- See `docs/LIVE_AUTH_DEVICE_QA.md` for missing two-account and signed iPhone acceptance evidence. Do not close the P0 release gate until it is collected.
