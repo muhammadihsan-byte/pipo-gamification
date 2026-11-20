@@ -13,6 +13,7 @@ struct RootView: View {
     @State private var choosingPlan = false
     @State private var showingAccountDeletion = false
     @State private var isDeletingAccount = false
+    @State private var isSigningOut = false
     @State private var isResettingPassword = false
     @State private var isRecoveringSession = false
     @State private var noticeMessage: String?
@@ -373,9 +374,11 @@ struct RootView: View {
             },
             onDeleteAccount: {
                 guard authStateManager.authState == .authenticated,
-                      authStateManager.userID != nil else { return }
+                      authStateManager.userID != nil,
+                      !isSigningOut, !isDeletingAccount else { return }
                 showingAccountDeletion = true
             },
+            onSignOut: signOutCurrentAccount,
             onSavingCompleted: { transaction, goal, xpEarned, streakDays, badges in
                 guard !isDeletingAccount,
                       let userID = authStateManager.userID,
@@ -445,6 +448,26 @@ struct RootView: View {
         noticeMessage = localCleanupFailure == nil && widgetCleared
             ? "Your Pipo account and its saved data were deleted."
             : "Your Pipo account was deleted on the server. Some device data or widget content could not be cleared; Pipo will retry cleanup when you next open the app."
+    }
+
+    private func signOutCurrentAccount() {
+        guard !isSigningOut, !isDeletingAccount, !isRecoveringSession,
+              authStateManager.authState == .authenticated,
+              let signedInID = authStateManager.userID,
+              let supabaseService else { return }
+        isSigningOut = true
+        Task {
+            defer { isSigningOut = false }
+            guard authStateManager.userID == signedInID else { return }
+            do {
+                try await supabaseService.signOut(authStateManager: authStateManager)
+                // Account changes clear widget state, navigation and entitlements.
+                navigationManager.resetAccountContext()
+            } catch {
+                guard authStateManager.userID == signedInID else { return }
+                noticeMessage = "Couldn't sign out. Please check your connection and try again."
+            }
+        }
     }
 
     private func requestPasswordReset(_ email: String) {
