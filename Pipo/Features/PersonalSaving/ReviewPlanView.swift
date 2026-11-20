@@ -23,6 +23,9 @@ struct ReviewPlanView: View {
         PersonalPlanPage(step: .review, onBack: onBack) {
             PersonalPlanIntro(step: .review, title: "Review your saving plan", subtitle: "Check the details for \(plan.title).")
             goalCard
+            if !plan.breakdown.isEmpty {
+                budgetBreakdownCard
+            }
             timelineCard
             rhythmCard
             Text("This plan is an estimate. Pipo doesn’t move money or set up automatic payments.")
@@ -79,29 +82,35 @@ struct ReviewPlanView: View {
 
             Divider()
             HStack {
-                Text(plan.breakdown.isEmpty ? "Target amount" : "Target breakdown")
+                Text("Target amount")
                     .font(.subheadline.bold())
-                Spacer()
+                Spacer(minLength: 12)
                 editButton("target", step: .target)
             }
-
-            ForEach(plan.breakdown) { item in
-                if let amount = item.rupiah {
-                    summaryRow(item.cleanTitle, value: money(amount))
-                }
-            }
-            if !plan.breakdown.isEmpty { Divider() }
-            HStack {
-                Text("Target total").font(.caption.bold())
-                Spacer(minLength: 12)
-                Text(money(plan.targetAmount))
-                    .font(.headline)
-                    .foregroundStyle(PersonalPlanStyle.berry)
-            }
+            Text(money(plan.targetAmount))
+                .font(.title3.bold())
+                .foregroundStyle(PersonalPlanStyle.berry)
+                .accessibilityIdentifier("pipo.review.targetAmount")
         }
         .padding(16)
         .background(.white, in: RoundedRectangle(cornerRadius: 16))
         .overlay { RoundedRectangle(cornerRadius: 16).strokeBorder(PersonalPlanStyle.blush, lineWidth: 1.5) }
+    }
+
+    // Reuses the exact Budget Breakdown B family also used by goal details.
+    // It is read-only: editing still routes through the existing target step.
+    private var budgetBreakdownCard: some View {
+        PipoBudgetBreakdownCard(
+            lines: plan.breakdown.map { item in
+                PipoBudgetLine(
+                    id: item.id,
+                    title: item.cleanTitle,
+                    amount: Double(item.rupiah ?? -1)
+                )
+            },
+            targetAmount: plan.targetAmount,
+            onEdit: { onEdit(.target) }
+        )
     }
 
     private var timelineCard: some View {
@@ -368,14 +377,12 @@ struct PersonalGoalDetailView: View {
             }
 
             if !goal.subItems.isEmpty {
-                TicketCard {
-                    VStack(alignment: .leading, spacing: 12) {
-                        Text("Target breakdown").font(.headline)
-                        ForEach(goal.subItems) { item in
-                            LabeledContent(item.title, value: money(item.amount))
-                        }
-                    }
-                }
+                PipoBudgetBreakdownCard(
+                    lines: goal.subItems.map {
+                        PipoBudgetLine(id: $0.id, title: $0.title, amount: $0.amount)
+                    },
+                    targetAmount: goal.targetAmount
+                )
             }
 
             if goal.canRecordSaving {

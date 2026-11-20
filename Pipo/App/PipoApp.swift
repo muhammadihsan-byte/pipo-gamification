@@ -86,6 +86,13 @@ private enum PipoDashboardQA {
             createdAt: shifted(-35)
         )
         bali.plannedContributionOverride = 75_000
+        // DEBUG-only, in-memory example to validate the native Budget B
+        // surface using real model rows (never user data or cloud writes).
+        bali.subItems = [
+            SubItem(title: "Travel & stay", amount: 3_500_000),
+            SubItem(title: "Experiences", amount: 1_500_000),
+            SubItem(title: "Documents", amount: 1_000_000)
+        ]
         let ipad = PersonalGoal(
             title: "New iPad",
             category: .gadget,
