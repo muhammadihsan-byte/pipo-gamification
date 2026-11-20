@@ -40,6 +40,7 @@ struct DashboardView: View {
     @State private var preferredFocusGoalID: UUID?
     @State private var selectedGroupGoal: PersonalGoal?
     @State private var showingAchievements = false
+    @State private var showingPrivacyOverview = false
     @State private var mascotReply: String?
     @State private var goalToRecord: PersonalGoal?
     @State private var savingAmount = ""
@@ -174,6 +175,7 @@ struct DashboardView: View {
             goalToRecord = nil
             selectedGroupGoal = nil
             showingAchievements = false
+            showingPrivacyOverview = false
             preferredFocusGoalID = nil
             completedSavingReward = nil
             mascotReply = nil
@@ -197,6 +199,9 @@ struct DashboardView: View {
         }
         .sheet(isPresented: $showingAchievements) {
             achievementsSheet
+        }
+        .sheet(isPresented: $showingPrivacyOverview) {
+            privacyOverviewSheet
         }
         .alert(
             "Pipo",
@@ -778,6 +783,13 @@ struct DashboardView: View {
                 Text("Deleting your Pipo account permanently removes your saved goals, saving history and profile. This does not move or withdraw money.")
                     .font(.footnote)
                     .foregroundStyle(PipoTheme.muted)
+                Button { showingPrivacyOverview = true } label: {
+                    Label("Your data & privacy", systemImage: "hand.raised")
+                        .font(.subheadline.weight(.semibold))
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .padding(.vertical, 10)
+                }
+                .accessibilityIdentifier("pipo.profile.privacyInformation")
                 Button(action: onSignOut) {
                     Label("Sign out", systemImage: "rectangle.portrait.and.arrow.right")
                         .font(.subheadline.weight(.semibold))
@@ -792,6 +804,46 @@ struct DashboardView: View {
                         .padding(.vertical, 10)
                 }
                 .accessibilityIdentifier("pipo.profile.deleteAccount")
+            }
+        }
+    }
+
+    // In-app transparency is useful while the final public legal policy is
+    // being verified. This summary is not a replacement for the App Store
+    // privacy policy URL and must match the actual shipped SDK inventory.
+    private var privacyOverviewSheet: some View {
+        NavigationStack {
+            ScrollView {
+                VStack(alignment: .leading, spacing: 18) {
+                    Text("Your data in Pipo")
+                        .font(.title2.bold())
+                        .accessibilityAddTraits(.isHeader)
+                    Text("Pipo helps you record your own savings. Pipo doesn't hold, move, or check real money.")
+                        .foregroundStyle(PipoTheme.ink)
+                    Text("What's saved")
+                        .font(.headline)
+                    Text("Your iPhone keeps your goals, contributions, progress, achievements, and optional personalization. Pipo may upload your personal goals and their entries to your account on Supabase. Group plans are device-local; a full cloud restore isn't available yet.")
+                        .foregroundStyle(PipoTheme.muted)
+                    Text("Your account")
+                        .font(.headline)
+                    Text("Email sign-in uses Supabase authentication. You can sign out or delete your account from Profile → Account & privacy. Deletion asks for explicit confirmation.")
+                        .foregroundStyle(PipoTheme.muted)
+                    Text("Before publishing")
+                        .font(.headline)
+                    Text("The full privacy policy and verified support information will be published before Pipo's App Store release.")
+                        .foregroundStyle(PipoTheme.muted)
+                }
+                .font(.subheadline)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .padding(24)
+            }
+            .navigationTitle("Privacy overview")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .confirmationAction) {
+                    Button("Done") { showingPrivacyOverview = false }
+                        .accessibilityIdentifier("pipo.privacy.done")
+                }
             }
         }
     }

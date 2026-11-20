@@ -239,6 +239,10 @@ final class PipoUIRecordingTests: XCTestCase {
         XCTAssertTrue(app.staticTexts["Your space"].waitForExistence(timeout: 15))
         XCTAssertTrue(app.buttons["pipo.profile.signOut"].exists,
                       "Sign out must be visible for a user with no saving goal")
+        tapButton("pipo.profile.privacyInformation")
+        XCTAssertTrue(app.staticTexts["Your data in Pipo"].waitForExistence(timeout: 12),
+                      "Privacy summary must be reachable from Profile")
+        tapButton("pipo.privacy.done")
         tapButton("pipo.profile.deleteAccount")
         let submit = app.buttons["pipo.deleteAccount.submit"].firstMatch
         XCTAssertTrue(submit.waitForExistence(timeout: 15))

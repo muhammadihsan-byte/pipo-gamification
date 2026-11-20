@@ -186,6 +186,13 @@ jobs:
             CODE_SIGNING_REQUIRED=NO \
             build test 2>&1 | tee validation/xcodebuild.log
 
+      - name: Verify App and Widget privacy manifest resources
+        if: >-
+          github.event_name == 'pull_request' &&
+          github.head_ref == 'feat/pipo-p0-auth-e2e-release-kit'
+        shell: bash
+        run: bash scripts/check-privacy-manifest.sh "$RUNNER_TEMP/PipoDerivedData"
+
       - name: Dashboard B — one controlled native iOS visual QA recording
         if: github.event_name == 'pull_request' && (github.head_ref == 'feat/pipo-dashboard-b' || github.head_ref == 'feat/pipo-p0-release-hardening')
         shell: bash
@@ -217,7 +224,10 @@ jobs:
           exit "$TEST_RESULT"
 
       - name: P0 authentication and deletion simulator safety QA
-        if: github.event_name == 'pull_request' && github.head_ref == 'feat/pipo-p0-live-auth-qa'
+        if: >-
+          github.event_name == 'pull_request' &&
+          (github.head_ref == 'feat/pipo-p0-live-auth-qa' ||
+           github.head_ref == 'feat/pipo-p0-auth-e2e-release-kit')
         shell: bash
         run: |
           set -euo pipefail

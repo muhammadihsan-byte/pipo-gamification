@@ -1,0 +1,44 @@
+name: Authenticated RLS QA (Disposable Accounts Only)
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - "scripts/live_authenticated_qa.py"
+      - "scripts/test_live_authenticated_qa.py"
+      - ".github/workflows/authenticated-rls-qa.yml"
+  workflow_dispatch:
+    inputs:
+      approve_disposable_accounts:
+        description: "Confirm both QA accounts are disposable +pipoqa email aliases (no production users)"
+        required: true
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+
+jobs:
+  harness-unit-tests:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - name: Test E2E credential safeguards and assertion logic (offline)
+        run: PYTHONPATH=scripts python3 -m unittest -v scripts/test_live_authenticated_qa.py
+
+  read-only-authenticated:
+    if: github.event_name == 'workflow_dispatch' && inputs.approve_disposable_accounts
+    needs: harness-unit-tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - name: Check live two-account ownership without modifying data
+        env:
+          PIPO_QA_DISPOSABLE_APPROVED: I_CONFIRM_BOTH_ARE_DISPOSABLE
+          PIPO_QA_A_EMAIL: ${{ secrets.PIPO_QA_A_EMAIL }}
+          PIPO_QA_A_PASSWORD: ${{ secrets.PIPO_QA_A_PASSWORD }}
+          PIPO_QA_B_EMAIL: ${{ secrets.PIPO_QA_B_EMAIL }}
+          PIPO_QA_B_PASSWORD: ${{ secrets.PIPO_QA_B_PASSWORD }}
+        run: python3 scripts/live_authenticated_qa.py
