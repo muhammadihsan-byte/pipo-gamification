@@ -257,7 +257,7 @@ struct SavingLedgerCloudContribution: Decodable, Sendable {
     let userID: UUID
     let amount: Double
     let xpEarned: Int
-    let date: Date
+    let date: String
 
     enum CodingKeys: String, CodingKey {
         case id, amount, date
@@ -274,7 +274,7 @@ struct SavingLedgerCloudAdjustment: Decodable, Sendable {
     let kind: String
     let amount: Double
     let correctsEventID: UUID?
-    let createdAt: Date
+    let createdAt: String
 
     enum CodingKeys: String, CodingKey {
         case id, kind, amount
@@ -295,6 +295,17 @@ enum SavingCloudRecoveryError: Error, Equatable {
 /// No local SwiftData changes occur until an explicit reconciliation policy
 /// for unsynced contributions has been reviewed and approved.
 enum SavingCloudLedgerReconciler {
+    /// PostgreSQL timestamptz may include fractional seconds; accepting only
+    /// a strict ISO8601 timestamp prevents locale-dependent recovery.
+    private static func decodeTimestamp(_ source: String) throws -> Date {
+        let formatter = ISO8601DateFormatter()
+        formatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+        if let timestamp = formatter.date(from: source) { return timestamp }
+        formatter.formatOptions = [.withInternetDateTime]
+        if let timestamp = formatter.date(from: source) { return timestamp }
+        throw SavingCloudRecoveryError.invalidServerEntry
+    }
+
     static func reconstruct(
         goalID: UUID, ownerID: UUID,
         contributions: [SavingLedgerCloudContribution],
@@ -310,7 +321,7 @@ enum SavingCloudLedgerReconciler {
             else { throw SavingCloudRecoveryError.invalidServerEntry }
             return SavingTransaction(
                 id: entry.id, goalId: entry.goalID, amount: Double(amount),
-                xpEarned: entry.xpEarned, date: entry.date, userID: entry.userID
+                xpEarned: entry.xpEarned, date: try decodeTimestamp(entry.date), userID: entry.userID
             )
         }
         let events: [SavingAdjustmentEvent] = try adjustments.map { entry in
@@ -322,7 +333,7 @@ enum SavingCloudLedgerReconciler {
             return SavingAdjustmentEvent(
                 id: entry.id, goalID: entry.goalID, userID: entry.userID,
                 kind: kind, amount: amount,
-                correctsEventID: entry.correctsEventID, date: entry.createdAt
+                correctsEventID: entry.correctsEventID, date: try decodeTimestamp(entry.createdAt)
             )
         }
         return try SavingLedgerSnapshot.reconstruct(
