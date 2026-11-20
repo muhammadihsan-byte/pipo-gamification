@@ -45,6 +45,27 @@ struct SupabaseConfiguration: Sendable {
         return SupabaseConfiguration(url: url, anonKey: anonKey, redirectURL: redirectURL)
     }
 
+    /// Use a distinct callback path so recovery never silently becomes a normal sign-in.
+    /// Both this URL and redirectURL must be allowlisted in Supabase Auth settings.
+    var passwordRecoveryRedirectURL: URL {
+        redirectURL.appendingPathComponent("reset-password")
+    }
+
+    func isSignInCallback(_ url: URL) -> Bool {
+        matchesCallback(url, expected: redirectURL)
+    }
+
+    func isPasswordRecoveryCallback(_ url: URL) -> Bool {
+        matchesCallback(url, expected: passwordRecoveryRedirectURL)
+    }
+
+    private func matchesCallback(_ url: URL, expected: URL) -> Bool {
+        url.scheme?.lowercased() == expected.scheme?.lowercased()
+            && url.host?.lowercased() == expected.host?.lowercased()
+            && url.path.trimmingCharacters(in: CharacterSet(charactersIn: "/"))
+                == expected.path.trimmingCharacters(in: CharacterSet(charactersIn: "/"))
+    }
+
     private static func configuredValue(
         _ key: String,
         environment: [String: String],
@@ -337,6 +358,20 @@ final class SupabaseService {
             redirectTo: configuration.redirectURL
         )
         authStateManager.signIn(userID: session.user.id)
+    }
+
+    func requestPasswordReset(email: String) async throws {
+        // The password-recovery link opens an in-app password editor, not Home.
+        try await client.auth.resetPasswordForEmail(
+            email, redirectTo: configuration.passwordRecoveryRedirectURL
+        )
+    }
+
+    func updateRecoveredPassword(_ password: String) async throws {
+        guard client.auth.currentUser != nil else {
+            throw SupabaseServiceError.notAuthenticated
+        }
+        try await client.auth.update(user: UserAttributes(password: password))
     }
 
     func signOut(authStateManager: AuthStateManager) async throws {

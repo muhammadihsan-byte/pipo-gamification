@@ -11,6 +11,8 @@ struct RootView: View {
     @State private var storeKitManager: StoreKitManager
     @State private var supabaseService: SupabaseService?
     @State private var choosingPlan = false
+    @State private var isResettingPassword = false
+    @State private var isRecoveringSession = false
     @State private var noticeMessage: String?
     @State private var hasFinishedOnboardingQA = false
     @State private var completedOnboardingAccountID: UUID?
@@ -165,7 +167,7 @@ struct RootView: View {
                 purchasedPersonalSlots: 0, purchasedGroupSlots: 0
             )
             updateWidgetAccount(userID)
-            guard let userID else { return }
+            guard let userID, !isRecoveringSession else { return }
             // Do not wait for StoreKit before retrying local-only goal sync.
             enqueuePersonalSavingsSync(for: userID)
             Task {
@@ -186,7 +188,8 @@ struct RootView: View {
         .onChange(of: scenePhase) { _, phase in
             // A failed offline write remains local; retry on foreground,
             // without inventing a successful server sync or a timer.
-            if phase == .active, let userID = authStateManager.userID {
+            if phase == .active, !isRecoveringSession,
+               let userID = authStateManager.userID {
                 enqueuePersonalSavingsSync(for: userID, showFailure: false)
             }
         }
@@ -213,22 +216,50 @@ struct RootView: View {
                 return
             }
 
-            guard
-                let supabaseService,
-                url.scheme == supabaseService.configuration.redirectURL.scheme
-            else {
+            guard let supabaseService else { return }
+            let isRecovery = supabaseService.configuration.isPasswordRecoveryCallback(url)
+            guard isRecovery || supabaseService.configuration.isSignInCallback(url) else {
                 return
             }
+            // Mark recovery before session changes so account-scoped sync cannot
+            // run from an intermediate recovery session.
+            if isRecovery { isRecoveringSession = true }
             Task {
                 do {
                     try await supabaseService.handleAuthCallback(
                         url,
                         authStateManager: authStateManager
                     )
+                    if isRecovery {
+                        isResettingPassword = true
+                    }
                 } catch {
+                    if isRecovery { isRecoveringSession = false }
                     noticeMessage = error.localizedDescription
                 }
             }
+        }
+        .sheet(isPresented: $isResettingPassword) {
+            PasswordResetView(
+                onSubmit: { password in
+                    guard let supabaseService else {
+                        throw SupabaseServiceError.notAuthenticated
+                    }
+                    try await supabaseService.updateRecoveredPassword(password)
+                    try await supabaseService.signOut(authStateManager: authStateManager)
+                    isResettingPassword = false
+                    isRecoveringSession = false
+                    noticeMessage = "Password updated. Sign in with your new password."
+                },
+                onCancel: {
+                    guard let supabaseService else {
+                        throw SupabaseServiceError.notAuthenticated
+                    }
+                    try await supabaseService.signOut(authStateManager: authStateManager)
+                    isResettingPassword = false
+                    isRecoveringSession = false
+                }
+            )
         }
         .sheet(isPresented: $navigationManager.isMilestonePresented) {
             ConsistencyMilestoneView(
@@ -258,6 +289,16 @@ struct RootView: View {
 
     @ViewBuilder
     private var rootContent: some View {
+        if isRecoveringSession {
+            VStack(spacing: 12) {
+                ProgressView()
+                Text("Securing your password recovery…")
+                    .font(.footnote)
+                    .foregroundStyle(PipoTheme.muted)
+            }
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
+            .background(.white)
+        } else {
         switch authStateManager.authState {
         case .unauthenticated:
             authenticationView
@@ -267,6 +308,7 @@ struct RootView: View {
             } else {
                 dashboardView
             }
+        }
         }
     }
 
@@ -301,9 +343,7 @@ struct RootView: View {
             onGoogleSignIn: {
                 beginOAuthSignIn(provider: .google)
             },
-            onForgotPassword: {
-                noticeMessage = "Password reset is not configured yet."
-            }
+            onForgotPassword: requestPasswordReset
         )
     }
 
@@ -342,6 +382,22 @@ struct RootView: View {
             Button("Personal saving") { navigationManager.navigate(to: .createGoal) }
             Button("Group saving") { navigationManager.navigate(to: .createGroupPlan) }
             Button("Cancel", role: .cancel) {}
+        }
+    }
+
+    private func requestPasswordReset(_ email: String) {
+        guard let supabaseService else {
+            noticeMessage = supabaseConfigurationError ?? "Supabase is not configured."
+            return
+        }
+        Task {
+            do {
+                try await supabaseService.requestPasswordReset(email: email)
+                // Avoid disclosing whether an account exists for this email address.
+                noticeMessage = "If an account exists, a password reset link will arrive by email."
+            } catch {
+                noticeMessage = error.localizedDescription
+            }
         }
     }
 
