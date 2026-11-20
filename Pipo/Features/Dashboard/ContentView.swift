@@ -24,6 +24,7 @@ private enum DashboardPage: String, CaseIterable, Identifiable {
 struct DashboardView: View {
     private let onCreateGoal: () -> Void
     private let onDeleteAccount: () -> Void
+    private let onSignOut: () -> Void
     private let onSavingCompleted: (SavingTransaction, PersonalGoal, Int, Int, [PipoBadge]) -> Void
 
     @Environment(\.modelContext) private var modelContext
@@ -55,12 +56,14 @@ struct DashboardView: View {
     init(
         onCreateGoal: @escaping () -> Void,
         onDeleteAccount: @escaping () -> Void = {},
+        onSignOut: @escaping () -> Void = {},
         onSavingCompleted: @escaping (SavingTransaction, PersonalGoal, Int, Int, [PipoBadge]) -> Void = {
             _, _, _, _, _ in
         }
     ) {
         self.onCreateGoal = onCreateGoal
         self.onDeleteAccount = onDeleteAccount
+        self.onSignOut = onSignOut
         self.onSavingCompleted = onSavingCompleted
     }
 
@@ -775,6 +778,13 @@ struct DashboardView: View {
                 Text("Deleting your Pipo account permanently removes your saved goals, saving history and profile. This does not move or withdraw money.")
                     .font(.footnote)
                     .foregroundStyle(PipoTheme.muted)
+                Button(action: onSignOut) {
+                    Label("Sign out", systemImage: "rectangle.portrait.and.arrow.right")
+                        .font(.subheadline.weight(.semibold))
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .padding(.vertical, 10)
+                }
+                .accessibilityIdentifier("pipo.profile.signOut")
                 Button(role: .destructive, action: onDeleteAccount) {
                     Label("Delete my account", systemImage: "trash")
                         .font(.subheadline.weight(.semibold))
