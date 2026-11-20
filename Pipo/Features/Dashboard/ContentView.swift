@@ -614,13 +614,27 @@ struct DashboardView: View {
             }
             .buttonStyle(.plain)
             .accessibilityIdentifier("pipo.dashboard.focusGoal")
+            .accessibilityLabel(focusGoalAccessibilitySummary(for: goal))
+            .accessibilityHint("Opens goal details")
         } else {
             NavigationLink(value: Route.personalGoal(goal.id)) {
                 focusGoalNavigationLabel(for: goal)
             }
             .buttonStyle(.plain)
             .accessibilityIdentifier("pipo.dashboard.focusGoal")
+            .accessibilityLabel(focusGoalAccessibilitySummary(for: goal))
+            .accessibilityHint("Opens goal details")
         }
+    }
+
+    /// The featured goal is a separate action from Record a saving.
+    /// VoiceOver needs the same account-owned status and manually recorded
+    /// progress context that sighted users can read in the card.
+    private func focusGoalAccessibilitySummary(for goal: PersonalGoal) -> String {
+        let progressPercent = Int(goal.progress * 100)
+        return "\(goal.title), \(goal.isGroupGoal ? "group" : "personal") saving goal, " +
+            "\(goal.lifecycleState.title), \(money(goal.currentAmount)) recorded, " +
+            "\(progressPercent) percent complete"
     }
 
     private func focusGoalNavigationLabel(for goal: PersonalGoal) -> some View {
