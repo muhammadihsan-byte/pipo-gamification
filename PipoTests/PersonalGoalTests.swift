@@ -86,6 +86,93 @@ final class PersonalGoalTests: XCTestCase {
 }
 
 extension PersonalGoalTests {
+
+    @MainActor
+    func testAccountSwitchShowsOnlyOwnedGoalsAndTransactions() throws {
+        let accountA = UUID()
+        let accountB = UUID()
+        let container = try ModelContainer(
+            for: Schema([PersonalGoal.self, SubItem.self, SavingTransaction.self, UserProfile.self]),
+            configurations: [ModelConfiguration(isStoredInMemoryOnly: true)]
+        )
+        let context = ModelContext(container)
+        let goalA = PersonalGoal(title: "Private A", category: .trip,
+                                 targetAmount: 1_000, targetDate: .now,
+                                 ownerUserID: accountA)
+        let goalB = PersonalGoal(title: "Private B", category: .gadget,
+                                 targetAmount: 2_000, targetDate: .now,
+                                 ownerUserID: accountB)
+        let oldGoal = PersonalGoal(title: "Legacy unowned", category: .trip,
+                                   targetAmount: 3_000, targetDate: .now)
+        context.insert(goalA)
+        context.insert(goalB)
+        context.insert(oldGoal)
+        context.insert(SavingTransaction(goalId: goalA.id, amount: 100, userID: accountA))
+        context.insert(SavingTransaction(goalId: goalB.id, amount: 200, userID: accountB))
+        // A transaction may claim B in its metadata, but still points at A's goal.
+        context.insert(SavingTransaction(goalId: goalA.id, amount: 999, userID: accountB))
+        context.insert(SavingTransaction(goalId: oldGoal.id, amount: 444, userID: nil))
+        try context.save()
+
+        let reopened = ModelContext(container)
+        let goals = try reopened.fetch(FetchDescriptor<PersonalGoal>())
+        let entries = try reopened.fetch(FetchDescriptor<SavingTransaction>())
+        XCTAssertEqual(Set(AccountScope.visibleGoals(goals, userID: accountA).map(\.id)), [goalA.id])
+        XCTAssertEqual(Set(AccountScope.visibleGoals(goals, userID: accountB).map(\.id)), [goalB.id])
+        XCTAssertTrue(AccountScope.visibleGoals(goals, userID: nil).isEmpty)
+        XCTAssertEqual(AccountScope.visibleTransactions(entries, goals: goals, userID: accountA).map(\.amount), [100])
+        XCTAssertEqual(AccountScope.visibleTransactions(entries, goals: goals, userID: accountB).map(\.amount), [200])
+        XCTAssertTrue(AccountScope.visibleTransactions(entries, goals: goals, userID: nil).isEmpty)
+
+        // Legacy records remain on disk/in the store and are never silently claimed.
+        XCTAssertEqual(goals.count, 3)
+        XCTAssertNil(try XCTUnwrap(goals.first(where: { $0.id == oldGoal.id })).ownerUserID)
+        XCTAssertEqual(entries.count, 4)
+    }
+
+    @MainActor
+    func testUnownedLegacyProfileIsNotAdoptedOnNextSignIn() throws {
+        let accountA = UUID()
+        let accountB = UUID()
+        let legacy = UserProfile(totalXP: 5_000, unlockedBadgeIds: ["private-badge"])
+        let owned = UserProfile(userID: accountA, totalXP: 80)
+        let profiles = [legacy, owned]
+        XCTAssertEqual(UserProfile.existing(for: accountA, in: profiles)?.id, owned.id)
+        XCTAssertNil(UserProfile.existing(for: accountB, in: profiles))
+        XCTAssertNil(UserProfile.existing(for: nil, in: profiles))
+        XCTAssertNil(legacy.userID)
+    }
+
+    func testWidgetSnapshotsAreHiddenAcrossAccountSwitchAndLogout() throws {
+        let suite = "pipo.widget.account-scope.qa.\(UUID().uuidString)"
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: suite))
+        defer { defaults.removePersistentDomain(forName: suite) }
+        let accountA = UUID()
+        let accountB = UUID()
+        let goalID = UUID()
+        let snapshot = WidgetSnapshot(
+            streakDays: 2, totalXP: 600, currentLevel: 1,
+            goalID: goalID, goalTitle: "Private savings",
+            goalProgress: 0.4, nextDepositDate: nil, ownerUserID: accountA
+        )
+
+        WidgetSharedData.activate(userID: accountA, in: defaults)
+        try WidgetSharedData.save(snapshot, in: defaults)
+        XCTAssertEqual(WidgetSharedData.load(from: defaults).goalID, goalID)
+
+        WidgetSharedData.activate(userID: accountB, in: defaults)
+        XCTAssertNil(WidgetSharedData.load(from: defaults).goalID)
+        XCTAssertThrowsError(try WidgetSharedData.save(snapshot, in: defaults))
+
+        // An upgrade can encounter a legacy snapshot without an owner tag.
+        defaults.set(["goalID": goalID.uuidString, "goalTitle": "Old savings"],
+                     forKey: "pipo.widget.snapshot")
+        XCTAssertNil(WidgetSharedData.load(from: defaults).goalTitle)
+
+        WidgetSharedData.activate(userID: nil, in: defaults)
+        XCTAssertEqual(WidgetSharedData.load(from: defaults).totalXP, 0)
+    }
+
     @MainActor
     func testGroupReviewPersistsLocalMetadataAndSingleTargetWithoutMockRows() throws {
         var draft = GroupPlanDraft()

@@ -27,6 +27,21 @@ final class AuthStateManagerTests: XCTestCase {
         XCTAssertNil(result.signedOutUserID)
     }
 
+
+    func testAccountResetClearsPendingDepositRouteAndMilestone() async {
+        await MainActor.run {
+            let nav = NavigationManager()
+            nav.requestDeposit(goalID: UUID())
+            nav.transactionDidComplete(xpEarned: 300, streakDays: 5)
+            nav.navigate(to: .createGoal)
+            nav.resetAccountContext()
+            XCTAssertNil(nav.pendingDepositGoalID)
+            XCTAssertFalse(nav.isMilestonePresented)
+            XCTAssertEqual(nav.milestoneStreakDays, 0)
+            XCTAssertEqual(nav.path.count, 0)
+        }
+    }
+
     func testNavigationManagerPushesAndPopsRoutes() async {
         let pathCounts = await MainActor.run { () -> [Int] in
             let manager = NavigationManager()
