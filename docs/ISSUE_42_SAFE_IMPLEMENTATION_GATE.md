@@ -28,3 +28,16 @@ Implement an append-only account-scoped adjustment ledger or carefully versioned
 
 ## Release / review gate
 One controlled macOS iOS build + XCTest on the exact PR head; screenshots/MP4 for live flows only after actual integration. No merge, TestFlight, App Store submission, live migration, or production financial writes on this branch without explicit approval.
+
+## Updated branch handoff — PR #47
+
+The branch currently adds:
+- Account-scoped `SavingLedgerSnapshot.reconstruct`, rejecting foreign accounts, duplicate IDs, malformed corrections, overdraw and integer overflow. XP is derived only from original saving contributions.
+- `MoneyOutCorrectionPreview` for the approved correction scenario.
+- Read-only Plan Management and Money Out SwiftUI sheets, using the three approved D-family card components from PR #46; no live financial mutation or enabled confirmation.
+- Proposal-only SQL for a locked, idempotent `record_money_out` RPC and append-only `correct_money_out` RPC. Database remains unchanged.
+- Focused iOS UI test for sheet navigation and disabled save actions plus pure financial unit tests.
+
+**Known gaps preventing completion:** secure plan-revision persistence and budget-item sync; signed two-account RLS tests; correction-event replay after device restoration; server/net-balance reconciliation with the local goal snapshot; offline idempotency and conflict handling; full screenshot/MP4 and device accessibility validation. The correction RPC and migration proposal require independent security review before deployment.
+
+**CI:** exact-head run for PR #47 was requested by temporarily targeting main for a PR event, then restoring the PR to its stacked draft base. Only a completed successful exact-head run counts as validation. Do not claim a queued/in-progress run as success. No user merge approval has been requested.
