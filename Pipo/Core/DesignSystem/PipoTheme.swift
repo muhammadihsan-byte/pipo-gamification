@@ -120,7 +120,7 @@ struct PipoBudgetBreakdownCard: View {
                                 return "Amount needs review"
                             }
                             let share = PipoBudgetPresentation.percent(of: line.amount, target: targetAmount)
-                            return money(line.amount) + (share.map { " · \\($0)% of goal" } ?? " · Check target")
+                            return money(line.amount) + (share.map { " · \($0)% of goal" } ?? " · Check target")
                         }()
                         Text(detail)
                             .font(.system(size: 12))
