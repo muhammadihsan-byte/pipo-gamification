@@ -561,7 +561,7 @@ extension PersonalGoalTests {
           "created_at":"2026-11-19T13:00:00Z"}]
         """
         for altered in [base.replacingOccurrences(of: "money_out", with: "transfer"),
-                        base.replacingOccurrences(of: "999", with: "999.5")] {
+                        base.replacingOccurrences(of: "\\"amount\\":999", with: "\\"amount\\":999.5")] {
             let entries = try json.decode(
                 [SavingLedgerCloudAdjustment].self, from: altered.data(using: .utf8)!
             )
