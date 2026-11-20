@@ -1,0 +1,49 @@
+name: Pipo Roadmap Status Sync
+
+on:
+  pull_request:
+    types: [opened, reopened, synchronize]
+    paths:
+      - '.github/workflows/roadmap-status.yml'
+      - 'scripts/roadmap_status.cjs'
+      - 'scripts/roadmap_status.test.cjs'
+  pull_request_target:
+    types: [opened, reopened, ready_for_review, synchronize]
+
+permissions:
+  contents: read
+
+jobs:
+  test-safe-transitions:
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Verify roadmap status transitions cannot close issues
+        run: node --test scripts/roadmap_status.test.cjs
+
+  sync-existing-project-item:
+    if: >-
+      github.event_name == 'pull_request_target' &&
+      github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: ubuntu-latest
+    env:
+      PROJECTS_TOKEN: ${{ secrets.PIPO_PROJECTS_TOKEN }}
+    steps:
+      - name: Explain one-time token requirement
+        if: env.PROJECTS_TOKEN == ''
+        run: echo '::notice::Roadmap sync is not active. Add the PIPO_PROJECTS_TOKEN secret with GitHub Projects write permission.'
+      - name: Checkout trusted default-branch automation only
+        if: env.PROJECTS_TOKEN != ''
+        uses: actions/checkout@v4
+        with:
+          ref: main
+          persist-credentials: false
+      - name: Move linked existing issue from Todo to In Progress
+        if: env.PROJECTS_TOKEN != ''
+        uses: actions/github-script@v7
+        with:
+          github-token: ${{ secrets.PIPO_PROJECTS_TOKEN }}
+          script: |
+            const { syncRoadmapStatus } = require('./scripts/roadmap_status.cjs');
+            await syncRoadmapStatus({ github, context, core });
