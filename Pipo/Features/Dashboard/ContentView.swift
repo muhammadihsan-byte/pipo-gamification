@@ -649,7 +649,26 @@ struct DashboardView: View {
             goalLifecycleMenu(goal)
         }
         .accessibilityIdentifier("pipo.dashboard.goal.\(goal.id.uuidString)")
-        .accessibilityHint("Opens goal details. Hold for goal actions.")
+        .accessibilityLabel(
+            "\(goal.title), \(goal.isGroupGoal ? "group" : "personal") saving goal, " +
+            "\(goal.lifecycleState.title), \(money(goal.currentAmount)) recorded, " +
+            "\(Int(goal.progress * 100)) percent complete"
+        )
+        .accessibilityHint("Opens goal details. More actions are available.")
+        // VoiceOver users must not need to discover a long-press context menu.
+        // Keep these actions identical to the existing lifecycle menu.
+        .accessibilityActions {
+            if goal.canRecordSaving {
+                Button("Make focus goal") { makeFocusGoal(goal) }
+                Button("Pause goal") { changeLifecycle(of: goal, to: .paused) }
+            }
+            if goal.lifecycleState == .paused || goal.lifecycleState == .archived {
+                Button("Resume goal") { changeLifecycle(of: goal, to: .active) }
+            }
+            if goal.lifecycleState == .active || goal.lifecycleState == .paused {
+                Button("Archive goal") { changeLifecycle(of: goal, to: .archived) }
+            }
+        }
     }
 
     private func compactGoalRowLabel(_ goal: PersonalGoal) -> some View {

@@ -205,6 +205,24 @@ final class PipoUIRecordingTests: XCTestCase {
         attachOnboardingScreen("Dashboard B — confirmed saving milestone")
     }
 
+    /// #18 Dashboard B: goal rows announce their state, progress and recorded
+    /// amount as one action, instead of relying on a context-menu long press.
+    func testDashboardGoalRowsHaveAccountSafeAccessibilitySummary() {
+        continueAfterFailure = false
+        app.launchArguments = ["-pipo-dashboard-qa"]
+        app.launch()
+
+        tapButton("pipo.dashboard.tab.goals")
+        let goal = app.buttons.matching(
+            NSPredicate(format: "identifier BEGINSWITH %@", "pipo.dashboard.goal.")
+        ).firstMatch
+        XCTAssertTrue(goal.waitForExistence(timeout: 20),
+                      "A real account-owned goal row must be present")
+        XCTAssertTrue(goal.label.contains("saving goal"), goal.label)
+        XCTAssertTrue(goal.label.contains("recorded"), goal.label)
+        XCTAssertTrue(goal.label.contains("percent complete"), goal.label)
+    }
+
     /// #44 Approved Budget B visual and functional parity: one reused card
     /// in Goal Detail with the real SwiftData breakdown of a DEBUG-only goal.
     func testApprovedBudgetBreakdownBOnGoalDetail() {
