@@ -216,6 +216,22 @@ jobs:
           wait "$VIDEO_PID" 2>/dev/null || true
           exit "$TEST_RESULT"
 
+      - name: P0 authentication and deletion simulator safety QA
+        if: github.event_name == 'pull_request' && github.head_ref == 'feat/pipo-p0-live-auth-qa'
+        shell: bash
+        run: |
+          set -euo pipefail
+          xcodebuild \
+            -project "$XCODE_PROJECT" \
+            -scheme "$XCODE_SCHEME" \
+            -destination "id=$SIMULATOR_UDID" \
+            -derivedDataPath "$RUNNER_TEMP/PipoDerivedData" \
+            -resultBundlePath "$RUNNER_TEMP/PipoAuthQAResults.xcresult" \
+            -only-testing:PipoUITests/PipoUIRecordingTests/testP0AuthAndDeletionReviewGuards \
+            CODE_SIGNING_ALLOWED=NO \
+            CODE_SIGNING_REQUIRED=NO \
+            test 2>&1 | tee validation/p0-auth-deletion-ui-qa.log
+
       - name: Record native Saving journeys
         if: >-
           (github.event_name == 'workflow_dispatch' && inputs.validation_mode == 'visual-qa') ||
@@ -243,7 +259,7 @@ jobs:
         if: always()
         shell: bash
         run: |
-          for bundle in "$RUNNER_TEMP/PipoTestResults.xcresult" "$RUNNER_TEMP/PipoDashboardResults.xcresult"; do
+          for bundle in "$RUNNER_TEMP/PipoTestResults.xcresult" "$RUNNER_TEMP/PipoDashboardResults.xcresult" "$RUNNER_TEMP/PipoAuthQAResults.xcresult"; do
             if test -d "$bundle"; then
               name="$(basename "$bundle" .xcresult)"
               mkdir -p "validation/visual-qa/$name"
@@ -263,5 +279,6 @@ jobs:
             xcode-version.txt
             ${{ runner.temp }}/PipoTestResults.xcresult
             ${{ runner.temp }}/PipoDashboardResults.xcresult
+            ${{ runner.temp }}/PipoAuthQAResults.xcresult
           if-no-files-found: warn
           retention-days: 7
