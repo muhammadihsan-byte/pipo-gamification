@@ -164,9 +164,13 @@ final class PipoUIRecordingTests: XCTestCase {
         app.launchArguments = ["-pipo-dashboard-qa"]
         app.launch()
 
-        XCTAssertTrue(app.staticTexts["Bali holiday"].waitForExistence(timeout: 25))
-        XCTAssertTrue(app.buttons["pipo.dashboard.focusGoal"].exists)
-        XCTAssertTrue(app.buttons["pipo.dashboard.recordSaving"].exists)
+        let focusButton = app.buttons["pipo.dashboard.focusGoal"].firstMatch
+        XCTAssertTrue(focusButton.waitForExistence(timeout: 25),
+                      "Focus goal must be a separately accessible button")
+        XCTAssertTrue(focusButton.label.contains("Bali holiday"),
+                      "The most advanced active personal goal should be featured")
+        XCTAssertTrue(app.buttons["pipo.dashboard.recordSaving"].waitForExistence(timeout: 12),
+                      "Record a saving must remain a separately accessible action")
         XCTAssertTrue(app.staticTexts["60% complete"].exists)
         attachOnboardingScreen("Dashboard B — returning user and featured goal")
 

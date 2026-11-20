@@ -73,7 +73,15 @@ struct DashboardView: View {
            let match = activeGoals.first(where: { $0.id == preferredFocusGoalID }) {
             return match
         }
-        return activeGoals.first(where: { !$0.isGroupGoal }) ?? activeGoals.first
+        let personal = activeGoals.filter { !$0.isGroupGoal }
+        // The most advanced active personal goal has priority over newer drafts.
+        // Group goals are considered when no personal goal remains active.
+        return (personal.isEmpty ? activeGoals : personal)
+            .max { lhs, rhs in
+                lhs.progress == rhs.progress
+                    ? lhs.createdAt < rhs.createdAt
+                    : lhs.progress < rhs.progress
+            }
     }
 
     private var otherGoals: [PersonalGoal] {
@@ -458,7 +466,7 @@ struct DashboardView: View {
         .padding(18)
         .frame(maxWidth: .infinity, alignment: .leading)
         .background(PipoTheme.palePink, in: RoundedRectangle(cornerRadius: 24))
-        .accessibilityIdentifier("pipo.dashboard.featuredGoal")
+        // Individual actions provide their own accessibility identifiers.
     }
 
     private func activityAndAchievements(for goal: PersonalGoal) -> some View {
