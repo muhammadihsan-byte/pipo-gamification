@@ -205,6 +205,50 @@ final class PipoUIRecordingTests: XCTestCase {
         attachOnboardingScreen("Dashboard B — confirmed saving milestone")
     }
 
+    /// Non-destructive P0 simulator acceptance: sign-in availability and
+    /// account deletion confirmation. The fixture is DEBUG-only and has no
+    /// backend Auth session. NEVER tap the destructive submit action.
+    func testP0AuthAndDeletionReviewGuards() {
+        continueAfterFailure = false
+        app.launchArguments = ["-pipo-auth-qa"]
+        app.launch()
+
+        let forgot = app.buttons["pipo.auth.forgotPassword"].firstMatch
+        XCTAssertTrue(forgot.waitForExistence(timeout: 25),
+                      "Email recovery must be available on the sign-in screen")
+        XCTAssertFalse(app.buttons["Apple"].exists,
+                       "Unconfigured Apple sign-in must stay unavailable")
+        XCTAssertFalse(app.buttons["Google"].exists,
+                       "Unconfigured Google sign-in must stay unavailable")
+        forgot.tap()
+        XCTAssertTrue(app.staticTexts[
+            "Enter your email address to receive a reset link."
+        ].waitForExistence(timeout: 10),
+                      "Invalid email must fail locally, without sending mail")
+        attachOnboardingScreen("P0 - Recovery entry and no social provider")
+        app.terminate()
+
+        launchFromDashboard()
+        tapButton("pipo.dashboard.tab.profile")
+        XCTAssertTrue(app.staticTexts["Your space"].waitForExistence(timeout: 15))
+        XCTAssertTrue(app.buttons["pipo.profile.signOut"].exists,
+                      "Sign out must be visible for a user with no saving goal")
+        tapButton("pipo.profile.deleteAccount")
+        let submit = app.buttons["pipo.deleteAccount.submit"].firstMatch
+        XCTAssertTrue(submit.waitForExistence(timeout: 15))
+        XCTAssertFalse(submit.isEnabled, "Deletion must be disabled by default")
+        let confirmation = app.textFields["pipo.deleteAccount.confirmation"].firstMatch
+        XCTAssertTrue(confirmation.waitForExistence(timeout: 10))
+        confirmation.tap()
+        confirmation.typeText("DELETE")
+        XCTAssertTrue(submit.isEnabled,
+                      "Only a fully typed confirmation may unlock deletion")
+        attachOnboardingScreen("P0 - Typed delete confirmation, not submitted")
+        tapButton("pipo.deleteAccount.cancel")
+        XCTAssertTrue(app.buttons["pipo.profile.deleteAccount"].waitForExistence(timeout: 15),
+                      "Cancel must preserve the user's Profile")
+    }
+
     private func launchOnboarding() {
         app.launchArguments = ["-pipo-onboarding-qa"]
         app.launch()
