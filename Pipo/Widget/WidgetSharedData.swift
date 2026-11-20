@@ -32,6 +32,10 @@ enum WidgetSharedData {
         guard let defaults = UserDefaults(suiteName: appGroupIdentifier) else {
             throw WidgetSharedDataError.appGroupUnavailable
         }
+        activate(userID: userID, in: defaults)
+    }
+
+    static func activate(userID: UUID?, in defaults: UserDefaults) {
         let previousUserID = defaults.string(forKey: activeAccountKey)
         let nextUserID = userID?.uuidString
         if previousUserID != nextUserID {
@@ -49,6 +53,10 @@ enum WidgetSharedData {
             throw WidgetSharedDataError.appGroupUnavailable
         }
 
+        try save(snapshot, in: defaults)
+    }
+
+    static func save(_ snapshot: WidgetSnapshot, in defaults: UserDefaults) throws {
         let activeUserID = defaults.string(forKey: activeAccountKey)
         if let ownerUserID = snapshot.ownerUserID {
             guard activeUserID == ownerUserID.uuidString else {
@@ -81,8 +89,14 @@ enum WidgetSharedData {
     }
 
     static func load() -> WidgetSnapshot {
-        guard let defaults = UserDefaults(suiteName: appGroupIdentifier),
-              let currentAccount = defaults.string(forKey: activeAccountKey),
+        guard let defaults = UserDefaults(suiteName: appGroupIdentifier) else {
+            return .empty
+        }
+        return load(from: defaults)
+    }
+
+    static func load(from defaults: UserDefaults) -> WidgetSnapshot {
+        guard let currentAccount = defaults.string(forKey: activeAccountKey),
               let values = defaults.dictionary(forKey: snapshotKey),
               let owner = values["ownerUserID"] as? String,
               owner == currentAccount,
