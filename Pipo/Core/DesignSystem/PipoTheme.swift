@@ -20,7 +20,7 @@ enum PipoTheme {
     static let cardBorder = Color(red: 226 / 255, green: 232 / 255, blue: 240 / 255)
 }
 
-enum TicketCardStyle {
+enum TicketCardStyle: Equatable {
     case standard
     case approvedCompact
 }
