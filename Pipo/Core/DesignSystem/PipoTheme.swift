@@ -26,6 +26,8 @@ enum PipoTheme {
 enum TicketCardStyle: Equatable {
     case standard
     case approvedCompact
+    case approvedBlush
+    case approvedMist
 }
 
 @MainActor
@@ -39,18 +41,28 @@ struct TicketCard<Content: View>: View {
     }
 
     var body: some View {
-        let radius: CGFloat = style == .approvedCompact ? 18 : 24
-        let horizontal: CGFloat = style == .approvedCompact ? 16 : 20
+        let radius: CGFloat = style == .standard ? 24 : (style == .approvedCompact ? 18 : 22)
+        let inset: CGFloat = style == .standard ? 20 : 16
+        let top: CGFloat = style == .standard ? 20 : 15
+        let bottom: CGFloat = style == .standard ? 20 : 13
+        let surface: Color = style == .approvedBlush
+            ? Color(red: 1, green: 241 / 255, blue: 244 / 255)
+            : (style == .approvedMist
+                ? Color(red: 248 / 255, green: 250 / 255, blue: 252 / 255)
+                : .white)
+        let outline: Color = style == .approvedBlush
+            ? Color(red: 254 / 255, green: 205 / 255, blue: 206 / 255)
+            : (style == .standard ? PipoTheme.border : PipoTheme.cardBorder)
 
         return content
-            .padding(.horizontal, horizontal)
-            .padding(.top, style == .approvedCompact ? 15 : 20)
-            .padding(.bottom, style == .approvedCompact ? 13 : 20)
+            .padding(.horizontal, inset)
+            .padding(.top, top)
+            .padding(.bottom, bottom)
             .frame(maxWidth: .infinity, alignment: .leading)
-            .background(.white, in: RoundedRectangle(cornerRadius: radius))
+            .background(surface, in: RoundedRectangle(cornerRadius: radius))
             .overlay {
                 RoundedRectangle(cornerRadius: radius)
-                    .strokeBorder(style == .approvedCompact ? PipoTheme.cardBorder : PipoTheme.border, lineWidth: 1)
+                    .strokeBorder(outline, lineWidth: 1)
             }
     }
 }
