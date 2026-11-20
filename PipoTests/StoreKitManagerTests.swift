@@ -113,6 +113,29 @@ final class StoreKitManagerTests: XCTestCase {
         XCTAssertEqual(secondProfile.purchasedGroupSlots, 1)
     }
 
+
+    @MainActor
+    func testDeletedAccountClearsOnlyItsStoreKitPendingPurchaseContext() throws {
+        let defaults = try makeDefaults()
+        let deletedUser = UUID()
+        let anotherUser = UUID()
+        defaults.set(true, forKey: "storekit.goal-slot.pending")
+        defaults.set(deletedUser.uuidString, forKey: "storekit.goal-slot.pending-user-id")
+        defaults.set(false, forKey: "storekit.goal-slot.pending-is-group")
+
+        let manager = StoreKitManager(defaults: defaults)
+        XCTAssertTrue(manager.hasPendingPurchase)
+        manager.discardDeletedAccountPurchaseContext(anotherUser)
+        XCTAssertTrue(manager.hasPendingPurchase)
+        XCTAssertEqual(defaults.string(forKey: "storekit.goal-slot.pending-user-id"),
+                       deletedUser.uuidString)
+
+        manager.discardDeletedAccountPurchaseContext(deletedUser)
+        XCTAssertFalse(manager.hasPendingPurchase)
+        XCTAssertNil(defaults.string(forKey: "storekit.goal-slot.pending-user-id"))
+        XCTAssertFalse(defaults.bool(forKey: "storekit.goal-slot.pending"))
+    }
+
     @MainActor
     private func makeContainer() throws -> ModelContainer {
         try ModelContainer(
