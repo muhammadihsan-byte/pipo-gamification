@@ -439,23 +439,7 @@ struct DashboardView: View {
                     .foregroundStyle(PipoTheme.deepPink)
             }
 
-            Button {
-                openGoal(goal)
-            } label: {
-                HStack {
-                    Text(goal.title)
-                        .font(.title3.bold())
-                        .multilineTextAlignment(.leading)
-                        .foregroundStyle(PipoTheme.ink)
-                    Spacer(minLength: 8)
-                    Image(systemName: "chevron.right")
-                        .font(.caption.bold())
-                        .foregroundStyle(PipoTheme.deepPink)
-                }
-                .frame(minHeight: 44)
-            }
-            .buttonStyle(.plain)
-            .accessibilityIdentifier("pipo.dashboard.focusGoal")
+            focusGoalNavigation(for: goal)
 
             ViewThatFits(in: .horizontal) {
                 HStack(alignment: .firstTextBaseline, spacing: 5) {
@@ -624,6 +608,43 @@ struct DashboardView: View {
                     .frame(minHeight: 44)
             }
         }
+    }
+
+    /// A value-based NavigationLink participates directly in RootView's
+    /// NavigationStack instead of relying on an imperative path mutation.
+    /// Group goals retain their distinct local detail sheet.
+    @ViewBuilder
+    private func focusGoalNavigation(for goal: PersonalGoal) -> some View {
+        if goal.isGroupGoal {
+            Button {
+                openGoal(goal)
+            } label: {
+                focusGoalNavigationLabel(for: goal)
+            }
+            .buttonStyle(.plain)
+            .accessibilityIdentifier("pipo.dashboard.focusGoal")
+        } else {
+            NavigationLink(value: Route.personalGoal(goal.id)) {
+                focusGoalNavigationLabel(for: goal)
+            }
+            .buttonStyle(.plain)
+            .accessibilityIdentifier("pipo.dashboard.focusGoal")
+        }
+    }
+
+    private func focusGoalNavigationLabel(for goal: PersonalGoal) -> some View {
+        HStack {
+            Text(goal.title)
+                .font(.title3.bold())
+                .multilineTextAlignment(.leading)
+                .foregroundStyle(PipoTheme.ink)
+            Spacer(minLength: 8)
+            Image(systemName: "chevron.right")
+                .font(.caption.bold())
+                .foregroundStyle(PipoTheme.deepPink)
+        }
+        .frame(minHeight: 44)
+        .contentShape(Rectangle())
     }
 
     private func compactGoalRow(_ goal: PersonalGoal) -> some View {
