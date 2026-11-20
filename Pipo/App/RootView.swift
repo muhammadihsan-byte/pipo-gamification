@@ -381,6 +381,7 @@ struct RootView: View {
         // The Auth identity is gone. If saving the local store fails, persist
         // the deleted ID so cleanup can retry offline on the next launch.
         AccountDeletionLocalData.markServerDeleted(userID)
+        storeKitManager.discardDeletedAccountPurchaseContext(userID)
         var localCleanupFailure: Error?
         do {
             try AccountDeletionLocalData.complete(for: userID, in: modelContext)
@@ -388,14 +389,15 @@ struct RootView: View {
             localCleanupFailure = error
         }
 
+        var widgetCleared = true
         if authStateManager.userID == userID {
             await supabaseService.discardDeletedSession(using: authStateManager)
-            updateWidgetAccount(nil)
+            widgetCleared = updateWidgetAccount(nil)
         }
         showingAccountDeletion = false
-        noticeMessage = localCleanupFailure == nil
+        noticeMessage = localCleanupFailure == nil && widgetCleared
             ? "Your Pipo account and its saved data were deleted."
-            : "Your account was deleted on the server, but this device could not finish clearing its saved data. Pipo will retry when you next open the app."
+            : "Your Pipo account was deleted on the server. Some device data or widget content could not be cleared; Pipo will retry cleanup when you next open the app."
     }
 
     private func authenticate(_ credentials: AuthCredentials) {
@@ -469,16 +471,20 @@ struct RootView: View {
         updateWidgetAccount(nil)
     }
 
-    private func updateWidgetAccount(_ userID: UUID?) {
+    @discardableResult
+    private func updateWidgetAccount(_ userID: UUID?) -> Bool {
+        var success = true
         do {
             try WidgetSharedData.activate(userID: userID)
             if userID == nil {
                 try WidgetSharedData.save(.empty)
             }
         } catch {
+            success = false
             noticeMessage = "Widget account data could not be updated: \(error.localizedDescription)"
         }
         WidgetCenter.shared.reloadAllTimelines()
+        return success
     }
 
     private func beginOAuthSignIn(provider: Provider) {
