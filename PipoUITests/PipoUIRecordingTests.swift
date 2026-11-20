@@ -297,6 +297,12 @@ final class PipoUIRecordingTests: XCTestCase {
         tapButton("pipo.goal.moneyOutPreview")
         XCTAssertTrue(app.navigationBars["Money used elsewhere"]
                       .waitForExistence(timeout: 12))
+        // Capture the form hierarchy before typing so a regression in
+        // field exposure has usable visual evidence instead of a timeout.
+        attachOnboardingScreen("Issue 42 — Money Out input is visible")
+        let input = app.textFields["pipo.card.moneyOut.amount"].firstMatch
+        XCTAssertTrue(input.waitForExistence(timeout: 12),
+                      "The approved Money Out input must remain an editable text field")
         typeText("pipo.card.moneyOut.amount", value: "500000")
         tapButton("pipo.card.moneyOut.review")
         XCTAssertTrue(app.staticTexts["A CHANGE, NOT A RESET"]
