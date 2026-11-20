@@ -712,13 +712,23 @@ private struct AccountDeletionConfirmationView: View {
                     }
                     .frame(maxWidth: .infinity)
                     .disabled(isWorking)
-                    .accessibilityIdentifier("pipo.deleteAccount.cancel")
+                    .accessibilityIdentifier("pipo.deleteAccount.keepAccount")
                 }
                 .padding(24)
             }
             .background(.white)
             .navigationTitle("Account deletion")
             .navigationBarTitleDisplayMode(.inline)
+            // The keyboard can cover the bottom "Keep my account" button.
+            // Keep cancellation reachable without scrolling or dismissal.
+            .toolbar(.visible, for: .navigationBar)
+            .toolbar {
+                ToolbarItem(placement: .topBarLeading) {
+                    Button("Cancel") { dismiss() }
+                        .disabled(isWorking)
+                        .accessibilityIdentifier("pipo.deleteAccount.cancel")
+                }
+            }
             .interactiveDismissDisabled(isWorking)
         }
     }
