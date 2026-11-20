@@ -28,6 +28,8 @@
 		00000000000000000000000C /* SavingTransaction.swift in Sources */ = {isa = PBXBuildFile; fileRef = 000000000000000000000112 /* SavingTransaction.swift */; };
 		00000000000000000000000D /* UserProfile.swift in Sources */ = {isa = PBXBuildFile; fileRef = 000000000000000000000113 /* UserProfile.swift */; };
 		00000000000000000000000E /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 000000000000000000000114 /* Assets.xcassets */; };
+		B0AA20261120000000000003 /* App PrivacyInfo.xcprivacy in Resources */ = {isa = PBXBuildFile; fileRef = B0AA20261120000000000001 /* App PrivacyInfo.xcprivacy */; };
+		B0AA20261120000000000004 /* Widget PrivacyInfo.xcprivacy in Resources */ = {isa = PBXBuildFile; fileRef = B0AA20261120000000000002 /* Widget PrivacyInfo.xcprivacy */; };
 		00000000000000000000000F /* PersonalGoalTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 000000000000000000000115 /* PersonalGoalTests.swift */; };
 		000000000000000000000010 /* XCTest.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 000000000000000000000118 /* XCTest.framework */; };
 		000000000000000000000011 /* AuthStateManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = 000000000000000000000119 /* AuthStateManager.swift */; };
@@ -108,6 +110,8 @@
 		000000000000000000000112 /* SavingTransaction.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SavingTransaction.swift; sourceTree = "<group>"; };
 		000000000000000000000113 /* UserProfile.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = UserProfile.swift; sourceTree = "<group>"; };
 		000000000000000000000114 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
+		B0AA20261120000000000001 /* App PrivacyInfo.xcprivacy */ = {isa = PBXFileReference; lastKnownFileType = text.xml; path = PrivacyInfo.xcprivacy; sourceTree = "<group>"; };
+		B0AA20261120000000000002 /* Widget PrivacyInfo.xcprivacy */ = {isa = PBXFileReference; lastKnownFileType = text.xml; path = PrivacyInfo.xcprivacy; sourceTree = "<group>"; };
 		000000000000000000000115 /* PersonalGoalTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PersonalGoalTests.swift; sourceTree = "<group>"; };
 		000000000000000000000116 /* Pipo.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = Pipo.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		000000000000000000000117 /* PipoTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = PipoTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
@@ -234,6 +238,7 @@
 				000000000000000000000101 /* RootView.swift */,
 				000000000000000000000102 /* PipoApp.swift */,
 				A71D5C9E6B20433BB8000015 /* Pipo.entitlements */,
+				B0AA20261120000000000001 /* App PrivacyInfo.xcprivacy */,
 			);
 			path = App;
 			sourceTree = "<group>";
@@ -302,6 +307,7 @@
 				A71D5C9E6B20433BB8000013 /* WidgetSharedData.swift */,
 				A71D5C9E6B20433BB8000016 /* PipoWidget.entitlements */,
 				A71D5C9E6B20433BB8000017 /* Widget Info.plist */,
+				B0AA20261120000000000002 /* Widget PrivacyInfo.xcprivacy */,
 			);
 			path = Widget;
 			sourceTree = "<group>";
@@ -584,6 +590,7 @@
 			files = (
 				00000000000000000000000E /* Assets.xcassets in Resources */,
 				D20000000000000000000003 /* PersonalPlanMotion in Resources */,
+				B0AA20261120000000000003 /* App PrivacyInfo.xcprivacy in Resources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -599,6 +606,7 @@
 			buildActionMask = 2147483647;
 			files = (
 				A71D5C9E6B20433BB8000005 /* Assets.xcassets in Widget Resources */,
+				B0AA20261120000000000004 /* Widget PrivacyInfo.xcprivacy in Resources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
