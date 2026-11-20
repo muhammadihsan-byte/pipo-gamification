@@ -217,7 +217,10 @@ jobs:
           exit "$TEST_RESULT"
 
       - name: P0 authentication and deletion simulator safety QA
-        if: github.event_name == 'pull_request' && github.head_ref == 'feat/pipo-p0-live-auth-qa'
+        if: >-
+          github.event_name == 'pull_request' &&
+          (github.head_ref == 'feat/pipo-p0-live-auth-qa' ||
+           github.head_ref == 'feat/pipo-p0-auth-e2e-release-kit')
         shell: bash
         run: |
           set -euo pipefail
