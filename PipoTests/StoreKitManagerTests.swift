@@ -5,6 +5,28 @@ import XCTest
 
 final class StoreKitManagerTests: XCTestCase {
     @MainActor
+    func testLivePurchasesAreBlockedUntilServerVerificationExists() async throws {
+        XCTAssertFalse(StoreKitManager.purchasesEnabled)
+        let container = try makeContainer()
+        let manager = StoreKitManager(defaults: try makeDefaults())
+        let entitlements = SubscriptionManager()
+        do {
+            _ = try await manager.purchaseSlot(
+                isGroup: false,
+                userID: UUID(),
+                modelContext: container.mainContext,
+                subscriptionManager: entitlements
+            )
+            XCTFail("An unverified permanent slot must never charge a user.")
+        } catch StoreKitManagerError.purchasesAwaitingServerVerification {
+            XCTAssertEqual(entitlements.purchasedPersonalSlots, 0)
+            XCTAssertFalse(manager.isPurchasing)
+        } catch {
+            XCTFail("Unexpected purchase error: \(error)")
+        }
+    }
+
+    @MainActor
     func testVerifiedPurchaseAddsSlotToCorrectBalanceAndPersistsIt() async throws {
         let container = try makeContainer()
         let context = container.mainContext
