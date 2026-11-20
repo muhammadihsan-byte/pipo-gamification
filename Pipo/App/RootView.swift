@@ -11,6 +11,7 @@ struct RootView: View {
     @State private var storeKitManager: StoreKitManager
     @State private var supabaseService: SupabaseService?
     @State private var choosingPlan = false
+    @State private var isResettingPassword = false
     @State private var noticeMessage: String?
     @State private var hasFinishedOnboardingQA = false
     @State private var completedOnboardingAccountID: UUID?
@@ -213,10 +214,9 @@ struct RootView: View {
                 return
             }
 
-            guard
-                let supabaseService,
-                url.scheme == supabaseService.configuration.redirectURL.scheme
-            else {
+            guard let supabaseService else { return }
+            let isRecovery = supabaseService.configuration.isPasswordRecoveryCallback(url)
+            guard isRecovery || supabaseService.configuration.isSignInCallback(url) else {
                 return
             }
             Task {
@@ -225,10 +225,33 @@ struct RootView: View {
                         url,
                         authStateManager: authStateManager
                     )
+                    if isRecovery {
+                        isResettingPassword = true
+                    }
                 } catch {
                     noticeMessage = error.localizedDescription
                 }
             }
+        }
+        .sheet(isPresented: $isResettingPassword) {
+            PasswordResetView(
+                onSubmit: { password in
+                    guard let supabaseService else {
+                        throw SupabaseServiceError.notAuthenticated
+                    }
+                    try await supabaseService.updateRecoveredPassword(password)
+                    try await supabaseService.signOut(authStateManager: authStateManager)
+                    isResettingPassword = false
+                    noticeMessage = "Password updated. Sign in with your new password."
+                },
+                onCancel: {
+                    guard let supabaseService else {
+                        throw SupabaseServiceError.notAuthenticated
+                    }
+                    try await supabaseService.signOut(authStateManager: authStateManager)
+                    isResettingPassword = false
+                }
+            )
         }
         .sheet(isPresented: $navigationManager.isMilestonePresented) {
             ConsistencyMilestoneView(
@@ -301,9 +324,7 @@ struct RootView: View {
             onGoogleSignIn: {
                 beginOAuthSignIn(provider: .google)
             },
-            onForgotPassword: {
-                noticeMessage = "Password reset is not configured yet."
-            }
+            onForgotPassword: requestPasswordReset
         )
     }
 
@@ -342,6 +363,22 @@ struct RootView: View {
             Button("Personal saving") { navigationManager.navigate(to: .createGoal) }
             Button("Group saving") { navigationManager.navigate(to: .createGroupPlan) }
             Button("Cancel", role: .cancel) {}
+        }
+    }
+
+    private func requestPasswordReset(_ email: String) {
+        guard let supabaseService else {
+            noticeMessage = supabaseConfigurationError ?? "Supabase is not configured."
+            return
+        }
+        Task {
+            do {
+                try await supabaseService.requestPasswordReset(email: email)
+                // Avoid disclosing whether an account exists for this email address.
+                noticeMessage = "If an account exists, a password reset link will arrive by email."
+            } catch {
+                noticeMessage = error.localizedDescription
+            }
         }
     }
 
