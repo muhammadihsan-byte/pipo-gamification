@@ -4,6 +4,41 @@ import XCTest
 @testable import Pipo
 
 final class PersonalGoalTests: XCTestCase {
+    func testApprovedBudgetBUsesRecordedBreakdownNotSampleAmounts() {
+        let goalID = UUID()
+        let rows = [
+            PipoBudgetLine(id: goalID, title: "Travel & stay", amount: 4_500_000),
+            PipoBudgetLine(id: UUID(), title: "Experiences", amount: 1_500_000),
+            PipoBudgetLine(id: UUID(), title: "Documents", amount: 600_000)
+        ]
+        let target = 6_600_000.0
+
+        XCTAssertEqual(rows.map { PipoBudgetPresentation.percent(of: $0.amount, target: target) },
+                       [68, 23, 9])
+        let total = PipoBudgetPresentation.validTotal(for: rows)
+        XCTAssertEqual(total, target)
+        XCTAssertTrue(PipoBudgetPresentation.matchesTarget(total: total ?? -1, target: target))
+        XCTAssertEqual(rows.first?.id, goalID, "Rows should keep real persisted identity")
+    }
+
+    func testApprovedBudgetBNeverHidesMismatchOrInvalidAmount() {
+        let rows = [
+            PipoBudgetLine(id: UUID(), title: "Travel", amount: 250),
+            PipoBudgetLine(id: UUID(), title: "Hotel", amount: 300)
+        ]
+        let total = PipoBudgetPresentation.validTotal(for: rows)
+        XCTAssertEqual(total, 550)
+        XCTAssertFalse(PipoBudgetPresentation.matchesTarget(total: total ?? -1, target: 600))
+        XCTAssertNil(PipoBudgetPresentation.percent(of: 250, target: 0))
+        XCTAssertNil(PipoBudgetPresentation.percent(of: -.infinity, target: 600))
+        XCTAssertNil(PipoBudgetPresentation.validTotal(for: [
+            PipoBudgetLine(id: UUID(), title: "Bad import", amount: -.infinity)
+        ]))
+        XCTAssertNil(PipoBudgetPresentation.validTotal(for: [
+            PipoBudgetLine(id: UUID(), title: "Negative", amount: -1)
+        ]))
+    }
+
     func testProgressAndRemainingAmountAreBoundedByTarget() {
         let goal = PersonalGoal(
             title: "Emergency fund",
