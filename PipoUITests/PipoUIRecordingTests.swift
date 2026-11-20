@@ -156,6 +156,44 @@ final class PipoUIRecordingTests: XCTestCase {
         attachOnboardingScreen("Skipped options lead directly to Home")
     }
 
+
+    /// Dashboard B visual contract using only seeded in-memory simulator data.
+    /// The PR workflow records this in one controlled native iOS run.
+    func testReturningDashboardB() {
+        continueAfterFailure = false
+        app.launchArguments = ["-pipo-dashboard-qa"]
+        app.launch()
+
+        XCTAssertTrue(app.staticTexts["Bali holiday"].waitForExistence(timeout: 25))
+        XCTAssertTrue(app.buttons["pipo.dashboard.focusGoal"].exists)
+        XCTAssertTrue(app.buttons["pipo.dashboard.recordSaving"].exists)
+        XCTAssertTrue(app.staticTexts["60% complete"].exists)
+        attachOnboardingScreen("Dashboard B — returning user and featured goal")
+
+        tapButton("pipo.dashboard.tab.goals")
+        XCTAssertTrue(app.staticTexts["Saving goals"].waitForExistence(timeout: 12))
+        XCTAssertTrue(app.staticTexts["Bandung trip"].exists)
+        attachOnboardingScreen("Dashboard B — personal and group goals")
+
+        tapButton("pipo.dashboard.tab.journey")
+        XCTAssertTrue(app.staticTexts["Your journey"].waitForExistence(timeout: 12))
+        XCTAssertTrue(app.staticTexts["RECENT ACTIVITY"].exists)
+        attachOnboardingScreen("Dashboard B — real recorded activity")
+
+        tapButton("pipo.dashboard.tab.profile")
+        XCTAssertTrue(app.staticTexts["Your space"].waitForExistence(timeout: 12))
+        XCTAssertTrue(app.staticTexts["Total XP"].exists)
+        attachOnboardingScreen("Dashboard B — profile data")
+
+        tapButton("pipo.dashboard.tab.home")
+        tapButton("pipo.dashboard.recordSaving")
+        XCTAssertTrue(app.textFields["Amount in IDR"].waitForExistence(timeout: 12))
+        typeText("Amount in IDR", value: "50000")
+        tapButton("Save")
+        XCTAssertTrue(app.buttons["View my achievements"].waitForExistence(timeout: 15))
+        attachOnboardingScreen("Dashboard B — confirmed saving milestone")
+    }
+
     private func launchOnboarding() {
         app.launchArguments = ["-pipo-onboarding-qa"]
         app.launch()
