@@ -198,11 +198,14 @@ struct PlanFinancialPreview: Equatable {
         guard netRecorded >= 0 else { throw PlanFinancialPreviewError.invalidBalance }
         guard target > 0 else { throw PlanFinancialPreviewError.invalidTarget }
         if let breakdown {
-            guard breakdown.allSatisfy({ $0 > 0 }),
-                  breakdown.reduce(into: 0, { sum, item in
-                      let (next, overflow) = sum.addingReportingOverflow(item)
-                      sum = overflow ? -1 : next
-                  }) == target else {
+            var budgetTotal = 0
+            for item in breakdown {
+                guard item > 0 else { throw PlanFinancialPreviewError.invalidBreakdown }
+                let (next, overflow) = budgetTotal.addingReportingOverflow(item)
+                guard !overflow else { throw PlanFinancialPreviewError.invalidBreakdown }
+                budgetTotal = next
+            }
+            guard budgetTotal == target else {
                 throw PlanFinancialPreviewError.invalidBreakdown
             }
         }
