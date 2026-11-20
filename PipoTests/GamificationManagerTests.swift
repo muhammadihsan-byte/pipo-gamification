@@ -153,6 +153,40 @@ final class GamificationManagerTests: XCTestCase {
         )
     }
 
+
+    @MainActor
+    func testDashboardWeeklyNextDateRespectsPreferredWeekday() {
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = TimeZone(secondsFromGMT: 0)!
+        let goal = PersonalGoal(
+            title: "Trip", category: .trip, targetAmount: 1_000,
+            startDate: makeDate(day: 1),
+            targetDate: makeDate(day: 31),
+            rhythm: .weekly,
+            preferredSavingDay: 1
+        )
+        let next = DashboardSchedule.nextDate(for: goal, asOf: makeDate(day: 5), calendar: calendar)
+        XCTAssertEqual(calendar.component(.day, from: next!), 11)
+    }
+
+    @MainActor
+    func testDashboardMonthlyNextDateClampsPreferredThirtyFirst() {
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = TimeZone(secondsFromGMT: 0)!
+        let target = calendar.date(from: DateComponents(year: 2026, month: 4, day: 30))!
+        let february = calendar.date(from: DateComponents(year: 2026, month: 2, day: 12))!
+        let goal = PersonalGoal(
+            title: "New laptop", category: .gadget, targetAmount: 10_000,
+            startDate: makeDate(day: 20),
+            targetDate: target,
+            rhythm: .monthly,
+            preferredSavingDay: 31
+        )
+        let next = DashboardSchedule.nextDate(for: goal, asOf: february, calendar: calendar)
+        XCTAssertEqual(calendar.component(.month, from: next!), 2)
+        XCTAssertEqual(calendar.component(.day, from: next!), 28)
+    }
+
     @MainActor
     private func makeGoal() -> PersonalGoal {
         PersonalGoal(
