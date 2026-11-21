@@ -304,7 +304,7 @@ struct SavingMoneyOutRPCRequest: Codable, Sendable {
 
     init(requestID: UUID, goalID: UUID, amount: Int, note: String?,
          preference: String) throws {
-        guard amount > 0, amount <= 9_999_999_999_999_999 else {
+        guard amount > 0, amount <= SavingsAmountSafety.maxExactWholeIDR else {
             throw SavingMoneyOutRequestError.invalidAmount
         }
         guard ["keep_date", "keep_amount"].contains(preference) else {
@@ -539,6 +539,7 @@ struct SavingMoneyOutRPCReceipt: Decodable, Sendable {
     func verify(request: SavingMoneyOutRPCRequest, ownerID: UUID) throws {
         guard id == request.requestID, goalID == request.goalID, userID == ownerID,
               kind == "money_out", amount.isFinite,
+              amount <= Double(SavingsAmountSafety.maxExactWholeIDR),
               Int(exactly: amount) == request.amount,
               preference == request.preference,
               note == request.note
@@ -593,7 +594,9 @@ enum SavingCloudLedgerReconciler {
         let savings: [SavingTransaction] = try contributions.map { entry in
             guard entry.goalID == goalID, entry.userID == ownerID,
                   entry.amount.isFinite, let amount = Int(exactly: entry.amount),
-                  amount > 0, entry.xpEarned >= 0
+                  amount > 0,
+                  amount <= SavingsAmountSafety.maxExactWholeIDR,
+                  entry.xpEarned >= 0
             else { throw SavingCloudRecoveryError.invalidServerEntry }
             return SavingTransaction(
                 id: entry.id, goalId: entry.goalID, amount: Double(amount),
@@ -604,7 +607,9 @@ enum SavingCloudLedgerReconciler {
             guard entry.goalID == goalID, entry.userID == ownerID,
                   let kind = SavingAdjustmentKind(rawValue: entry.kind),
                   entry.amount.isFinite, let amount = Int(exactly: entry.amount),
-                  amount != 0
+                  amount != 0,
+                  amount >= -SavingsAmountSafety.maxExactWholeIDR,
+                  amount <= SavingsAmountSafety.maxExactWholeIDR
             else { throw SavingCloudRecoveryError.invalidServerEntry }
             return SavingAdjustmentEvent(
                 id: entry.id, goalID: entry.goalID, userID: entry.userID,
