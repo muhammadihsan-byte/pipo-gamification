@@ -1,10 +1,37 @@
 import Foundation
 import UIKit
+import SwiftUI
 import SwiftData
 import XCTest
 @testable import Pipo
 
 final class PersonalGoalTests: XCTestCase {
+
+    /// Guard the actual SwiftUI Color tokens used as filled backgrounds behind
+    /// white CTA text. WCAG AA normal-text threshold is 4.5:1. Do not test
+    /// a duplicated hex value that could drift from the production button.
+    @MainActor
+    func testGlobalV1FilledPrimaryActionTextContrastMeetsWCAGAA() {
+        let activeButtons: [(String, UIColor)] = [
+            ("Create Goal", UIColor(PersonalPlanStyle.buttonEdge)),
+            ("Manage Plan", UIColor(PipoTheme.cardAccentReadable))
+        ]
+        func channel(_ value: Double) -> Double {
+            value <= 0.04045 ? value / 12.92 :
+                pow((value + 0.055) / 1.055, 2.4)
+        }
+        for (name, background) in activeButtons {
+            var red: CGFloat = 0, green: CGFloat = 0, blue: CGFloat = 0, alpha: CGFloat = 0
+            XCTAssertTrue(background.getRed(&red, green: &green, blue: &blue, alpha: &alpha),
+                          name + " color must resolve to RGB")
+            let luminance = 0.2126 * channel(Double(red))
+                + 0.7152 * channel(Double(green))
+                + 0.0722 * channel(Double(blue))
+            let whiteTextContrast = 1.05 / (luminance + 0.05)
+            XCTAssertGreaterThanOrEqual(whiteTextContrast, 4.5,
+                name + " filled CTA white text does not meet normal-text AA")
+        }
+    }
 
     @MainActor
     func testGlobalV1ExactRemainingAndCompletionAvoidFloatingPointDrift() {
