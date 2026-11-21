@@ -992,8 +992,8 @@ extension PersonalGoalTests {
         )
         let original = try String(contentsOf: fileURL, encoding: .utf8)
         let altered = original.replacingOccurrences(
-            of: "\"note\":\"Coffee\"",
-            with: "\"note\":\" Coffee \""
+            of: "\"p_note\":\"Coffee\"",
+            with: "\"p_note\":\" Coffee \""
         )
         XCTAssertNotEqual(original, altered)
         try Data(altered.utf8).write(to: fileURL, options: .atomic)
