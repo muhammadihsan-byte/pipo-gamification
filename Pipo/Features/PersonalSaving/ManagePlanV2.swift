@@ -462,7 +462,15 @@ struct PipoManagePlanV2Sheet: View {
                     // The ScrollView receives the remaining height; its body
                     // can scroll without hiding the review-only primary CTA.
                     footer(horizontal: horizontal)
+                        // When content is taller than a compact sheet, keep
+                        // the primary action fully visible and shrink only
+                        // the scrollable editor area.
+                        .fixedSize(horizontal: false, vertical: true)
+                        .layoutPriority(1)
                 }
+                .frame(width: geometry.size.width,
+                       height: geometry.size.height,
+                       alignment: .top)
                 .background(.white)
             }
             .navigationBarHidden(true)
