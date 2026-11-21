@@ -472,6 +472,13 @@ struct PipoManagePlanV2Sheet: View {
                        height: geometry.size.height,
                        alignment: .top)
                 .background(.white)
+                .onAppear {
+                    #if DEBUG
+                    if horizontal <= 16 {
+                        print("PIPO_320_GEOMETRY height=\(geometry.size.height) top=\(geometry.safeAreaInsets.top) bottom=\(geometry.safeAreaInsets.bottom)")
+                    }
+                    #endif
+                }
             }
             .navigationBarHidden(true)
             .toolbar {
@@ -989,6 +996,18 @@ struct PipoManagePlanV2Sheet: View {
         .background(.white)
         .overlay(alignment: .top) {
             Rectangle().fill(PipoTheme.cardBorder).frame(height: 1)
+        }
+        .background {
+            #if DEBUG
+            GeometryReader { metrics in
+                Color.clear.onAppear {
+                    if horizontal <= 16 {
+                        let r = metrics.frame(in: .global)
+                        print("PIPO_320_FOOTER globalY=\(r.origin.y) height=\(r.height) bottom=\(r.maxY)")
+                    }
+                }
+            }
+            #endif
         }
     }
 
