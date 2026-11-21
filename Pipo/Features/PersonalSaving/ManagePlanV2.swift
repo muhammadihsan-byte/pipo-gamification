@@ -446,9 +446,11 @@ struct PipoManagePlanV2Sheet: View {
                         .frame(maxWidth: .infinity)
                     }
                     .scrollDismissesKeyboard(.interactively)
-                    .safeAreaInset(edge: .bottom, spacing: 0) {
-                        footer(horizontal: horizontal)
-                    }
+                    // Keep the footer inside the measured sheet layout, rather
+                    // than extending a scroll inset below a 320pt container.
+                    // The ScrollView receives the remaining height; its body
+                    // can scroll without hiding the review-only primary CTA.
+                    footer(horizontal: horizontal)
                 }
                 .background(.white)
             }
