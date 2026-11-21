@@ -84,7 +84,15 @@ struct SavingLedgerSnapshot: Equatable {
             earnedXP = xp
         }
 
-        let originals = Set(adjustments.filter { $0.kind == .moneyOut }.map(\.id))
+        // A correction changes an existing money-out amount; it cannot make
+        // that recorded usage negative and thereby fabricate saved money.
+        // Index originals first so cloud replay is independent of row order.
+        var effectiveMoneyOut: [UUID: Int] = [:]
+        for event in adjustments where event.kind == .moneyOut {
+            guard event.amount > 0, event.correctsEventID == nil
+            else { throw SavingLedgerError.malformedEvent }
+            effectiveMoneyOut[event.id] = event.amount
+        }
         var delta = 0
         for entry in adjustments {
             guard ids.insert(entry.id).inserted else { throw SavingLedgerError.duplicateEvent }
@@ -97,8 +105,13 @@ struct SavingLedgerSnapshot: Equatable {
                 delta = next
             case .correction:
                 guard entry.amount != 0, let original = entry.correctsEventID,
-                      originals.contains(original), original != entry.id
+                      let previous = effectiveMoneyOut[original], original != entry.id
                 else { throw SavingLedgerError.malformedEvent }
+                let (correctedAmount, correctionOverflow) =
+                    previous.subtractingReportingOverflow(entry.amount)
+                guard !correctionOverflow, correctedAmount > 0
+                else { throw SavingLedgerError.malformedEvent }
+                effectiveMoneyOut[original] = correctedAmount
                 let (next, overflow) = delta.addingReportingOverflow(entry.amount)
                 guard !overflow else { throw SavingLedgerError.invalidMoney }
                 delta = next
