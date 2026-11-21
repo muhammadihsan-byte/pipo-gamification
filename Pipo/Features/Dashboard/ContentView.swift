@@ -434,16 +434,16 @@ struct DashboardView: View {
 
             ViewThatFits(in: .horizontal) {
                 HStack(alignment: .firstTextBaseline, spacing: 5) {
-                    Text(money(goal.currentAmount))
+                    Text(money(goal.currentAmount, goal: goal))
                         .font(.title2.bold())
                         .foregroundStyle(PipoTheme.ink)
-                    Text("/ " + money(goal.targetAmount))
+                    Text("/ " + money(goal.targetAmount, goal: goal))
                         .font(.caption)
                         .foregroundStyle(PipoTheme.muted)
                 }
                 VStack(alignment: .leading, spacing: 3) {
-                    Text(money(goal.currentAmount)).font(.title2.bold())
-                    Text("of " + money(goal.targetAmount)).font(.footnote)
+                    Text(money(goal.currentAmount, goal: goal)).font(.title2.bold())
+                    Text("of " + money(goal.targetAmount, goal: goal)).font(.footnote)
                 }
                 .foregroundStyle(PipoTheme.ink)
             }
@@ -458,7 +458,7 @@ struct DashboardView: View {
                     .foregroundStyle(PipoTheme.deepPink)
                     .fontWeight(.semibold)
                 Spacer(minLength: 8)
-                Text("\(money(goal.remainingAmount)) left")
+                Text("\(money(goal.remainingAmount, goal: goal)) left")
                     .foregroundStyle(PipoTheme.muted)
                     .multilineTextAlignment(.trailing)
             }
@@ -633,7 +633,7 @@ struct DashboardView: View {
     private func focusGoalAccessibilitySummary(for goal: PersonalGoal) -> String {
         let progressPercent = Int(goal.progress * 100)
         return "\(goal.title), \(goal.isGroupGoal ? "group" : "personal") saving goal, " +
-            "\(goal.lifecycleState.title), \(money(goal.currentAmount)) recorded, " +
+            "\(goal.lifecycleState.title), \(money(goal.currentAmount, goal: goal)) recorded, " +
             "\(progressPercent) percent complete"
     }
 
@@ -665,7 +665,7 @@ struct DashboardView: View {
         .accessibilityIdentifier("pipo.dashboard.goal.\(goal.id.uuidString)")
         .accessibilityLabel(
             "\(goal.title), \(goal.isGroupGoal ? "group" : "personal") saving goal, " +
-            "\(goal.lifecycleState.title), \(money(goal.currentAmount)) recorded, " +
+            "\(goal.lifecycleState.title), \(money(goal.currentAmount, goal: goal)) recorded, " +
             "\(Int(goal.progress * 100)) percent complete"
         )
         .accessibilityHint("Opens goal details. More actions are available.")
@@ -687,7 +687,7 @@ struct DashboardView: View {
 
     private func compactGoalRowLabel(_ goal: PersonalGoal) -> some View {
         let kind = goal.isGroupGoal ? "Group" : "Personal"
-        let subtitle = "\(kind) · \(goal.lifecycleState.title) · \(money(goal.currentAmount)) recorded"
+        let subtitle = "\(kind) · \(goal.lifecycleState.title) · \(money(goal.currentAmount, goal: goal)) recorded"
         let percentage = Int(goal.progress * 100)
 
         return HStack(alignment: .center, spacing: 12) {
@@ -1072,6 +1072,12 @@ struct DashboardView: View {
         }
     }
 
+    private func money(_ amount: Double, goal: PersonalGoal) -> String {
+        PipoGoalCurrency.display(amount, code: goal.effectiveCurrencyCode,
+            exactMinor: amount == goal.targetAmount ? goal.exactTargetMinor :
+                amount == goal.currentAmount ? goal.exactRecordedMinor : nil)
+    }
+
     private func money(_ amount: Double) -> String {
         "Rp" + amount.formatted(
             .number.precision(.fractionLength(0)).locale(Locale(identifier: "id_ID"))
@@ -1139,7 +1145,8 @@ struct DashboardView: View {
                 }
 
                 Section("Deposit") {
-                    TextField("Amount in IDR", text: $savingAmount)
+                    TextField("Amount in " + (goalToRecord?.effectiveCurrencyCode ?? "IDR"), text: $savingAmount)
+                        .accessibilityIdentifier("pipo.currency.recordSavingAmount")
                         .keyboardType(.decimalPad)
                 }
             }
@@ -1161,19 +1168,18 @@ struct DashboardView: View {
         }
     }
 
+    private var parsedSavingMinor: Int64? {
+        guard let goalToRecord else { return nil }
+        return PipoGoalCurrency.parseMinor(
+            savingAmount, code: goalToRecord.effectiveCurrencyCode
+        )
+    }
+
     private var parsedSavingAmount: Double? {
-        guard
-            let amount = Double(
-                savingAmount
-                    .trimmingCharacters(in: .whitespacesAndNewlines)
-                    .replacingOccurrences(of: ",", with: ".")
-            ),
-            amount.isFinite,
-            amount > 0
-        else {
-            return nil
-        }
-        return amount
+        guard let goalToRecord, let minor = parsedSavingMinor else { return nil }
+        return NSDecimalNumber(decimal:
+            PipoGoalCurrency.decimal(minor, code: goalToRecord.effectiveCurrencyCode)
+        ).doubleValue
     }
 
     private func confirmSaving() {
@@ -1182,7 +1188,10 @@ struct DashboardView: View {
               authStateManager.authState == .authenticated,
               AccountScope.owns(goal, userID: userID),
               goal.canRecordSaving,
-              let amount = parsedSavingAmount else {
+              let amount = parsedSavingAmount,
+              let exactMinor = parsedSavingMinor,
+              let oldExactMinor = goal.exactRecordedMinor,
+              exactMinor > 0 else {
             isShowingSaveConfirmation = false
             return
         }
@@ -1190,6 +1199,17 @@ struct DashboardView: View {
         let existingProfile = UserProfile.existing(for: userID, in: profiles)
         let profile = existingProfile ?? UserProfile(userID: userID)
         let previousCurrentAmount = goal.currentAmount
+        let previousRecordedMinorUnits = goal.recordedMinorUnits
+        let (nextMinorUnits, minorOverflow) = oldExactMinor.addingReportingOverflow(exactMinor)
+        guard !minorOverflow,
+              nextMinorUnits >= 0,
+              PipoGoalCurrency.decimal(nextMinorUnits, code: goal.effectiveCurrencyCode)
+                <= PipoGoalCurrency.serverMaximum
+        else {
+            saveErrorMessage = "This amount would exceed the supported goal limit."
+            isShowingSaveConfirmation = false
+            return
+        }
         let previousTotalXP = profile.totalXP
         let previousCurrentLevel = profile.currentLevel
         let previousStreakDays = profile.streakDays
@@ -1209,6 +1229,12 @@ struct DashboardView: View {
                 priorTransactions: priorGoalTransactions
             )
             transaction.userID = userID
+            transaction.currencyCode = goal.effectiveCurrencyCode
+            transaction.amountMinorUnits = exactMinor
+            goal.recordedMinorUnits = nextMinorUnits
+            goal.currentAmount = NSDecimalNumber(decimal:
+                PipoGoalCurrency.decimal(nextMinorUnits, code: goal.effectiveCurrencyCode)
+            ).doubleValue
             newlyUnlocked = AchievementEngine.grant(
                 profile: profile, goal: goal, transaction: transaction,
                 history: ownedTransactions, previousAmount: previousCurrentAmount
@@ -1216,6 +1242,7 @@ struct DashboardView: View {
         } catch {
             profile.userID = previousUserID
             goal.currentAmount = previousCurrentAmount
+            goal.recordedMinorUnits = previousRecordedMinorUnits
             profile.totalXP = previousTotalXP
             profile.currentLevel = previousCurrentLevel
             profile.streakDays = previousStreakDays
@@ -1236,6 +1263,7 @@ struct DashboardView: View {
             modelContext.delete(transaction)
             profile.userID = previousUserID
             goal.currentAmount = previousCurrentAmount
+            goal.recordedMinorUnits = previousRecordedMinorUnits
             profile.totalXP = previousTotalXP
             profile.currentLevel = previousCurrentLevel
             profile.streakDays = previousStreakDays
