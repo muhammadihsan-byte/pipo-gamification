@@ -17,7 +17,22 @@ struct OnboardingContainerView: View {
     // Same 126pt V4 hero size as the approved optional-widget screen.
     private let mascotHeight: CGFloat = 126
 
+    let ownerUserID: UUID?
     let onCompleted: (OnboardingPersonalization) -> Void
+
+    init(ownerUserID: UUID? = nil, onCompleted: @escaping (OnboardingPersonalization) -> Void) {
+        self.ownerUserID = ownerUserID
+        self.onCompleted = onCompleted
+    }
+
+    private func persistDraft() {
+        guard let ownerUserID else { return }
+        OnboardingProfileStore.saveDraft(.init(
+            stepNumber: viewModel.step.rawValue,
+            nickname: viewModel.nickname,
+            motivation: viewModel.motivation
+        ), for: ownerUserID)
+    }
 
     var body: some View {
         VStack(spacing: 0) {
@@ -40,7 +55,19 @@ struct OnboardingContainerView: View {
         .background(.white)
         .safeAreaInset(edge: .bottom, spacing: 0) { footer }
         .preferredColorScheme(.light)
+        .onAppear {
+            guard let ownerUserID,
+                  let saved = OnboardingProfileStore.loadDraft(for: ownerUserID),
+                  let step = OnboardingStep(rawValue: saved.stepNumber)
+            else { return }
+            viewModel.nickname = saved.nickname
+            viewModel.motivation = saved.motivation
+            viewModel.step = step
+        }
+        .onChange(of: viewModel.nickname) { _, _ in persistDraft() }
+        .onChange(of: viewModel.motivation) { _, _ in persistDraft() }
         .onChange(of: viewModel.step) { _, step in
+            persistDraft()
             mascotReply = nil
             nicknameFocused = false
             mascotReaction = step == .widget ? .reassure : .acknowledge
