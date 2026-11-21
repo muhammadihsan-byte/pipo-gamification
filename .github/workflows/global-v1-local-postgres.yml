@@ -51,7 +51,7 @@ jobs:
             sudo apt-get install -y postgresql-client
           fi
           psql --version
-          psql -X -v ON_ERROR_STOP=1 -Atqc "SELECT current_setting('server_version_num')::integer >= 170000" | grep -Fx true
+          psql -X -v ON_ERROR_STOP=1 -Atqc "SELECT CASE WHEN current_setting('server_version_num')::integer >= 170000 THEN 'PASS' ELSE 'FAIL' END" | grep -Fx PASS
 
       - name: Load deployed Pipo migration into isolated local PostgreSQL
         shell: bash
