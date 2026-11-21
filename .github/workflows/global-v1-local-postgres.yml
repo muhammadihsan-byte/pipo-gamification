@@ -5,6 +5,7 @@ on:
     branches: [main]
     paths:
       - "supabase/local_qa/**"
+      - "scripts/local_authenticated_global_v1_qa.py"
       - "supabase/proposals/global_v1_goal_currency_immutable_REVIEW_ONLY.sql"
       - ".github/workflows/global-v1-local-postgres.yml"
   workflow_dispatch:
@@ -79,3 +80,46 @@ jobs:
           echo "NO Supabase project, database branch, production Auth users, secrets, or billing change."
           echo "Verified by SQL: deployed initial schema mirror, currency trigger, RLS policy semantics, composite FK."
           echo "NOT VERIFIED: real Auth JWT signing / PostgREST request routing / live Supabase 2-user roundtrip."
+
+  local-auth-postgrest:
+    name: Local Supabase real Auth and PostgREST two-user E2E
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install pinned Supabase CLI
+        uses: supabase/setup-cli@v3.2.0
+        with:
+          version: 3.2.0
+      - name: Validate local-only runner commands
+        shell: bash
+        run: |
+          set -euo pipefail
+          supabase --version
+          supabase start --help > /dev/null
+          supabase status --help > /dev/null
+          python3 -m py_compile scripts/local_authenticated_global_v1_qa.py
+
+      - name: Start disposable local Auth + REST stack (no production link)
+        shell: bash
+        run: |
+          set -euo pipefail
+          supabase start --exclude studio,imgproxy,realtime,storage-api,edge-runtime,logflare,vector,supavisor,postgres-meta,mailpit
+
+      - name: Authenticate two synthetic users and exercise actual local REST RLS
+        shell: bash
+        run: |
+          set -euo pipefail
+          if ! command -v psql > /dev/null 2>&1; then
+            sudo apt-get update -qq
+            sudo apt-get install -y postgresql-client
+          fi
+          python3 scripts/local_authenticated_global_v1_qa.py
+
+      - name: Explicitly report independent local E2E scope
+        if: always()
+        shell: bash
+        run: |
+          echo "Local-only Supabase Auth JWT + PostgREST with disposable +pipoqa accounts."
+          echo "All API and database URLs strictly constrained to loopback."
+          echo "This does NOT write to deployed Supabase production."
