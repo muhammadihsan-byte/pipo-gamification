@@ -17,7 +17,7 @@ final class PipoUIRecordingTests: XCTestCase {
         tapButton("Continue")
 
         XCTAssertTrue(app.staticTexts["How much do you need?"].waitForExistence(timeout: 15))
-        typeText("Target amount in rupiah", value: "5000000")
+        typeText("pipo.goal.currency.amount", value: "5000000")
         tapButton("Continue")
 
         XCTAssertTrue(app.staticTexts["When do you want to achieve it?"].waitForExistence(timeout: 15))
@@ -31,6 +31,58 @@ final class PipoUIRecordingTests: XCTestCase {
         tapButton("Start saving plan")
         tapButton("Done")
         XCTAssertTrue(app.staticTexts["Pipo QA Personal Trip"].waitForExistence(timeout: 20))
+    }
+
+    /// Global V1 Option B: currency selection belongs to Create Goal and
+    /// clears any amount entered under a different code. No network or live user.
+    func testGlobalExperienceUSDGoalCurrencySelectionAndReopen() {
+        launchFromDashboard()
+        tapButton("Create a saving goal")
+        tapButton("Personal saving")
+        typeText("Goal name", value: "New Laptop USD")
+        tapButton("Continue")
+        XCTAssertTrue(app.staticTexts["How much do you need?"].waitForExistence(timeout: 15))
+        XCTAssertTrue(app.buttons["pipo.goal.currency.choose"].exists)
+        attachOnboardingScreen("Global V1 — Currency confirmed at target step")
+        typeText("pipo.goal.currency.amount", value: "6000000")
+        tapButton("pipo.goal.currency.choose")
+        let search = app.searchFields.firstMatch
+        XCTAssertTrue(search.waitForExistence(timeout: 15), "Searchable currency sheet must appear")
+        search.tap()
+        search.typeText("USD")
+        tapButton("pipo.goal.currency.USD")
+        let target = app.textFields["pipo.goal.currency.amount"].firstMatch
+        XCTAssertTrue(target.waitForExistence(timeout: 15))
+        XCTAssertTrue((target.value as? String ?? "").isEmpty,
+                      "Old IDR amount must be cleared on USD selection")
+        XCTAssertFalse(app.buttons["Continue"].isEnabled,
+                       "Cannot continue until a fresh USD amount is entered")
+        attachOnboardingScreen("Global V1 — ISO selection resets ambiguous amount")
+        typeText("pipo.goal.currency.amount", value: "1500.50")
+        tapButton("Continue")
+        interactWithCalendar()
+        tapButton("Continue")
+        tapButton("Continue")
+        XCTAssertTrue(app.staticTexts["Review your saving plan"].waitForExistence(timeout: 15))
+        attachOnboardingScreen("Global V1 — USD review before local creation")
+        tapButton("Start saving plan")
+        tapButton("Done")
+        XCTAssertTrue(app.staticTexts["New Laptop USD"].waitForExistence(timeout: 20))
+        attachOnboardingScreen("Global V1 — Goal Detail USD after local save")
+        XCTAssertTrue(app.buttons["pipo.goal.recordSaving"].exists)
+        tapButton("pipo.goal.recordSaving")
+        XCTAssertTrue(app.textFields["Amount in USD"].waitForExistence(timeout: 15))
+        typeText("Amount in USD", value: "0.01")
+        XCTAssertTrue(app.buttons["Save"].isEnabled)
+        attachOnboardingScreen("Global V1 — Manual USD saving is not a bank transfer")
+        tapButton("Save")
+        XCTAssertTrue(app.buttons["pipo.goal.planRevisionPreview"].waitForExistence(timeout: 15))
+        tapButton("pipo.goal.planRevisionPreview")
+        XCTAssertTrue(app.staticTexts["Your plan, your pace."].waitForExistence(timeout: 15))
+        tapButton("pipo.plan.v2.editTarget")
+        XCTAssertTrue(app.staticTexts["TARGET AMOUNT · USD"].waitForExistence(timeout: 15))
+        XCTAssertFalse(app.buttons["pipo.plan.v2.primary"].isEnabled)
+        attachOnboardingScreen("Global V1 — Manage Plan V2 goal-level currency")
     }
 
     func testGroupSavingJourney() {
