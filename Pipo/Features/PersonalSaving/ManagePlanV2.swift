@@ -570,7 +570,9 @@ struct PipoManagePlanV2Sheet: View {
             .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
-        .accessibilityElement(children: .combine)
+        // Keep the intrinsic Button trait. Grouping a Button into an
+        // accessibilityElement can turn it into an Other element in XCTest.
+        .accessibilityLabel(title + ". " + detail)
         .accessibilityHint("Open focused editor")
         .accessibilityIdentifier(id)
     }
