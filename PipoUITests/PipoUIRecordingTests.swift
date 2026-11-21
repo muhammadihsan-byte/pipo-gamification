@@ -314,6 +314,41 @@ final class PipoUIRecordingTests: XCTestCase {
         attachOnboardingScreen("Issue 48 — Goal hero no-cover, one progress rail")
     }
 
+    /// #42 safe-native UI regression: both new sheets are navigable, but
+    /// no account record changes can be confirmed without the backend gate.
+    func testIssue42PlanAndMoneyOutRemainReviewOnly() {
+        continueAfterFailure = false
+        app.launchArguments = ["-pipo-dashboard-qa"]
+        app.launch()
+        tapButton("pipo.dashboard.focusGoal")
+        XCTAssertTrue(app.buttons["pipo.goal.planRevisionPreview"]
+                      .waitForExistence(timeout: 15))
+        tapButton("pipo.goal.planRevisionPreview")
+        XCTAssertTrue(app.navigationBars["Manage plan"].waitForExistence(timeout: 12))
+        XCTAssertTrue(app.buttons["Save plan changes — coming after secure sync"]
+                      .exists)
+        XCTAssertFalse(app.buttons["Save plan changes — coming after secure sync"]
+                       .isEnabled)
+        attachOnboardingScreen("Issue 42 — Managed plan review, no writes")
+        tapButton("Done")
+        tapButton("pipo.goal.moneyOutPreview")
+        XCTAssertTrue(app.navigationBars["Money used elsewhere"]
+                      .waitForExistence(timeout: 12))
+        // Capture the form hierarchy before typing so a regression in
+        // field exposure has usable visual evidence instead of a timeout.
+        attachOnboardingScreen("Issue 42 — Money Out input is visible")
+        let input = app.textFields["pipo.card.moneyOut.amount"].firstMatch
+        XCTAssertTrue(input.waitForExistence(timeout: 12),
+                      "The approved Money Out input must remain an editable text field")
+        typeText("pipo.card.moneyOut.amount", value: "500000")
+        tapButton("pipo.card.moneyOut.review")
+        XCTAssertTrue(app.staticTexts["A CHANGE, NOT A RESET"]
+                      .waitForExistence(timeout: 12))
+        XCTAssertTrue(app.buttons["Saving changes isn't available yet"].exists)
+        XCTAssertFalse(app.buttons["Saving changes isn't available yet"].isEnabled)
+        attachOnboardingScreen("Issue 42 — Approved money-out review, no writes")
+    }
+
     /// Non-destructive P0 simulator acceptance: sign-in availability and
     /// account deletion confirmation. The fixture is DEBUG-only and has no
     /// backend Auth session. NEVER tap the destructive submit action.
