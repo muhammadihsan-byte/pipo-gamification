@@ -410,13 +410,14 @@ final class MoneyOutIntentJournal {
         for entry in entries {
             guard entry.ownerID == ownerID,
                   ids.insert(entry.request.requestID).inserted,
-                  (try? SavingMoneyOutRPCRequest(
+                  let canonical = try? SavingMoneyOutRPCRequest(
                     requestID: entry.request.requestID,
                     goalID: entry.request.goalID,
                     amount: entry.request.amount,
                     note: entry.request.note,
                     preference: entry.request.preference
-                  )) != nil
+                  ),
+                  canonical.note == entry.request.note
             else { throw MoneyOutJournalError.invalidJournal }
         }
         return entries
