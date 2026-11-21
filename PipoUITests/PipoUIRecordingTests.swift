@@ -99,14 +99,16 @@ final class PipoUIRecordingTests: XCTestCase {
         persistedGoal.tap()
         XCTAssertTrue(app.buttons["pipo.goal.recordSaving"].waitForExistence(timeout: 15))
         attachOnboardingScreen("Global V1 — USD goal survives actual app restart")
-        tapButton("pipo.goal.moneyOutPreview")
-        attachOnboardingScreen("Global V1 — Non-IDR Money Out screen after tap")
-        XCTAssertTrue(app.staticTexts["pipo.currency.moneyOut.unavailable"]
-            .waitForExistence(timeout: 15),
-            "Non-IDR Money Out must present an explicit unsupported-state title")
+        // Non-IDR Money Out is an inline explanation, never an unsupported
+        // sheet with accidental IDR amount entry.
+        let moneyOutUnavailable = app.descendants(matching: .any)
+            .matching(identifier: "pipo.currency.moneyOut.unavailable").firstMatch
+        XCTAssertTrue(moneyOutUnavailable.waitForExistence(timeout: 15),
+            "Goal Detail must explain that Money Out isn't available for USD")
+        XCTAssertFalse(app.buttons["pipo.goal.moneyOutPreview"].exists,
+            "No unsupported Money Out sheet should be enterable for USD")
         XCTAssertFalse(app.textFields["pipo.card.moneyOut.amount"].exists)
-        attachOnboardingScreen("Global V1 — Non-IDR Money Out safely disabled")
-        tapButton("pipo.currency.moneyOut.close")
+        attachOnboardingScreen("Global V1 — Non-IDR Money Out safely unavailable")
         XCTAssertTrue(app.buttons["pipo.goal.planRevisionPreview"].waitForExistence(timeout: 15))
         tapButton("pipo.goal.planRevisionPreview")
         XCTAssertTrue(app.staticTexts["Your plan, your pace."].waitForExistence(timeout: 15))
