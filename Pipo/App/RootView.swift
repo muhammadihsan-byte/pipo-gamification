@@ -39,6 +39,7 @@ struct RootView: View {
         // Returning-user simulator fixtures must not depend on whether a
         // previous test happened to create an onboarding profile.
         if ProcessInfo.processInfo.arguments.contains("-pipo-dashboard-qa")
+                || ProcessInfo.processInfo.arguments.contains("-pipo-global-currency-qa")
             || ProcessInfo.processInfo.arguments.contains("-pipo-account-qa") {
             // Debug-only no-goal privacy QA: authenticated but no onboarding
             // fixture and no seeded personal data.
@@ -69,6 +70,7 @@ struct RootView: View {
             || args.contains("-pipo-visual-qa")
             || args.contains("-pipo-account-qa")
             || args.contains("-pipo-dashboard-qa")
+            || args.contains("-pipo-global-currency-qa")
         let onboardingQAUserID = qaSignedIn
             ? UUID(uuidString: "99999999-9999-4999-8999-999999999999")
             : nil
@@ -123,6 +125,7 @@ struct RootView: View {
                 || ProcessInfo.processInfo.arguments.contains("-pipo-auth-qa")
                 || ProcessInfo.processInfo.arguments.contains("-pipo-account-qa")
                 || ProcessInfo.processInfo.arguments.contains("-pipo-dashboard-qa")
+                || ProcessInfo.processInfo.arguments.contains("-pipo-global-currency-qa")
                 || (ProcessInfo.processInfo.arguments.contains("-pipo-onboarding-qa") || ProcessInfo.processInfo.arguments.contains("-pipo-onboarding-qa-returning")) { return }
             #endif
             guard let supabaseService else { return }
@@ -134,6 +137,7 @@ struct RootView: View {
                 || ProcessInfo.processInfo.arguments.contains("-pipo-auth-qa")
                 || ProcessInfo.processInfo.arguments.contains("-pipo-account-qa")
                 || ProcessInfo.processInfo.arguments.contains("-pipo-dashboard-qa")
+                || ProcessInfo.processInfo.arguments.contains("-pipo-global-currency-qa")
                 || (ProcessInfo.processInfo.arguments.contains("-pipo-onboarding-qa") || ProcessInfo.processInfo.arguments.contains("-pipo-onboarding-qa-returning")) { return }
             #endif
             if authStateManager.userID == nil {
@@ -184,6 +188,11 @@ struct RootView: View {
             )
             updateWidgetAccount(userID)
             guard let userID, !isDeletingAccount, !isRecoveringSession else { return }
+            #if DEBUG
+            if ProcessInfo.processInfo.arguments.contains("-pipo-global-currency-qa") {
+                return
+            }
+            #endif
             // Do not wait for StoreKit before retrying local-only goal sync.
             enqueuePersonalSavingsSync(for: userID)
             Task {
@@ -341,7 +350,7 @@ struct RootView: View {
     }
 
     private var onboardingView: some View {
-        OnboardingContainerView { personalization in
+        OnboardingContainerView(ownerUserID: authStateManager.userID) { personalization in
             if isOnboardingQA {
                 if let userID = authStateManager.userID {
                     _ = OnboardingProfileStore.save(personalization, for: userID)
@@ -399,6 +408,13 @@ struct RootView: View {
                 )
                 // Group plans are not shared or sent to other people yet.
                 // Only personal goals have deployed cloud ownership rules.
+                #if DEBUG
+                // A synthetic persistent UI fixture must never upload to a
+                // live Supabase project, even if CI has a valid client key.
+                if ProcessInfo.processInfo.arguments.contains("-pipo-global-currency-qa") {
+                    return
+                }
+                #endif
                 guard !goal.isGroupGoal, let supabaseService else { return }
                 Task {
                     guard authStateManager.userID == userID else { return }
@@ -527,6 +543,11 @@ struct RootView: View {
     private func enqueuePersonalSavingsSync(
         for userID: UUID, showFailure: Bool = true
     ) {
+        #if DEBUG
+        if ProcessInfo.processInfo.arguments.contains("-pipo-global-currency-qa") {
+            return
+        }
+        #endif
         guard !isDeletingAccount, !isRecoveringSession,
               authStateManager.authState == .authenticated,
               authStateManager.userID == userID,

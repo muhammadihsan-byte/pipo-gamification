@@ -92,8 +92,8 @@ struct PipoGoalFocusBCard: View {
                     .tint(Card44.pink)
                     .accessibilityLabel("Goal progress")
                     .accessibilityValue("\(Int(goal.progress * 100)) percent")
-                Text("A goal worth saving for · " + money(goal.currentAmount) +
-                     " of " + money(goal.targetAmount) + " recorded")
+                Text("A goal worth saving for · " + money(goal.currentAmount, goal: goal) +
+                     " of " + money(goal.targetAmount, goal: goal) + " recorded")
                     .font(.caption)
                     .foregroundStyle(Card44.muted)
                     .fixedSize(horizontal: false, vertical: true)
@@ -246,15 +246,17 @@ struct PipoPlanOverviewBCard: View {
     var body: some View {
         TicketCard(style: .approvedCompact) {
             VStack(alignment: .leading, spacing: 10) {
-                Card44Eyebrow(text: goal.isGroupGoal ? "GROUP GOAL · DEVICE ONLY" : "PERSONAL SAVING PLAN")
+                Card44Eyebrow(text: goal.isGroupGoal
+                    ? "GROUP GOAL · DEVICE ONLY"
+                    : "PERSONAL SAVING PLAN · " + goal.effectiveCurrencyCode)
                 Text(goal.title)
                     .font(.title2.bold())
                     .foregroundStyle(Card44.ink)
                     .fixedSize(horizontal: false, vertical: true)
 
                 HStack(alignment: .top, spacing: 14) {
-                    stat(label: "TARGET", value: money(goal.targetAmount))
-                    stat(label: "RECORDED", value: money(goal.currentAmount))
+                    stat(label: "TARGET", value: money(goal.targetAmount, goal: goal))
+                    stat(label: "RECORDED", value: money(goal.currentAmount, goal: goal))
                 }
                 ProgressView(value: goal.progress)
                     .tint(Card44.pink)
@@ -393,6 +395,7 @@ struct PipoInputEditingDCard: View {
                         .font(.caption.bold())
                         .foregroundStyle(Card44.muted)
                     TextField("Amount in IDR", text: $amount)
+                        .accessibilityLabel("Amount in IDR")
                         .keyboardType(.numberPad)
                         .font(.title2.bold())
                         .foregroundStyle(Card44.ink)
@@ -418,6 +421,9 @@ struct PipoInputEditingDCard: View {
                     .accessibilityIdentifier("pipo.card.moneyOut.review")
             }
         }
+        // Keep the card discoverable without collapsing its editable fields
+        // into a single parent accessibility element on the iOS Simulator.
+        .accessibilityElement(children: .contain)
         .accessibilityIdentifier("pipo.card.inputEditingD")
     }
 }
@@ -478,6 +484,7 @@ struct PipoFinancialImpactDCard: View {
 struct PipoActivityHistoryDCard: View {
     let transactions: [SavingTransaction]
     let titleForGoal: (UUID) -> String
+    var currencyForGoal: (UUID) -> String = { _ in "IDR" }
 
     var body: some View {
         TicketCard(style: .approvedBlush) {
@@ -489,6 +496,11 @@ struct PipoActivityHistoryDCard: View {
                         .foregroundStyle(Card44.muted)
                 } else {
                     ForEach(transactions.prefix(12)) { transaction in
+                        let amountText = PipoGoalCurrency.display(
+                            transaction.amount,
+                            code: transaction.currencyCode ?? currencyForGoal(transaction.goalId),
+                            exactMinor: transaction.amountMinorUnits
+                        )
                         HStack(alignment: .top, spacing: 12) {
                             VStack(spacing: 2) {
                                 Text(transaction.date.formatted(.dateTime.day()))
@@ -508,14 +520,14 @@ struct PipoActivityHistoryDCard: View {
                                     .foregroundStyle(Card44.muted)
                             }
                             Spacer(minLength: 0)
-                            Text("+ " + money(transaction.amount))
+                            Text("+ " + amountText)
                                 .font(.subheadline.bold())
                                 .foregroundStyle(Card44.accent)
                                 .multilineTextAlignment(.trailing)
                         }
                         .frame(minHeight: 48)
                         .accessibilityElement(children: .combine)
-                        .accessibilityLabel("\(titleForGoal(transaction.goalId)), saved \(money(transaction.amount)) on \(transaction.date.formatted(date: .abbreviated, time: .omitted))")
+                        .accessibilityLabel("\(titleForGoal(transaction.goalId)), saved \(amountText) on \(transaction.date.formatted(date: .abbreviated, time: .omitted))")
                     }
                 }
                 Text("Your own entries, not bank-verified transactions.")
@@ -546,7 +558,7 @@ struct PipoCompletionBCard: View {
                                 .font(.subheadline)
                                 .foregroundStyle(Card44.ink)
                                 .fixedSize(horizontal: false, vertical: true)
-                            Text(money(goal.currentAmount) + " recorded / 100%")
+                            Text(money(goal.currentAmount, goal: goal) + " recorded / 100%")
                                 .font(.caption)
                                 .foregroundStyle(Card44.muted)
                             Button("See your journey", action: onSeeJourney)
