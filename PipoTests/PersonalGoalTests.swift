@@ -938,3 +938,80 @@ extension PersonalGoalTests {
         }
     }
 }
+
+extension PersonalGoalTests {
+    func testIssue42RejectsUnrepresentableWholeIDRAmounts() throws {
+        let largestExact = SavingsAmountSafety.maxExactWholeIDR
+        let firstLossy = largestExact + 1
+
+        XCTAssertNoThrow(try SavingMoneyOutRPCRequest(
+            requestID: UUID(), goalID: UUID(), amount: largestExact,
+            note: nil, preference: "keep_date"
+        ))
+        XCTAssertThrowsError(try SavingMoneyOutRPCRequest(
+            requestID: UUID(), goalID: UUID(), amount: firstLossy,
+            note: nil, preference: "keep_date"
+        )) { error in
+            XCTAssertEqual(error as? SavingMoneyOutRequestError, .invalidAmount)
+        }
+
+        XCTAssertThrowsError(try PlanFinancialPreview.revisedTarget(
+            netRecorded: 0, target: firstLossy, futurePeriods: 2
+        )) { error in
+            XCTAssertEqual(error as? PlanFinancialPreviewError, .invalidTarget)
+        }
+        XCTAssertThrowsError(try MoneyOutFinancialPreview.calculate(
+            netRecorded: 1_000, target: firstLossy,
+            moneyTakenOut: 500, futurePeriods: 4,
+            currentPerPeriod: 250
+        )) { error in
+            XCTAssertEqual(error as? PlanFinancialPreviewError, .invalidTarget)
+        }
+    }
+
+    func testIssue42CloudRecoveryRejectsLossyAmounts() {
+        let owner = UUID(), goal = UUID()
+        let invalidAmount = Double(SavingsAmountSafety.maxExactWholeIDR + 1)
+        let contribution = SavingLedgerCloudContribution(
+            id: UUID(), goalID: goal, userID: owner,
+            amount: invalidAmount, xpEarned: 300,
+            date: "2026-11-20T00:00:00Z"
+        )
+        XCTAssertThrowsError(try SavingCloudLedgerReconciler.reconstruct(
+            goalID: goal, ownerID: owner,
+            contributions: [contribution], adjustments: []
+        )) { error in
+            XCTAssertEqual(error as? SavingCloudRecoveryError, .invalidServerEntry)
+        }
+
+        let invalidAdjustment = SavingLedgerCloudAdjustment(
+            id: UUID(), goalID: goal, userID: owner,
+            kind: "money_out", amount: invalidAmount,
+            correctsEventID: nil, createdAt: "2026-11-20T00:01:00Z"
+        )
+        XCTAssertThrowsError(try SavingCloudLedgerReconciler.reconstruct(
+            goalID: goal, ownerID: owner,
+            contributions: [], adjustments: [invalidAdjustment]
+        )) { error in
+            XCTAssertEqual(error as? SavingCloudRecoveryError, .invalidServerEntry)
+        }
+    }
+
+    func testIssue42LedgerRejectsAggregateBeyondExactIDRLimit() {
+        let owner = UUID(), goal = UUID()
+        let contribution1 = SavingTransaction(
+            goalId: goal, amount: 5_000_000_000_000_000,
+            xpEarned: 300, userID: owner
+        )
+        let contribution2 = SavingTransaction(
+            goalId: goal, amount: 5_000_000_000_000_000,
+            xpEarned: 300, userID: owner
+        )
+        XCTAssertThrowsError(try SavingLedgerSnapshot.reconstruct(
+            goalID: goal, ownerID: owner,
+            savings: [contribution1, contribution2], adjustments: []
+        )) { error in
+            XCTAssertEqual(error as? SavingLedgerError, .invalidMoney)
+        }
+    }
+}
