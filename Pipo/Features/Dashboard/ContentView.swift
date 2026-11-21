@@ -458,7 +458,7 @@ struct DashboardView: View {
                     .foregroundStyle(PipoTheme.deepPink)
                     .fontWeight(.semibold)
                 Spacer(minLength: 8)
-                Text("\(money(goal.remainingAmount, goal: goal)) left")
+                Text("\(remainingMoney(for: goal)) left")
                     .foregroundStyle(PipoTheme.muted)
                     .multilineTextAlignment(.trailing)
             }
@@ -1079,6 +1079,13 @@ struct DashboardView: View {
         PipoGoalCurrency.display(amount, code: goal.effectiveCurrencyCode,
             exactMinor: amount == goal.targetAmount ? goal.exactTargetMinor :
                 amount == goal.currentAmount ? goal.exactRecordedMinor : nil)
+    }
+
+    private func remainingMoney(for goal: PersonalGoal) -> String {
+        if let minor = goal.exactRemainingMinor {
+            return PipoGoalCurrency.formatted(minor, code: goal.effectiveCurrencyCode)
+        }
+        return money(goal.remainingAmount, goal: goal)
     }
 
     private func money(_ amount: Double) -> String {
