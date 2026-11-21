@@ -195,8 +195,11 @@ struct PlanFinancialPreview: Equatable {
         futurePeriods: Int,
         breakdown: [Int]? = nil
     ) throws -> PlanFinancialPreview {
-        guard netRecorded >= 0 else { throw PlanFinancialPreviewError.invalidBalance }
-        guard target > 0 else { throw PlanFinancialPreviewError.invalidTarget }
+        guard netRecorded >= 0,
+              netRecorded <= SavingsAmountSafety.maxExactWholeIDR
+        else { throw PlanFinancialPreviewError.invalidBalance }
+        guard target > 0, target <= SavingsAmountSafety.maxExactWholeIDR
+        else { throw PlanFinancialPreviewError.invalidTarget }
         if let breakdown {
             var budgetTotal = 0
             for item in breakdown {
@@ -235,9 +238,14 @@ struct MoneyOutFinancialPreview: Equatable {
         futurePeriods: Int,
         currentPerPeriod: Int
     ) throws -> MoneyOutFinancialPreview {
-        guard netRecorded >= 0 else { throw PlanFinancialPreviewError.invalidBalance }
-        guard target > 0 else { throw PlanFinancialPreviewError.invalidTarget }
-        guard moneyTakenOut > 0 else { throw PlanFinancialPreviewError.invalidAmount }
+        guard netRecorded >= 0,
+              netRecorded <= SavingsAmountSafety.maxExactWholeIDR
+        else { throw PlanFinancialPreviewError.invalidBalance }
+        guard target > 0, target <= SavingsAmountSafety.maxExactWholeIDR
+        else { throw PlanFinancialPreviewError.invalidTarget }
+        guard moneyTakenOut > 0,
+              moneyTakenOut <= SavingsAmountSafety.maxExactWholeIDR
+        else { throw PlanFinancialPreviewError.invalidAmount }
         guard moneyTakenOut <= netRecorded else { throw PlanFinancialPreviewError.insufficientSavings }
         guard futurePeriods > 0, currentPerPeriod > 0 else {
             throw PlanFinancialPreviewError.invalidSchedule
@@ -267,8 +275,12 @@ struct MoneyOutCorrectionPreview: Equatable {
         originalMoneyOut: Int,
         correctedMoneyOut: Int
     ) throws -> MoneyOutCorrectionPreview {
-        guard currentNetRecorded >= 0 else { throw PlanFinancialPreviewError.invalidBalance }
-        guard originalMoneyOut > 0, correctedMoneyOut > 0 else {
+        guard currentNetRecorded >= 0,
+              currentNetRecorded <= SavingsAmountSafety.maxExactWholeIDR
+        else { throw PlanFinancialPreviewError.invalidBalance }
+        guard originalMoneyOut > 0, correctedMoneyOut > 0,
+              originalMoneyOut <= SavingsAmountSafety.maxExactWholeIDR,
+              correctedMoneyOut <= SavingsAmountSafety.maxExactWholeIDR else {
             throw PlanFinancialPreviewError.invalidAmount
         }
         // Reversal is positive when the original money-out was overstated.
