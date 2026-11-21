@@ -333,7 +333,7 @@ jobs:
         if: always()
         shell: bash
         run: |
-          for bundle in "$RUNNER_TEMP/PipoTestResults.xcresult" "$RUNNER_TEMP/PipoDashboardResults.xcresult" "$RUNNER_TEMP/PipoAuthQAResults.xcresult" "$RUNNER_TEMP/PipoCardParityResults.xcresult" "$RUNNER_TEMP/PipoAllCardsQAResults.xcresult" "$RUNNER_TEMP/PipoGoalPhotoHeroQA.xcresult"; do
+          for bundle in "$RUNNER_TEMP/PipoTestResults.xcresult" "$RUNNER_TEMP/PipoDashboardResults.xcresult" "$RUNNER_TEMP/PipoAuthQAResults.xcresult" "$RUNNER_TEMP/PipoCardParityResults.xcresult" "$RUNNER_TEMP/PipoAllCardsQAResults.xcresult" "$RUNNER_TEMP/PipoGoalPhotoHeroQA.xcresult" "$RUNNER_TEMP/PipoIssue42ReviewQA.xcresult"; do
             if test -d "$bundle"; then
               name="$(basename "$bundle" .xcresult)"
               mkdir -p "validation/visual-qa/$name"
@@ -357,5 +357,6 @@ jobs:
             ${{ runner.temp }}/PipoCardParityResults.xcresult
             ${{ runner.temp }}/PipoAllCardsQAResults.xcresult
             ${{ runner.temp }}/PipoGoalPhotoHeroQA.xcresult
+            ${{ runner.temp }}/PipoIssue42ReviewQA.xcresult
           if-no-files-found: warn
           retention-days: 7
