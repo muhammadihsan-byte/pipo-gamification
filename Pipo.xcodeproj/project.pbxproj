@@ -27,6 +27,7 @@
 		00000000000000000000000A /* SavingRhythmView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 000000000000000000000110 /* SavingRhythmView.swift */; };
 		00000000000000000000000B /* PersonalGoal.swift in Sources */ = {isa = PBXBuildFile; fileRef = 000000000000000000000111 /* PersonalGoal.swift */; };
 		00000000000000000000000C /* SavingTransaction.swift in Sources */ = {isa = PBXBuildFile; fileRef = 000000000000000000000112 /* SavingTransaction.swift */; };
+		B42026112200000000000001 /* PipoGoalCurrency.swift in Sources */ = {isa = PBXBuildFile; fileRef = B42026112200000000000002 /* PipoGoalCurrency.swift */; };
 		00000000000000000000000D /* UserProfile.swift in Sources */ = {isa = PBXBuildFile; fileRef = 000000000000000000000113 /* UserProfile.swift */; };
 		00000000000000000000000E /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 000000000000000000000114 /* Assets.xcassets */; };
 		B0AA20261120000000000003 /* App PrivacyInfo.xcprivacy in Resources */ = {isa = PBXBuildFile; fileRef = B0AA20261120000000000001 /* App PrivacyInfo.xcprivacy */; };
@@ -111,6 +112,7 @@
 		000000000000000000000110 /* SavingRhythmView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SavingRhythmView.swift; sourceTree = "<group>"; };
 		000000000000000000000111 /* PersonalGoal.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PersonalGoal.swift; sourceTree = "<group>"; };
 		000000000000000000000112 /* SavingTransaction.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SavingTransaction.swift; sourceTree = "<group>"; };
+		B42026112200000000000002 /* PipoGoalCurrency.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PipoGoalCurrency.swift; sourceTree = "<group>"; };
 		000000000000000000000113 /* UserProfile.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = UserProfile.swift; sourceTree = "<group>"; };
 		000000000000000000000114 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
 		B0AA20261120000000000001 /* App PrivacyInfo.xcprivacy */ = {isa = PBXFileReference; lastKnownFileType = text.xml; path = PrivacyInfo.xcprivacy; sourceTree = "<group>"; };
@@ -299,6 +301,7 @@
 			children = (
 				000000000000000000000111 /* PersonalGoal.swift */,
 				000000000000000000000112 /* SavingTransaction.swift */,
+				B42026112200000000000002 /* PipoGoalCurrency.swift */,
 				000000000000000000000113 /* UserProfile.swift */,
 			);
 			path = Models;
@@ -645,6 +648,7 @@
 				00000000000000000000000A /* SavingRhythmView.swift in Sources */,
 				00000000000000000000000B /* PersonalGoal.swift in Sources */,
 				00000000000000000000000C /* SavingTransaction.swift in Sources */,
+				B42026112200000000000001 /* PipoGoalCurrency.swift in Sources */,
 				00000000000000000000000D /* UserProfile.swift in Sources */,
 				000000000000000000000011 /* AuthStateManager.swift in Sources */,
 				000000000000000000000013 /* GamificationManager.swift in Sources */,
