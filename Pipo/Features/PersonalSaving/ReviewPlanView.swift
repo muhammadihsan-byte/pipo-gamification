@@ -335,7 +335,14 @@ struct PersonalGoalDetailView: View {
     @State private var lifecycleError: String?
     @State private var showingSavingJournal = false
     @State private var showingMoneyOutPreview = false
-    @State private var showingPlanRevisionPreview = false
+    @State private var planRevisionPreview: PlanRevisionPreview?
+
+    // Freeze the selected goal at tap time so a SwiftData query refresh while
+    // presenting the sheet cannot accidentally produce an empty modal.
+    private struct PlanRevisionPreview: Identifiable {
+        let id = UUID()
+        let original: PipoPlanV2Original
+    }
 
     init(goalID: UUID, onBack: @escaping () -> Void, recordSaving: @escaping () -> Void) {
         _goals = Query(filter: #Predicate<PersonalGoal> { $0.id == goalID })
@@ -429,11 +436,9 @@ struct PersonalGoalDetailView: View {
                 }
             }
         }
-        .sheet(isPresented: $showingPlanRevisionPreview) {
-            if let goal = ownedGoal {
-                PipoManagePlanV2Sheet(goal: goal) {
-                    showingPlanRevisionPreview = false
-                }
+        .sheet(item: $planRevisionPreview) { preview in
+            PipoManagePlanV2Sheet(original: preview.original) {
+                planRevisionPreview = nil
             }
         }
         .sheet(isPresented: $showingMoneyOutPreview) {
@@ -629,7 +634,9 @@ struct PersonalGoalDetailView: View {
 
             if !goal.isGroupGoal {
                 Button("Review plan changes") {
-                    showingPlanRevisionPreview = true
+                    planRevisionPreview = PlanRevisionPreview(
+                        original: PipoPlanV2Original(goal: goal)
+                    )
                 }
                 .font(.subheadline.bold())
                 .foregroundStyle(PipoTheme.deepPink)
