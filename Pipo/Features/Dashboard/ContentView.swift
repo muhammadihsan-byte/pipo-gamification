@@ -1092,17 +1092,23 @@ struct DashboardView: View {
     private func plannedAmount(for goal: PersonalGoal) -> Double? {
         guard goal.rhythm != .flexible else { return nil }
         if let amount = goal.plannedContributionOverride, amount > 0 {
-            return Double(amount)
+            return NSDecimalNumber(decimal: PipoGoalCurrency.decimal(
+                Int64(amount), code: goal.effectiveCurrencyCode
+            )).doubleValue
         }
-        guard !goal.isGroupGoal, goal.targetAmount.isFinite,
-              goal.targetAmount >= 1, goal.targetAmount < Double(Int.max) else { return nil }
+        guard !goal.isGroupGoal,
+              let targetMinor = goal.exactTargetMinor,
+              targetMinor > 0,
+              let scheduledTarget = Int(exactly: targetMinor) else { return nil }
         return PersonalSavingSchedule(
-            targetAmount: Int(goal.targetAmount),
+            targetAmount: scheduledTarget,
             startDate: goal.startDate,
             targetDate: goal.targetDate,
             rhythm: goal.rhythm,
             preferredDay: goal.preferredSavingDay
-        ).map { Double($0.amount) }
+        ).map { NSDecimalNumber(decimal: PipoGoalCurrency.decimal(
+            Int64($0.amount), code: goal.effectiveCurrencyCode
+        )).doubleValue }
     }
 
     private var bottomNavigation: some View {
