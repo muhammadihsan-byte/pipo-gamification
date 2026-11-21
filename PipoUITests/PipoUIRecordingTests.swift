@@ -491,6 +491,61 @@ final class PipoUIRecordingTests: XCTestCase {
         XCTAssertFalse(app.buttons["pipo.plan.v2.primary"].isEnabled)
     }
 
+    /// Automated accessibility-tree proxy at a large system text category.
+    /// This proves discoverable labels, tappable targets and reachable native
+    /// controls; actual VoiceOver speech/focus order and Switch Control still
+    /// require a signed-device/manual accessibility session.
+    func testGlobalV1AccessibilityLabelsAndTargetsAtLargeText() {
+        continueAfterFailure = false
+        // This DEBUG-only fixture does not authenticate or send cloud writes.
+        // UICTContentSizeCategoryAccessibilityM is a supported large category.
+        app.launchArguments = [
+            "-pipo-dashboard-qa",
+            "-UIPreferredContentSizeCategoryName",
+            "UICTContentSizeCategoryAccessibilityM"
+        ]
+        app.launch()
+        tapButton("pipo.dashboard.focusGoal")
+        tapButtonAboveSavingFooter("pipo.goal.planRevisionPreview")
+        XCTAssertTrue(app.staticTexts["Your plan, your pace."].waitForExistence(timeout: 15))
+
+        let back = app.buttons["pipo.plan.v2.back"].firstMatch
+        XCTAssertTrue(back.waitForExistence(timeout: 10))
+        XCTAssertFalse(back.label.trimmingCharacters(in: .whitespaces).isEmpty,
+                       "Back must have a spoken accessibility label")
+        XCTAssertGreaterThanOrEqual(back.frame.height, 44,
+            "Back control is below Pipo's 44pt accessibility target")
+        let primary = app.buttons["pipo.plan.v2.primary"].firstMatch
+        XCTAssertTrue(primary.exists)
+        XCTAssertGreaterThanOrEqual(primary.frame.height, 44,
+            "Primary action must remain a 44pt minimum target under large text")
+        XCTAssertFalse(primary.label.trimmingCharacters(in: .whitespaces).isEmpty)
+        XCTAssertFalse(primary.isEnabled,
+            "Manage Plan remains preview-only, including accessibility sizes")
+
+        let targetChoice = app.buttons["pipo.plan.v2.editTarget"].firstMatch
+        XCTAssertTrue(targetChoice.exists)
+        XCTAssertTrue(targetChoice.label.contains("Target amount"),
+            "Target editor label must describe its action, not just a chevron")
+        XCTAssertGreaterThanOrEqual(targetChoice.frame.height, 44)
+        tapButton("pipo.plan.v2.editTarget")
+        let targetField = app.textFields["pipo.plan.v2.targetAmount"].firstMatch
+        XCTAssertTrue(targetField.waitForExistence(timeout: 10))
+        XCTAssertTrue(targetField.label.contains("Target amount in"),
+            "Amount entry must announce its currency to assistive technology")
+        attachOnboardingScreen("Global V1 AX — large text target editor")
+        tapButton("pipo.plan.v2.back")
+
+        tapButton("pipo.plan.v2.editDate")
+        let dateField = app.datePickers["pipo.plan.v2.finishDate"].firstMatch
+        let dateButton = app.buttons["pipo.plan.v2.finishDate"].firstMatch
+        XCTAssertTrue(dateField.exists || dateButton.exists,
+            "Finish-date control must remain accessible at large text sizes")
+        let nativeDate = dateField.exists ? dateField : dateButton
+        XCTAssertFalse(nativeDate.label.trimmingCharacters(in: .whitespaces).isEmpty)
+        attachOnboardingScreen("Global V1 AX — native date editor")
+    }
+
     /// Legacy #42 regressions: both sheets still open, but neither can mutate
     /// account history or complete a financial write.
     func testIssue42PlanAndMoneyOutRemainReviewOnly() {
