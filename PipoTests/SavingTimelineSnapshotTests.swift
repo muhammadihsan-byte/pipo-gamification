@@ -74,6 +74,45 @@ final class SavingTimelineSnapshotTests: XCTestCase {
         }
     }
 
+    /// Dynamic Type accessibility acceptance is different from ordinary 320pt
+    /// acceptance: text grows, the editor must scroll, and the primary action
+    /// must remain fully inside both compact and standard-size viewports.
+    /// This verifies layout, not VoiceOver speech or focus order.
+    func testManagePlanV2AccessibilityTextAt320And393KeepsFooterVisible() {
+        let owner = UUID()
+        let goal = PersonalGoal(
+            title: "Trip with a longer goal title", category: .trip,
+            targetAmount: 1500.50, currentAmount: 100.25,
+            currencyCode: "USD", targetMinorUnits: 150_050,
+            recordedMinorUnits: 10_025,
+            targetDate: Calendar.current.date(byAdding: .month, value: 4, to: .now)!,
+            rhythm: .weekly, preferredSavingDay: 3, ownerUserID: owner
+        )
+        for width in [CGFloat(320), CGFloat(393)] {
+            let height: CGFloat = width == 320 ? 760 : 956
+            let name = "Manage-Plan-AX3-\(Int(width))pt"
+            let content = PipoManagePlanV2Sheet(goal: goal, onClose: {})
+                .environment(\.dynamicTypeSize, .accessibility3)
+                .frame(width: width, height: height)
+            guard let screenshot = renderInWindow(
+                content, size: CGSize(width: width, height: height)
+            ) else {
+                XCTFail(name + " did not render")
+                continue
+            }
+            XCTAssertEqual(screenshot.size.width, width, accuracy: 1)
+            XCTAssertEqual(screenshot.size.height, height, accuracy: 1)
+            XCTAssertTrue(hasRenderedBodyContent(screenshot),
+                          name + " is blank under accessibility text")
+            XCTAssertTrue(hasVisibleFooterClearance(screenshot),
+                          name + " clips the primary action under accessibility text")
+            let attachment = XCTAttachment(image: screenshot)
+            attachment.name = name
+            attachment.lifetime = .keepAlways
+            add(attachment)
+        }
+    }
+
     /// Embed a fixed-size SwiftUI host as a child controller inside the live
     /// UIWindow. UIWindowScene is free to resize its root view to the simulator's
     /// physical dimensions; using a constrained child is necessary for genuine
