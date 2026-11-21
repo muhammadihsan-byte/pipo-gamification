@@ -44,6 +44,13 @@ final class PipoUIRecordingTests: XCTestCase {
         XCTAssertTrue(app.staticTexts["How much do you need?"].waitForExistence(timeout: 15))
         XCTAssertTrue(app.buttons["pipo.goal.currency.choose"].exists)
         attachOnboardingScreen("Global V1 — Currency confirmed at target step")
+        // Begin with an explicit IDR choice independent of simulator region.
+        tapButton("pipo.goal.currency.choose")
+        let idrSearch = app.searchFields.firstMatch
+        XCTAssertTrue(idrSearch.waitForExistence(timeout: 15))
+        idrSearch.tap()
+        idrSearch.typeText("IDR")
+        tapButton("pipo.goal.currency.IDR")
         typeText("pipo.goal.currency.amount", value: "6000000")
         tapButton("pipo.goal.currency.choose")
         let search = app.searchFields.firstMatch
