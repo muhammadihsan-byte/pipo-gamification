@@ -364,9 +364,13 @@ struct PipoManagePlanV2Sheet: View {
     @State private var askDiscard = false
     @FocusState private var focusedInput: String?
 
-    init(goal: PersonalGoal, onClose: @escaping () -> Void) {
+    init(original: PipoPlanV2Original, onClose: @escaping () -> Void) {
         self.onClose = onClose
-        _draft = State(initialValue: PipoPlanV2Draft(original: PipoPlanV2Original(goal: goal)))
+        _draft = State(initialValue: PipoPlanV2Draft(original: original))
+    }
+
+    init(goal: PersonalGoal, onClose: @escaping () -> Void) {
+        self.init(original: PipoPlanV2Original(goal: goal), onClose: onClose)
     }
 
     private enum Step: Equatable {
