@@ -248,6 +248,382 @@ struct PersonalSavingSyncBatch {
     }
 }
 
+/// Rows are decoded from an account-restricted Supabase SELECT only.
+/// The server uses numeric(18,2); the app requires exact whole IDR amounts
+/// until fractional-currency support is formally designed.
+struct SavingLedgerCloudContribution: Decodable, Sendable {
+    let id: UUID
+    let goalID: UUID
+    let userID: UUID
+    let amount: Double
+    let xpEarned: Int
+    let date: String
+
+    enum CodingKeys: String, CodingKey {
+        case id, amount, date
+        case goalID = "goal_id"
+        case userID = "user_id"
+        case xpEarned = "xp_earned"
+    }
+}
+
+struct SavingLedgerCloudAdjustment: Decodable, Sendable {
+    let id: UUID
+    let goalID: UUID
+    let userID: UUID
+    let kind: String
+    let amount: Double
+    let correctsEventID: UUID?
+    let createdAt: String
+
+    enum CodingKeys: String, CodingKey {
+        case id, kind, amount
+        case goalID = "goal_id"
+        case userID = "user_id"
+        case correctsEventID = "corrects_event_id"
+        case createdAt = "created_at"
+    }
+}
+
+enum SavingMoneyOutRequestError: Error, Equatable {
+    case invalidAmount
+    case invalidNote
+    case invalidPreference
+    case mismatchedServerReceipt
+}
+
+/// Stable idempotency key must be created before the first send and reused
+/// unchanged after a timeout or a relaunch. NEVER regenerate it on retry.
+/// This does not move bank money; the server only records manual saving usage.
+struct SavingMoneyOutRPCRequest: Codable, Sendable {
+    let requestID: UUID
+    let goalID: UUID
+    let amount: Int
+    let note: String?
+    let preference: String
+
+    init(requestID: UUID, goalID: UUID, amount: Int, note: String?,
+         preference: String) throws {
+        guard amount > 0, amount <= SavingsAmountSafety.maxExactWholeIDR else {
+            throw SavingMoneyOutRequestError.invalidAmount
+        }
+        guard ["keep_date", "keep_amount"].contains(preference) else {
+            throw SavingMoneyOutRequestError.invalidPreference
+        }
+        let trimmed = note?.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard (trimmed?.count ?? 0) <= 240 else {
+            throw SavingMoneyOutRequestError.invalidNote
+        }
+        self.requestID = requestID
+        self.goalID = goalID
+        self.amount = amount
+        self.note = trimmed?.isEmpty == true ? nil : trimmed
+        self.preference = preference
+    }
+
+    enum CodingKeys: String, CodingKey {
+        case requestID = "p_id"
+        case goalID = "p_goal_id"
+        case amount = "p_amount"
+        case note = "p_note"
+        case preference = "p_preference"
+    }
+}
+
+/// Crash-safe local delivery intent, never a declaration that money has moved.
+/// A pending request remains pending after a network timeout and must be retried
+/// with its original ID. Acknowledged requests remain until cloud readback.
+struct PendingMoneyOutIntent: Codable, Equatable, Sendable {
+    enum State: String, Codable, Sendable {
+        case staged
+        case acknowledged
+    }
+
+    let ownerID: UUID
+    let request: SavingMoneyOutRPCRequest
+    let createdAt: Date
+    var state: State
+
+    static func == (lhs: Self, rhs: Self) -> Bool {
+        lhs.ownerID == rhs.ownerID &&
+        lhs.request.requestID == rhs.request.requestID &&
+        lhs.request.goalID == rhs.request.goalID &&
+        lhs.request.amount == rhs.request.amount &&
+        lhs.request.note == rhs.request.note &&
+        lhs.request.preference == rhs.request.preference &&
+        lhs.createdAt == rhs.createdAt && lhs.state == rhs.state
+    }
+}
+
+enum MoneyOutJournalError: Error, Equatable {
+    case idempotencyConflict
+    case unknownIntent
+    case notAcknowledged
+    case unverifiedCloudReceipt
+    case invalidJournal
+    case tooManyPendingIntents
+}
+
+/// The application-support journal is separate from SwiftData migrations.
+/// It deliberately does not auto-retry or modify balance; those operations
+/// require the approved server rollout and explicit account/session guards.
+/// MainActor serializes journal read/modify/write on the current device.
+@MainActor
+final class MoneyOutIntentJournal {
+    private let directory: URL
+    private let files: FileManager
+    private let maximumEntries = 500
+
+    init(directory: URL, fileManager: FileManager = .default) {
+        self.directory = directory
+        self.files = fileManager
+    }
+
+    static func inApplicationSupport() throws -> MoneyOutIntentJournal {
+        let root = try FileManager.default.url(
+            for: .applicationSupportDirectory, in: .userDomainMask,
+            appropriateFor: nil, create: true
+        )
+        return MoneyOutIntentJournal(
+            directory: root.appendingPathComponent(
+                "PipoMoneyOutIntents", isDirectory: true
+            )
+        )
+    }
+
+    func all(for ownerID: UUID) throws -> [PendingMoneyOutIntent] {
+        let path = fileURL(for: ownerID)
+        guard files.fileExists(atPath: path.path) else { return [] }
+        let data = try Data(contentsOf: path)
+        let entries: [PendingMoneyOutIntent]
+        do {
+            entries = try JSONDecoder().decode(
+                [PendingMoneyOutIntent].self, from: data
+            )
+        } catch {
+            throw MoneyOutJournalError.invalidJournal
+        }
+        guard entries.count <= maximumEntries else {
+            throw MoneyOutJournalError.tooManyPendingIntents
+        }
+        var ids = Set<UUID>()
+        for entry in entries {
+            guard entry.ownerID == ownerID,
+                  ids.insert(entry.request.requestID).inserted,
+                  let canonical = try? SavingMoneyOutRPCRequest(
+                    requestID: entry.request.requestID,
+                    goalID: entry.request.goalID,
+                    amount: entry.request.amount,
+                    note: entry.request.note,
+                    preference: entry.request.preference
+                  ),
+                  canonical.note == entry.request.note
+            else { throw MoneyOutJournalError.invalidJournal }
+        }
+        return entries
+    }
+
+    @discardableResult
+    func stage(
+        _ request: SavingMoneyOutRPCRequest,
+        ownerID: UUID
+    ) throws -> PendingMoneyOutIntent {
+        var entries = try all(for: ownerID)
+        if let existing = entries.first(where: {
+            $0.request.requestID == request.requestID
+        }) {
+            guard existing.request.goalID == request.goalID,
+                  existing.request.amount == request.amount,
+                  existing.request.note == request.note,
+                  existing.request.preference == request.preference
+            else { throw MoneyOutJournalError.idempotencyConflict }
+            return existing
+        }
+        guard entries.count < maximumEntries else {
+            throw MoneyOutJournalError.tooManyPendingIntents
+        }
+        let entry = PendingMoneyOutIntent(
+            ownerID: ownerID, request: request,
+            createdAt: .now, state: .staged
+        )
+        entries.append(entry)
+        try persist(entries, ownerID: ownerID)
+        return entry
+    }
+
+    /// Call only after submitVerifiedMoneyOut has checked the actual receipt.
+    func acknowledge(
+        requestID: UUID, receipt: SavingMoneyOutRPCReceipt,
+        ownerID: UUID
+    ) throws {
+        var entries = try all(for: ownerID)
+        guard let index = entries.firstIndex(where: {
+            $0.request.requestID == requestID
+        }) else { throw MoneyOutJournalError.unknownIntent }
+        try receipt.verify(request: entries[index].request, ownerID: ownerID)
+        entries[index].state = .acknowledged
+        try persist(entries, ownerID: ownerID)
+    }
+
+    /// Readback must include the exact server adjustment before the local
+    /// delivery intent can be discarded. The returned snapshot is still
+    /// read-only; local goal balances are NOT automatically overwritten.
+    @discardableResult
+    func finishVerifiedReadback(
+        requestID: UUID,
+        cloud: SavingLedgerCloudSnapshotEnvelope,
+        ownerID: UUID
+    ) throws -> SavingLedgerSnapshot {
+        let entries = try all(for: ownerID)
+        guard let entry = entries.first(where: {
+            $0.request.requestID == requestID
+        }) else { throw MoneyOutJournalError.unknownIntent }
+        guard entry.state == .acknowledged else {
+            throw MoneyOutJournalError.notAcknowledged
+        }
+        guard cloud.goalID == entry.request.goalID,
+              cloud.userID == ownerID,
+              cloud.adjustments.contains(where: {
+                $0.id == requestID && $0.goalID == entry.request.goalID &&
+                $0.userID == ownerID && $0.kind == "money_out" &&
+                $0.amount.isFinite &&
+                Int(exactly: $0.amount) == entry.request.amount
+              })
+        else { throw MoneyOutJournalError.unverifiedCloudReceipt }
+        let snapshot = try SavingCloudLedgerReconciler.reconstruct(
+            goalID: cloud.goalID, ownerID: ownerID,
+            contributions: cloud.contributions, adjustments: cloud.adjustments
+        )
+        try persist(
+            entries.filter { $0.request.requestID != requestID },
+            ownerID: ownerID
+        )
+        return snapshot
+    }
+
+    private func fileURL(for ownerID: UUID) -> URL {
+        directory.appendingPathComponent(
+            ownerID.uuidString.lowercased() + ".json", isDirectory: false
+        )
+    }
+
+    private func persist(
+        _ entries: [PendingMoneyOutIntent], ownerID: UUID
+    ) throws {
+        try files.createDirectory(
+            at: directory, withIntermediateDirectories: true
+        )
+        let payload = try JSONEncoder().encode(entries)
+        try payload.write(
+            to: fileURL(for: ownerID),
+            options: [.atomic, .completeFileProtectionUnlessOpen]
+        )
+    }
+}
+
+struct SavingMoneyOutRPCReceipt: Decodable, Sendable {
+    let id: UUID
+    let goalID: UUID
+    let userID: UUID
+    let kind: String
+    let amount: Double
+    let preference: String
+    let note: String?
+
+    enum CodingKeys: String, CodingKey {
+        case id, kind, amount, preference, note
+        case goalID = "goal_id"
+        case userID = "user_id"
+    }
+
+    func verify(request: SavingMoneyOutRPCRequest, ownerID: UUID) throws {
+        guard id == request.requestID, goalID == request.goalID, userID == ownerID,
+              kind == "money_out", amount.isFinite,
+              amount <= Double(SavingsAmountSafety.maxExactWholeIDR),
+              Int(exactly: amount) == request.amount,
+              preference == request.preference,
+              note == request.note
+        else { throw SavingMoneyOutRequestError.mismatchedServerReceipt }
+    }
+}
+
+/// A single PostgreSQL statement snapshot prevents torn cross-device reads.
+/// The RPC enforces owner RLS; the client independently validates identity.
+struct SavingLedgerCloudSnapshotEnvelope: Decodable, Sendable {
+    let goalID: UUID
+    let userID: UUID
+    let contributions: [SavingLedgerCloudContribution]
+    let adjustments: [SavingLedgerCloudAdjustment]
+
+    enum CodingKeys: String, CodingKey {
+        case goalID = "goal_id"
+        case userID = "user_id"
+        case contributions, adjustments
+    }
+}
+
+enum SavingCloudRecoveryError: Error, Equatable {
+    case invalidServerEntry
+    case accountChanged
+    case tooManyEntries
+}
+
+/// Strict, pure reconstruction of independently fetched cloud rows.
+/// No local SwiftData changes occur until an explicit reconciliation policy
+/// for unsynced contributions has been reviewed and approved.
+enum SavingCloudLedgerReconciler {
+    /// PostgreSQL timestamptz may include fractional seconds; accepting only
+    /// a strict ISO8601 timestamp prevents locale-dependent recovery.
+    private static func decodeTimestamp(_ source: String) throws -> Date {
+        let formatter = ISO8601DateFormatter()
+        formatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+        if let timestamp = formatter.date(from: source) { return timestamp }
+        formatter.formatOptions = [.withInternetDateTime]
+        if let timestamp = formatter.date(from: source) { return timestamp }
+        throw SavingCloudRecoveryError.invalidServerEntry
+    }
+
+    static func reconstruct(
+        goalID: UUID, ownerID: UUID,
+        contributions: [SavingLedgerCloudContribution],
+        adjustments: [SavingLedgerCloudAdjustment]
+    ) throws -> SavingLedgerSnapshot {
+        guard contributions.count <= 10_000, adjustments.count <= 10_000 else {
+            throw SavingCloudRecoveryError.tooManyEntries
+        }
+        let savings: [SavingTransaction] = try contributions.map { entry in
+            guard entry.goalID == goalID, entry.userID == ownerID,
+                  entry.amount.isFinite, let amount = Int(exactly: entry.amount),
+                  amount > 0,
+                  amount <= SavingsAmountSafety.maxExactWholeIDR,
+                  entry.xpEarned >= 0
+            else { throw SavingCloudRecoveryError.invalidServerEntry }
+            return SavingTransaction(
+                id: entry.id, goalId: entry.goalID, amount: Double(amount),
+                xpEarned: entry.xpEarned, date: try decodeTimestamp(entry.date), userID: entry.userID
+            )
+        }
+        let events: [SavingAdjustmentEvent] = try adjustments.map { entry in
+            guard entry.goalID == goalID, entry.userID == ownerID,
+                  let kind = SavingAdjustmentKind(rawValue: entry.kind),
+                  entry.amount.isFinite, let amount = Int(exactly: entry.amount),
+                  amount != 0,
+                  amount >= -SavingsAmountSafety.maxExactWholeIDR,
+                  amount <= SavingsAmountSafety.maxExactWholeIDR
+            else { throw SavingCloudRecoveryError.invalidServerEntry }
+            return SavingAdjustmentEvent(
+                id: entry.id, goalID: entry.goalID, userID: entry.userID,
+                kind: kind, amount: amount,
+                correctsEventID: entry.correctsEventID, date: try decodeTimestamp(entry.createdAt)
+            )
+        }
+        return try SavingLedgerSnapshot.reconstruct(
+            goalID: goalID, ownerID: ownerID, savings: savings,
+            adjustments: events
+        )
+    }
+}
+
 struct GroupGoalProgressUpdate: Codable, Equatable, Sendable {
     let goalID: UUID
     let userID: UUID
@@ -490,6 +866,62 @@ final class SupabaseService {
             .from("saving_transactions")
             .upsert(payloads, onConflict: "id")
             .execute()
+    }
+
+    /// Authenticated, idempotent RPC adapter for the proposed atomic server
+    /// function. NOT connected to any production button until DB migration,
+    /// crash-safe intent persistence and verified reconciliation are complete.
+    func submitVerifiedMoneyOut(
+        _ request: SavingMoneyOutRPCRequest, authenticatedUserID: UUID
+    ) async throws -> SavingMoneyOutRPCReceipt {
+        guard client.auth.currentUser?.id == authenticatedUserID else {
+            throw SupabaseServiceError.notAuthenticated
+        }
+        let receipt = try await performMoneyOutRPC(request)
+        guard client.auth.currentUser?.id == authenticatedUserID else {
+            throw SavingCloudRecoveryError.accountChanged
+        }
+        try receipt.verify(request: request, ownerID: authenticatedUserID)
+        return receipt
+    }
+
+    private nonisolated func performMoneyOutRPC(
+        _ request: SavingMoneyOutRPCRequest
+    ) async throws -> SavingMoneyOutRPCReceipt {
+        try await client.rpc("record_money_out", params: request)
+            .execute().value
+    }
+
+    /// Reads one RLS-authorized database snapshot instead of racing two
+    /// independent requests. Never overwrites device-only unsynced entries.
+    /// Unavailable until the proposed database RPC is deployed and tested.
+    func fetchVerifiedSavingLedger(
+        goalID: UUID,
+        authenticatedUserID: UUID
+    ) async throws -> SavingLedgerSnapshot {
+        guard client.auth.currentUser?.id == authenticatedUserID else {
+            throw SupabaseServiceError.notAuthenticated
+        }
+        let cloud = try await fetchAtomicSavingLedgerSnapshot(goalID: goalID)
+        guard client.auth.currentUser?.id == authenticatedUserID else {
+            throw SavingCloudRecoveryError.accountChanged
+        }
+        guard cloud.goalID == goalID, cloud.userID == authenticatedUserID else {
+            throw SavingCloudRecoveryError.invalidServerEntry
+        }
+        return try SavingCloudLedgerReconciler.reconstruct(
+            goalID: goalID, ownerID: authenticatedUserID,
+            contributions: cloud.contributions, adjustments: cloud.adjustments
+        )
+    }
+
+    private nonisolated func fetchAtomicSavingLedgerSnapshot(
+        goalID: UUID
+    ) async throws -> SavingLedgerCloudSnapshotEnvelope {
+        try await client.rpc(
+            "get_saving_ledger_snapshot",
+            params: ["p_goal_id": goalID.uuidString]
+        ).execute().value
     }
 
     // Purchased slot counts are authoritative server state. In particular,
