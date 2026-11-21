@@ -46,6 +46,13 @@ struct SavingAdjustmentEvent: Equatable, Sendable {
     let date: Date
 }
 
+/// Whole-IDR amounts must remain exactly representable through the existing
+/// Supabase Double decoding boundary. This is stricter than numeric(18,2)
+/// until the app uses an exact decimal/wire representation end-to-end.
+enum SavingsAmountSafety {
+    static let maxExactWholeIDR = 9_007_199_254_740_991
+}
+
 enum SavingLedgerError: Error, Equatable {
     case unownedRecord
     case duplicateEvent
@@ -75,7 +82,8 @@ struct SavingLedgerSnapshot: Equatable {
         var earnedXP = 0
         for entry in savings {
             guard ids.insert(entry.id).inserted else { throw SavingLedgerError.duplicateEvent }
-            guard let amount = Int(exactly: entry.amount), amount > 0, entry.xpEarned >= 0
+            guard let amount = Int(exactly: entry.amount), amount > 0,
+                  amount <= SavingsAmountSafety.maxExactWholeIDR, entry.xpEarned >= 0
             else { throw SavingLedgerError.invalidMoney }
             let (next, overflow) = saved.addingReportingOverflow(amount)
             let (xp, xpOverflow) = earnedXP.addingReportingOverflow(entry.xpEarned)
@@ -100,11 +108,16 @@ struct SavingLedgerSnapshot: Equatable {
             case .moneyOut:
                 guard entry.amount > 0, entry.correctsEventID == nil
                 else { throw SavingLedgerError.malformedEvent }
+                guard entry.amount <= SavingsAmountSafety.maxExactWholeIDR
+                else { throw SavingLedgerError.invalidMoney }
                 let (next, overflow) = delta.subtractingReportingOverflow(entry.amount)
                 guard !overflow else { throw SavingLedgerError.invalidMoney }
                 delta = next
             case .correction:
-                guard entry.amount != 0, let original = entry.correctsEventID,
+                guard entry.amount != 0,
+                      entry.amount >= -SavingsAmountSafety.maxExactWholeIDR,
+                      entry.amount <= SavingsAmountSafety.maxExactWholeIDR,
+                      let original = entry.correctsEventID,
                       let previous = effectiveMoneyOut[original], original != entry.id
                 else { throw SavingLedgerError.malformedEvent }
                 let (correctedAmount, correctionOverflow) =
