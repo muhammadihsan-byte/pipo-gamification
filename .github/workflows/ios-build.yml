@@ -297,6 +297,8 @@ jobs:
             -only-testing:PipoUITests/PipoUIRecordingTests/testPostLoginPersonalizationAndWidgetPreview \
             -only-testing:PipoUITests/PipoUIRecordingTests/testGlobalExperienceUSDGoalCurrencySelectionAndReopen \
             -only-testing:PipoUITests/PipoUIRecordingTests/testPersonalSavingJourney \
+            -only-testing:PipoUITests/PipoUIRecordingTests/testManagePlanV2OverviewFlexibleImpactReviewAndMoneyOutSafety \
+            -only-testing:PipoUITests/PipoUIRecordingTests/testManagePlanV2TargetAndDateEditorsAreFocusedAndNonMutating \
             CODE_SIGNING_ALLOWED=NO \
             CODE_SIGNING_REQUIRED=NO \
             test 2>&1 | tee validation/pipo-global-experience-v1-qa.log
