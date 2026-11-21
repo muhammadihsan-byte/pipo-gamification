@@ -443,7 +443,7 @@ struct PipoManagePlanV2Sheet: View {
             } message: {
                 Text("Your recorded savings, XP, badges and history remain unchanged.")
             }
-            .accessibilityIdentifier("pipo.plan.v2.sheet")
+    
         }
         .preferredColorScheme(.light)
     }
@@ -507,7 +507,7 @@ struct PipoManagePlanV2Sheet: View {
                     .font(.footnote)
                     .foregroundStyle(PipoTheme.cardMuted)
             }
-            .accessibilityIdentifier("pipo.plan.v2.recorded")
+    
             VStack(alignment: .leading, spacing: 0) {
                 sectionTitle("ADJUST YOUR GOAL")
                 choiceRow("Target & breakdown",
@@ -531,7 +531,7 @@ struct PipoManagePlanV2Sheet: View {
                 .font(.footnote)
                 .foregroundStyle(PipoTheme.cardMuted)
         }
-        .accessibilityIdentifier("pipo.plan.v2.overview")
+
     }
 
     private var progress: Double {
@@ -621,7 +621,7 @@ struct PipoManagePlanV2Sheet: View {
                 .font(.footnote)
                 .foregroundStyle(PipoTheme.cardMuted)
         }
-        .accessibilityIdentifier("pipo.plan.v2.targetEditor")
+
     }
 
     private var breakdownEditor: some View {
@@ -665,7 +665,7 @@ struct PipoManagePlanV2Sheet: View {
                 .font(.footnote)
                 .foregroundStyle(PipoTheme.cardMuted)
         }
-        .accessibilityIdentifier("pipo.plan.v2.budgetEditor")
+
     }
 
     private var dateEditor: some View {
@@ -689,7 +689,7 @@ struct PipoManagePlanV2Sheet: View {
                 .font(.footnote)
                 .foregroundStyle(PipoTheme.cardMuted)
         }
-        .accessibilityIdentifier("pipo.plan.v2.dateEditor")
+
     }
 
     private var rhythmEditor: some View {
@@ -766,7 +766,7 @@ struct PipoManagePlanV2Sheet: View {
                 .font(.footnote)
                 .foregroundStyle(PipoTheme.cardMuted)
         }
-        .accessibilityIdentifier("pipo.plan.v2.rhythmEditor")
+
     }
 
     private var selectableRhythms: [SavingRhythm] {
@@ -811,7 +811,7 @@ struct PipoManagePlanV2Sheet: View {
             warning("Plans can change. Your saved steps stay.",
                     detail: "These are suggestions only. No bank transfer or past record changes.")
         }
-        .accessibilityIdentifier("pipo.plan.v2.impact")
+
     }
 
     private var draftReview: some View {
@@ -835,7 +835,7 @@ struct PipoManagePlanV2Sheet: View {
                 .foregroundStyle(PipoTheme.cardMuted)
                 .accessibilityIdentifier("pipo.plan.v2.unsavedNotice")
         }
-        .accessibilityIdentifier("pipo.plan.v2.review")
+
     }
 
     private func suggestionText(_ amount: Decimal?) -> String {
