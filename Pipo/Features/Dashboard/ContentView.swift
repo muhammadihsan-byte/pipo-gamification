@@ -482,8 +482,8 @@ struct DashboardView: View {
                         }
                     }
                     Spacer(minLength: 6)
-                    if let amount = plannedAmount(for: goal) {
-                        Text(money(amount, goal: goal))
+                    if let amountText = plannedMoney(for: goal) {
+                        Text(amountText)
                             .font(.subheadline.bold())
                             .multilineTextAlignment(.trailing)
                     }
@@ -1099,12 +1099,10 @@ struct DashboardView: View {
         return ownedTransactions.filter { $0.goalId == goal.id }
     }
 
-    private func plannedAmount(for goal: PersonalGoal) -> Double? {
+    private func plannedMoney(for goal: PersonalGoal) -> String? {
         guard goal.rhythm != .flexible else { return nil }
         if let amount = goal.plannedContributionOverride, amount > 0 {
-            return NSDecimalNumber(decimal: PipoGoalCurrency.decimal(
-                Int64(amount), code: goal.effectiveCurrencyCode
-            )).doubleValue
+            return PipoGoalCurrency.formatted(Int64(amount), code: goal.effectiveCurrencyCode)
         }
         guard !goal.isGroupGoal,
               let targetMinor = goal.exactTargetMinor,
@@ -1116,9 +1114,7 @@ struct DashboardView: View {
             targetDate: goal.targetDate,
             rhythm: goal.rhythm,
             preferredDay: goal.preferredSavingDay
-        ).map { NSDecimalNumber(decimal: PipoGoalCurrency.decimal(
-            Int64($0.amount), code: goal.effectiveCurrencyCode
-        )).doubleValue }
+        ).map { PipoGoalCurrency.formatted(Int64($0.amount), code: goal.effectiveCurrencyCode) }
     }
 
     private var bottomNavigation: some View {
