@@ -110,7 +110,13 @@ final class PipoUIRecordingTests: XCTestCase {
         XCTAssertFalse(app.textFields["pipo.card.moneyOut.amount"].exists)
         attachOnboardingScreen("Global V1 — Non-IDR Money Out safely unavailable")
         XCTAssertTrue(app.buttons["pipo.goal.planRevisionPreview"].waitForExistence(timeout: 15))
-        tapButton("pipo.goal.planRevisionPreview")
+        // Never let the pinned Record Saving CTA intercept an offscreen tap.
+        tapButtonAboveSavingFooter("pipo.goal.planRevisionPreview")
+        attachOnboardingScreen("Global V1 — Manage Plan presentation after USD restart")
+        XCTAssertFalse(app.navigationBars["Record a saving"].exists,
+                       "Manage Plan tap must not open Record Saving")
+        XCTAssertTrue(app.staticTexts["pipo.plan.v2.title"].waitForExistence(timeout: 15),
+                      "Manage Plan modal was not presented after USD restart: \(app.debugDescription)")
         XCTAssertTrue(app.staticTexts["Your plan, your pace."].waitForExistence(timeout: 15))
         tapButton("pipo.plan.v2.editTarget")
         XCTAssertTrue(app.staticTexts["TARGET AMOUNT · USD"].waitForExistence(timeout: 15))
@@ -620,6 +626,27 @@ final class PipoUIRecordingTests: XCTestCase {
         XCTAssertTrue(button.waitForExistence(timeout: 20), "Missing button: \(label)")
         bringIntoView(button)
         XCTAssertTrue(button.isEnabled, "Disabled button: \(label)")
+        button.tap()
+    }
+
+    /// XCUIElement.isHittable can be true even when a button's tap center
+    /// overlaps the pinned Record Saving footer on a compact device.
+    private func tapButtonAboveSavingFooter(_ identifier: String) {
+        let button = app.buttons[identifier].firstMatch
+        XCTAssertTrue(button.waitForExistence(timeout: 20), "Missing button: \(identifier)")
+        let scroll = app.scrollViews.containing(.button, identifier: identifier).firstMatch
+        XCTAssertTrue(scroll.exists, "Goal Detail scroll view is missing")
+        let footer = app.buttons["pipo.goal.recordSaving"].firstMatch
+        XCTAssertTrue(footer.exists, "Goal Detail sticky footer is missing")
+        for _ in 0..<8 {
+            let entirelyAboveFooter = button.frame.minY >= scroll.frame.minY + 8
+                && button.frame.maxY <= footer.frame.minY - 12
+            if button.isHittable && entirelyAboveFooter { break }
+            scroll.swipeUp()
+        }
+        XCTAssertTrue(button.isHittable && button.frame.minY >= scroll.frame.minY + 8
+                      && button.frame.maxY <= footer.frame.minY - 12,
+                      "Manage Plan action is obscured by the saving footer: \(app.debugDescription)")
         button.tap()
     }
 
