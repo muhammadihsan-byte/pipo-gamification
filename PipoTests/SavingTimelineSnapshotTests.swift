@@ -74,7 +74,11 @@ final class SavingTimelineSnapshotTests: XCTestCase {
         }
     }
 
-    /// Render SwiftUI inside a real UIWindow; ImageRenderer omits ScrollView body content.
+    /// Keep the UIKit window for correct ScrollView and safe-area behavior,
+    /// but render the hosted content view at the requested snapshot size.
+    /// A UIWindowScene can resize a visible UIWindow to the simulator's native
+    /// screen height (e.g. >760pt), even when window.frame is set to 320x760.
+    /// Capturing window.drawHierarchy then clips a taller layout at 760pt.
     private func renderInWindow<Content: View>(_ content: Content, size: CGSize) -> UIImage? {
         guard let scene = UIApplication.shared.connectedScenes
             .compactMap({ $0 as? UIWindowScene }).first else { return nil }
@@ -88,13 +92,22 @@ final class SavingTimelineSnapshotTests: XCTestCase {
             window.isHidden = true
             previousKeyWindow?.makeKeyAndVisible()
         }
-        controller.view.frame = window.bounds
+        // Layout and capture the 320x760 or 393x956 hosted scene itself,
+        // rather than the potentially native-height UIWindow container.
+        let target = CGRect(origin: .zero, size: size)
+        controller.view.frame = target
         controller.view.setNeedsLayout()
         controller.view.layoutIfNeeded()
         RunLoop.main.run(until: Date().addingTimeInterval(0.2))
+        controller.view.frame = target
+        controller.view.layoutIfNeeded()
+        guard abs(controller.view.bounds.width - size.width) < 1,
+              abs(controller.view.bounds.height - size.height) < 1 else {
+            return nil
+        }
         return UIGraphicsImageRenderer(size: size).image { context in
-            if !window.drawHierarchy(in: window.bounds, afterScreenUpdates: true) {
-                window.layer.render(in: context.cgContext)
+            if !controller.view.drawHierarchy(in: target, afterScreenUpdates: true) {
+                controller.view.layer.render(in: context.cgContext)
             }
         }
     }
