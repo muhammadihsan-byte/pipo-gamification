@@ -437,41 +437,18 @@ struct PersonalGoalDetailView: View {
             }
         }
         .sheet(isPresented: $showingMoneyOutPreview) {
-            if let goal = ownedGoal {
-                if goal.effectiveCurrencyCode == "IDR" {
-                    PipoMoneyOutReviewSheet(
-                        availableAmount: goal.currentAmount,
-                        targetAmount: goal.targetAmount,
-                        xpEarned: UserProfile.existing(
-                            for: authStateManager.userID, in: profiles
-                        )?.totalXP ?? 0,
-                        onClose: { showingMoneyOutPreview = false }
-                    )
-                } else {
-                    VStack(spacing: 18) {
-                        Spacer(minLength: 12)
-                        Image(systemName: "hand.raised")
-                            .font(.system(size: 40, weight: .medium))
-                            .foregroundStyle(PipoTheme.deepPink)
-                            .accessibilityHidden(true)
-                        Text("Money Out preview isn’t available in " + goal.effectiveCurrencyCode)
-                            .font(.title3.bold())
-                            .multilineTextAlignment(.center)
-                            .foregroundStyle(PipoTheme.ink)
-                            .accessibilityIdentifier("pipo.currency.moneyOut.unavailable")
-                        Text("Your manually recorded savings stay intact. Multi-currency Money Out needs a separately validated ledger; no money has moved.")
-                            .font(.subheadline)
-                            .multilineTextAlignment(.center)
-                            .foregroundStyle(PipoTheme.muted)
-                        Spacer(minLength: 12)
-                        Button("Close preview") { showingMoneyOutPreview = false }
-                            .buttonStyle(PrimaryActionButtonStyle())
-                            .accessibilityIdentifier("pipo.currency.moneyOut.close")
-                    }
-                    .padding(24)
-                    .frame(maxWidth: .infinity, maxHeight: .infinity)
-                    .background(.white)
-                }
+            // #42: the only current Money Out preview is review-only IDR.
+            // Non-IDR goals have no entry action; no unsupported sheet can
+            // accidentally show an IDR amount or imply a saved withdrawal.
+            if let goal = ownedGoal, goal.effectiveCurrencyCode == "IDR" {
+                PipoMoneyOutReviewSheet(
+                    availableAmount: goal.currentAmount,
+                    targetAmount: goal.targetAmount,
+                    xpEarned: UserProfile.existing(
+                        for: authStateManager.userID, in: profiles
+                    )?.totalXP ?? 0,
+                    onClose: { showingMoneyOutPreview = false }
+                )
             }
         }
         .alert("Goal not updated", isPresented: Binding(
@@ -663,13 +640,27 @@ struct PersonalGoalDetailView: View {
             // Review-only until #42's atomic account-scoped ledger is deployed.
             // Never imply this moves money from a bank or saves a withdrawal.
             if goal.currentAmount > 0 && !goal.isGroupGoal {
-                Button("Review money used elsewhere") {
-                    showingMoneyOutPreview = true
+                if goal.effectiveCurrencyCode == "IDR" {
+                    Button("Review money used elsewhere") {
+                        showingMoneyOutPreview = true
+                    }
+                    .font(.subheadline.bold())
+                    .foregroundStyle(PipoTheme.deepPink)
+                    .frame(maxWidth: .infinity, minHeight: 44)
+                    .accessibilityIdentifier("pipo.goal.moneyOutPreview")
+                } else {
+                    Label {
+                        Text("Money Out preview isn’t available in " + goal.effectiveCurrencyCode
+                             + ". Your manually recorded savings remain unchanged.")
+                            .fixedSize(horizontal: false, vertical: true)
+                    } icon: {
+                        Image(systemName: "hand.raised")
+                    }
+                    .font(.footnote)
+                    .foregroundStyle(PipoTheme.muted)
+                    .accessibilityElement(children: .combine)
+                    .accessibilityIdentifier("pipo.currency.moneyOut.unavailable")
                 }
-                .font(.subheadline.bold())
-                .foregroundStyle(PipoTheme.deepPink)
-                .frame(maxWidth: .infinity, minHeight: 44)
-                .accessibilityIdentifier("pipo.goal.moneyOutPreview")
             }
 
             HStack(alignment: .bottom, spacing: 12) {
