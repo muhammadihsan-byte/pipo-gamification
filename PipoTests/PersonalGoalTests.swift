@@ -904,3 +904,37 @@ extension PersonalGoalTests {
         }
     }
 }
+
+extension PersonalGoalTests {
+    @MainActor
+    func testIssue42JournalRejectsNoncanonicalSavedRequest() throws {
+        let directory = FileManager.default.temporaryDirectory
+            .appendingPathComponent("pipo-moneyout-qa-\(UUID().uuidString)")
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let owner = UUID()
+        let request = try SavingMoneyOutRPCRequest(
+            requestID: UUID(), goalID: UUID(), amount: 5_000,
+            note: "Coffee", preference: "keep_date"
+        )
+        let journal = MoneyOutIntentJournal(directory: directory)
+        try journal.stage(request, ownerID: owner)
+
+        // A malformed on-disk request must not silently acquire a different
+        // retry payload under the same idempotency key.
+        let fileURL = directory.appendingPathComponent(
+            owner.uuidString.lowercased() + ".json"
+        )
+        let original = try String(contentsOf: fileURL, encoding: .utf8)
+        let altered = original.replacingOccurrences(
+            of: "\"note\":\"Coffee\"",
+            with: "\"note\":\" Coffee \""
+        )
+        XCTAssertNotEqual(original, altered)
+        try Data(altered.utf8).write(to: fileURL, options: .atomic)
+        XCTAssertThrowsError(try MoneyOutIntentJournal(
+            directory: directory
+        ).all(for: owner)) { error in
+            XCTAssertEqual(error as? MoneyOutJournalError, .invalidJournal)
+        }
+    }
+}
