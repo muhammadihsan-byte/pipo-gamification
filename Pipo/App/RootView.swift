@@ -40,6 +40,7 @@ struct RootView: View {
         // previous test happened to create an onboarding profile.
         if ProcessInfo.processInfo.arguments.contains("-pipo-dashboard-qa")
                 || ProcessInfo.processInfo.arguments.contains("-pipo-global-currency-qa")
+                || ProcessInfo.processInfo.arguments.contains("-pipo-visual-qa")
             || ProcessInfo.processInfo.arguments.contains("-pipo-account-qa") {
             // Debug-only no-goal privacy QA: authenticated but no onboarding
             // fixture and no seeded personal data.
