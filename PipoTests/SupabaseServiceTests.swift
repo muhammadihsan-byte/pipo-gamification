@@ -309,6 +309,36 @@ extension SupabaseServiceTests {
     }
 
     @MainActor
+    func testGlobalExperienceScheduledMinorUnitsPersistAsDecimalAndDuplicateIDsFail() throws {
+        let owner = UUID()
+        let goal = PersonalGoal(
+            title: "Laptop", category: .gadget, targetAmount: 1500.50,
+            currencyCode: "USD", targetMinorUnits: 150_050,
+            recordedMinorUnits: 0,
+            targetDate: .now.addingTimeInterval(86_400 * 45),
+            ownerUserID: owner
+        )
+        goal.plannedContributionOverride = 12_550 // USD 125.50, NOT $12,550
+        let batch = try PersonalSavingSyncBatch.make(
+            goals: [goal], transactions: [], authenticatedUserID: owner
+        )
+        let json = try XCTUnwrap(JSONSerialization.jsonObject(
+            with: JSONEncoder().encode(batch.goals[0])) as? [String: Any])
+        let planned = try XCTUnwrap(json["planned_contribution_override"] as? NSNumber)
+        XCTAssertEqual(planned.decimalValue, Decimal(string: "125.50"))
+        XCTAssertThrowsError(try PersonalSavingSyncBatch.make(
+            goals: [goal, goal], transactions: [], authenticatedUserID: owner
+        ))
+        let divergent = SavingTransaction(
+            goalId: goal.id, amount: 2.00,
+            amountMinorUnits: 100, currencyCode: "USD", userID: owner
+        )
+        XCTAssertThrowsError(try PersonalSavingSyncBatch.make(
+            goals: [goal], transactions: [divergent], authenticatedUserID: owner
+        ))
+    }
+
+    @MainActor
     func testGlobalExperienceRejectsCrossGoalAndLossyCloudCurrency() throws {
         let user = UUID()
         let goal = PersonalGoal(
