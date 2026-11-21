@@ -108,27 +108,22 @@ enum SupabaseConfigurationError: LocalizedError {
     }
 }
 
-struct SavingTransactionPayload: Codable, Equatable, Sendable {
+struct SavingTransactionPayload: Encodable, Equatable, Sendable {
     let id: UUID
     let goalID: UUID
     let userID: UUID
-    let amount: Double
+    let amount: Double // legacy display/test compatibility; never used for wire encoding
     let xpEarned: Int
-    // A PostgREST timestamp must be ISO 8601, not JSONEncoder's numeric Date default.
     let date: String
+    private let wireAmount: Decimal
 
-    init(
-        id: UUID,
-        goalID: UUID,
-        userID: UUID,
-        amount: Double,
-        xpEarned: Int,
-        date: Date
-    ) {
+    init(id: UUID, goalID: UUID, userID: UUID,
+         amount: Double, xpEarned: Int, date: Date) {
         self.id = id
         self.goalID = goalID
         self.userID = userID
         self.amount = amount
+        wireAmount = Decimal(string: String(amount), locale: Locale(identifier: "en_US_POSIX")) ?? 0
         self.xpEarned = xpEarned
         self.date = ISO8601DateFormatter().string(from: date)
     }
@@ -138,47 +133,54 @@ struct SavingTransactionPayload: Codable, Equatable, Sendable {
         goalID = transaction.goalId
         self.userID = userID
         amount = transaction.amount
+        wireAmount = transaction.amountMinorUnits.map {
+            PipoGoalCurrency.decimal($0, code: transaction.currencyCode ?? "IDR")
+        } ?? Decimal(string: String(transaction.amount), locale: Locale(identifier: "en_US_POSIX")) ?? 0
         xpEarned = transaction.xpEarned
         date = ISO8601DateFormatter().string(from: transaction.date)
     }
 
-    static func makeBatch(
-        from transactions: [SavingTransaction],
-        authenticatedUserID: UUID
-    ) throws -> [SavingTransactionPayload] {
-        guard transactions.allSatisfy({ $0.userID == authenticatedUserID }) else {
-            throw SupabaseServiceError.transactionBelongsToAnotherUser
-        }
-        return transactions.map {
-            SavingTransactionPayload(transaction: $0, userID: authenticatedUserID)
-        }
+    static func makeBatch(from transactions: [SavingTransaction],
+                          authenticatedUserID: UUID) throws -> [SavingTransactionPayload] {
+        guard transactions.allSatisfy({ $0.userID == authenticatedUserID })
+        else { throw SupabaseServiceError.transactionBelongsToAnotherUser }
+        return transactions.map { SavingTransactionPayload(transaction: $0, userID: authenticatedUserID) }
     }
 
     enum CodingKeys: String, CodingKey {
-        case id
+        case id, amount, date
         case goalID = "goal_id"
         case userID = "user_id"
-        case amount
         case xpEarned = "xp_earned"
-        case date
+    }
+
+    func encode(to encoder: Encoder) throws {
+        var c = encoder.container(keyedBy: CodingKeys.self)
+        try c.encode(id, forKey: .id)
+        try c.encode(goalID, forKey: .goalID)
+        try c.encode(userID, forKey: .userID)
+        try c.encode(wireAmount, forKey: .amount)
+        try c.encode(xpEarned, forKey: .xpEarned)
+        try c.encode(date, forKey: .date)
     }
 }
 
-/// Exact payload for the deployed public.saving_goals schema.
-/// Group plans, photos, and legacy ownerless rows are intentionally not
-/// transmitted while their authorization/storage model is unfinished.
-struct SavingGoalPayload: Codable, Equatable, Sendable {
+/// Exact numeric payload for public.saving_goals. The currency is per goal,
+/// never a mutable account-wide preference, and PostgREST receives a Decimal.
+struct SavingGoalPayload: Encodable, Equatable, Sendable {
     let id: UUID
     let userID: UUID
     let title: String
     let category: String
     let customCategory: String?
-    let targetAmount: Double
+    let targetAmount: Double // legacy test/view compatibility
+    let currencyCode: String
     let startDate: String
     let targetDate: String
     let rhythm: String
     let preferredSavingDay: Int?
     let plannedContributionOverride: Int?
+    private let wireTarget: Decimal
 
     init(goal: PersonalGoal, userID: UUID) {
         id = goal.id
@@ -187,6 +189,10 @@ struct SavingGoalPayload: Codable, Equatable, Sendable {
         category = goal.category.rawValue
         customCategory = goal.customCategory
         targetAmount = goal.targetAmount
+        currencyCode = goal.effectiveCurrencyCode
+        wireTarget = goal.exactTargetMinor.map {
+            PipoGoalCurrency.decimal($0, code: goal.effectiveCurrencyCode)
+        } ?? Decimal(string: String(goal.targetAmount), locale: Locale(identifier: "en_US_POSIX")) ?? 0
         startDate = ISO8601DateFormatter().string(from: goal.startDate)
         targetDate = ISO8601DateFormatter().string(from: goal.targetDate)
         rhythm = goal.rhythm.rawValue
@@ -199,10 +205,27 @@ struct SavingGoalPayload: Codable, Equatable, Sendable {
         case userID = "user_id"
         case customCategory = "custom_category"
         case targetAmount = "target_amount"
+        case currencyCode = "currency_code"
         case startDate = "start_date"
         case targetDate = "target_date"
         case preferredSavingDay = "preferred_saving_day"
         case plannedContributionOverride = "planned_contribution_override"
+    }
+
+    func encode(to encoder: Encoder) throws {
+        var c = encoder.container(keyedBy: CodingKeys.self)
+        try c.encode(id, forKey: .id)
+        try c.encode(userID, forKey: .userID)
+        try c.encode(title, forKey: .title)
+        try c.encode(category, forKey: .category)
+        try c.encodeIfPresent(customCategory, forKey: .customCategory)
+        try c.encode(wireTarget, forKey: .targetAmount)
+        try c.encode(currencyCode, forKey: .currencyCode)
+        try c.encode(startDate, forKey: .startDate)
+        try c.encode(targetDate, forKey: .targetDate)
+        try c.encode(rhythm, forKey: .rhythm)
+        try c.encodeIfPresent(preferredSavingDay, forKey: .preferredSavingDay)
+        try c.encodeIfPresent(plannedContributionOverride, forKey: .plannedContributionOverride)
     }
 }
 
@@ -232,10 +255,20 @@ struct PersonalSavingSyncBatch {
             throw SupabaseServiceError.invalidSavingGoal
         }
         let allowedIDs = Set(goals.map(\.id))
-        guard transactions.allSatisfy({
-            $0.userID == authenticatedUserID &&
-            allowedIDs.contains($0.goalId) &&
-            $0.amount.isFinite && $0.amount > 0
+        let byGoal = Dictionary(uniqueKeysWithValues: goals.map { ($0.id, $0) })
+        guard goals.allSatisfy({
+            PipoGoalCurrency.isSupported($0.effectiveCurrencyCode) &&
+            ($0.exactTargetMinor ?? 0) > 0
+        }) else { throw SupabaseServiceError.invalidSavingGoal }
+        guard transactions.allSatisfy({ tx in
+            guard tx.userID == authenticatedUserID,
+                  allowedIDs.contains(tx.goalId),
+                  let goal = byGoal[tx.goalId], tx.amount.isFinite, tx.amount > 0
+            else { return false }
+            let code = goal.effectiveCurrencyCode
+            guard tx.currencyCode == nil || tx.currencyCode == code else { return false }
+            if code != "IDR" && tx.amountMinorUnits == nil { return false }
+            return (tx.amountMinorUnits ?? PipoGoalCurrency.legacyMinor(tx.amount, code: code) ?? 0) > 0
         }) else {
             throw SupabaseServiceError.invalidOrUnownedTransaction
         }
