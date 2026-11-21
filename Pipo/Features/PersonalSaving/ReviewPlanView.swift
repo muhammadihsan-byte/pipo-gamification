@@ -63,6 +63,13 @@ struct ReviewPlanView: View {
         }
     }
 
+    private func money(_ value: Int) -> String {
+        PipoGoalCurrency.formatted(Int64(value), code: plan.currencyCode)
+    }
+    private func money(_ value: Double) -> String {
+        PipoGoalCurrency.display(value, code: plan.currencyCode)
+    }
+
     private var goalCard: some View {
         VStack(alignment: .leading, spacing: 14) {
             HStack(spacing: 12) {
@@ -107,7 +114,9 @@ struct ReviewPlanView: View {
                 PipoBudgetLine(
                     id: item.id,
                     title: item.cleanTitle,
-                    amount: Double(item.rupiah ?? -1)
+                    amount: item.amountMinorUnits.map {
+                        NSDecimalNumber(decimal: PipoGoalCurrency.decimal($0, code: plan.currencyCode)).doubleValue
+                    } ?? -1
                 )
             },
             targetAmount: plan.targetAmount,
@@ -249,10 +258,16 @@ struct ReviewPlanView: View {
             rhythm: plan.rhythm, preferredSavingDay: plan.preferredSavingDay,
             ownerUserID: userID
         )
+        goal.currencyCode = plan.currencyCode
+        goal.targetMinorUnits = plan.targetMinorUnits
+        goal.recordedMinorUnits = 0
         goal.plannedContributionOverride = plan.contributionOverride
         goal.subItems = plan.breakdown.compactMap { item in
-            guard let amount = item.rupiah else { return nil }
-            return SubItem(title: item.cleanTitle, amount: Double(amount))
+            guard let minor = PipoGoalCurrency.parseMinor(item.amount, code: plan.currencyCode) else { return nil }
+            let amount = PipoGoalCurrency.decimal(minor, code: plan.currencyCode)
+            return SubItem(title: item.cleanTitle,
+                amount: NSDecimalNumber(decimal: amount).doubleValue,
+                amountMinorUnits: minor)
         }
 
         profile.userID = userID
