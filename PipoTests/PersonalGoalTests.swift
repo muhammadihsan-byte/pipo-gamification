@@ -1081,3 +1081,124 @@ extension PersonalGoalTests {
         }
     }
 }
+
+extension PersonalGoalTests {
+    func testManagePlanV2CurrencyMinorUnitsAndStrictFormatting() {
+        let idr = Locale(identifier: "id_ID")
+        let us = Locale(identifier: "en_US")
+        XCTAssertEqual(PipoPlanV2Money.fractionDigits(for: "IDR"), 0)
+        XCTAssertEqual(PipoPlanV2Money.fractionDigits(for: "JPY"), 0)
+        XCTAssertEqual(PipoPlanV2Money.fractionDigits(for: "USD"), 2)
+        XCTAssertEqual(PipoPlanV2Money.parse("6.600.000", currency: "IDR", locale: idr),
+                       Decimal(6_600_000))
+        XCTAssertNil(PipoPlanV2Money.parse("6.600.000,50", currency: "IDR", locale: idr))
+        XCTAssertEqual(PipoPlanV2Money.parse("1,234.56", currency: "USD", locale: us),
+                       Decimal(string: "1234.56"))
+        XCTAssertNil(PipoPlanV2Money.parse("1,234.567", currency: "USD", locale: us))
+        XCTAssertNil(PipoPlanV2Money.parse("1,23,4.56", currency: "USD", locale: us))
+        XCTAssertNil(PipoPlanV2Money.parse("1,234.50", currency: "JPY", locale: us))
+        XCTAssertNil(PipoPlanV2Money.parse("1e3", currency: "USD", locale: us))
+        XCTAssertNil(PipoPlanV2Money.parse("-100", currency: "USD", locale: us))
+        XCTAssertNil(PipoPlanV2Money.parse("0", currency: "IDR", locale: idr))
+        XCTAssertNil(PipoPlanV2Money.parse("99999999999999999", currency: "IDR", locale: idr))
+        XCTAssertEqual(PipoPlanV2Money.suggested(Decimal(101), periods: 4, currency: "IDR"),
+                       Decimal(26))
+        XCTAssertEqual(PipoPlanV2Money.suggested(Decimal(1), periods: 8, currency: "USD"),
+                       Decimal(string: "0.13"))
+    }
+
+    func testManagePlanV2FutureSavingPeriodsUseCalendarNotMockNumbers() throws {
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = try XCTUnwrap(TimeZone(identifier: "Asia/Jakarta"))
+        let now = try XCTUnwrap(calendar.date(from: DateComponents(year: 2026, month: 11, day: 21)))
+        let finish = try XCTUnwrap(calendar.date(from: DateComponents(year: 2027, month: 2, day: 20)))
+        let extended = try XCTUnwrap(calendar.date(from: DateComponents(year: 2027, month: 3, day: 20)))
+        let start = try XCTUnwrap(calendar.date(from: DateComponents(year: 2026, month: 11, day: 1)))
+        let weekly = PipoPlanV2Cadence.remainingCount(
+            originalStart: start, finish: finish, rhythm: .weekly,
+            preferredDay: 3, now: now, calendar: calendar
+        )
+        XCTAssertEqual(weekly, 13, "Includes Nov 24; design's 12 was an illustrative December start.")
+        let more = PipoPlanV2Cadence.remainingCount(
+            originalStart: start, finish: extended, rhythm: .weekly,
+            preferredDay: 3, now: now, calendar: calendar
+        )
+        XCTAssertEqual(more, 17)
+        XCTAssertNil(PipoPlanV2Cadence.remainingCount(
+            originalStart: start, finish: finish, rhythm: .flexible,
+            preferredDay: nil, now: now, calendar: calendar
+        ))
+        XCTAssertEqual(PipoPlanV2Cadence.remainingCount(
+            originalStart: start, finish: now, rhythm: .weekly,
+            preferredDay: 3, now: now, calendar: calendar
+        ), 0)
+    }
+
+    @MainActor
+    func testManagePlanV2BudgetMismatchAndFlexiblePreserveOriginalHistory() throws {
+        let owner = UUID()
+        let goal = PersonalGoal(
+            title: "Bali holiday", category: .trip, targetAmount: 6_000_000,
+            currentAmount: 3_600_000,
+            subItems: [
+                SubItem(title: "Flights", amount: 2_000_000),
+                SubItem(title: "Accommodation", amount: 2_500_000),
+                SubItem(title: "Activities", amount: 1_000_000),
+                SubItem(title: "Other", amount: 500_000)
+            ],
+            startDate: .now,
+            targetDate: Calendar.current.date(byAdding: .month, value: 4, to: .now)!,
+            rhythm: .weekly, preferredSavingDay: 3, ownerUserID: owner
+        )
+        let saving = SavingTransaction(goalId: goal.id, amount: 3_600_000, xpEarned: 300, userID: owner)
+        let original = PipoPlanV2Original(goal: goal)
+        var draft = PipoPlanV2Draft(original: original)
+        XCTAssertFalse(draft.isDirty)
+        XCTAssertEqual(original.recorded, Decimal(3_600_000))
+        XCTAssertEqual(goal.progress, 0.6, accuracy: 0.0001)
+        XCTAssertEqual(draft.target, Decimal(6_000_000))
+        draft.targetInput = "6.000.000"
+        XCTAssertFalse(draft.isDirty, "Equivalent IDR grouping is not a real edit")
+        draft.targetInput = "6600000"
+        XCTAssertTrue(draft.isDirty)
+        XCTAssertNotNil(draft.validationError, "Existing item allocation must reconcile")
+        let index = try XCTUnwrap(draft.budget.firstIndex(where: { $0.title == "Activities" }))
+        draft.budget[index].input = "1600000"
+        XCTAssertEqual(draft.allocationTotal, Decimal(6_600_000))
+        XCTAssertNil(draft.validationError)
+
+        draft.rhythm = .flexible
+        draft.preferredDay = nil
+        XCTAssertNil(draft.suggested(), "Flexible must never produce a required scheduled amount")
+        XCTAssertNil(draft.validationError, "Flexible has no deadline or streak enforcement")
+        XCTAssertEqual(goal.targetAmount, 6_000_000)
+        XCTAssertEqual(goal.currentAmount, 3_600_000)
+        XCTAssertEqual(saving.xpEarned, 300)
+        XCTAssertEqual(saving.amount, 3_600_000)
+        XCTAssertEqual(goal.rhythm, .weekly, "Draft cannot mutate persisted cadence")
+        XCTAssertEqual(goal.subItems.first(where: { $0.title == "Activities" })?.amount, 1_000_000)
+    }
+
+    @MainActor
+    func testManagePlanV2BlocksOverfundingAndRestoresSemanticNoChange() {
+        let goal = PersonalGoal(
+            title: "Bali holiday", category: .trip,
+            targetAmount: 6_000_000, currentAmount: 3_600_000,
+            targetDate: Calendar.current.date(byAdding: .month, value: 2, to: .now)!,
+            rhythm: .weekly, preferredSavingDay: 3
+        )
+        let original = PipoPlanV2Original(goal: goal)
+        var draft = PipoPlanV2Draft(original: original)
+        draft.targetInput = "3500000"
+        XCTAssertTrue(draft.validationError?.contains("below") == true)
+        draft.targetInput = "6000000"
+        XCTAssertFalse(draft.isDirty)
+        draft.rhythm = .flexible
+        draft.preferredDay = nil
+        XCTAssertTrue(draft.isDirty)
+        draft.rhythm = .weekly
+        draft.preferredDay = 3
+        XCTAssertFalse(draft.isDirty)
+        XCTAssertEqual(goal.currentAmount, 3_600_000)
+    }
+}
