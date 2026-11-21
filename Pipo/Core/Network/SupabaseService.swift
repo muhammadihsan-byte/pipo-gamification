@@ -225,7 +225,13 @@ struct SavingGoalPayload: Encodable, Equatable, Sendable {
         try c.encode(targetDate, forKey: .targetDate)
         try c.encode(rhythm, forKey: .rhythm)
         try c.encodeIfPresent(preferredSavingDay, forKey: .preferredSavingDay)
-        try c.encodeIfPresent(plannedContributionOverride, forKey: .plannedContributionOverride)
+        if let plannedContributionOverride {
+            // The local schedule stores minor units; Postgres numeric(15,2)
+            // stores major currency units, never a cent count.
+            try c.encode(PipoGoalCurrency.decimal(
+                Int64(plannedContributionOverride), code: currencyCode
+            ), forKey: .plannedContributionOverride)
+        }
     }
 }
 
@@ -255,10 +261,19 @@ struct PersonalSavingSyncBatch {
             throw SupabaseServiceError.invalidSavingGoal
         }
         let allowedIDs = Set(goals.map(\.id))
+        // Duplicate identifiers must fail closed, not trap in a Dictionary
+        // initializer while preparing an authenticated sync batch.
+        guard allowedIDs.count == goals.count else {
+            throw SupabaseServiceError.invalidSavingGoal
+        }
         let byGoal = Dictionary(uniqueKeysWithValues: goals.map { ($0.id, $0) })
         guard goals.allSatisfy({
             PipoGoalCurrency.isSupported($0.effectiveCurrencyCode) &&
-            ($0.exactTargetMinor ?? 0) > 0
+            ($0.effectiveCurrencyCode == "IDR" || $0.targetMinorUnits != nil) &&
+            ($0.exactTargetMinor ?? 0) > 0 &&
+            PipoGoalCurrency.legacyMinor(
+                $0.targetAmount, code: $0.effectiveCurrencyCode
+            ) == $0.exactTargetMinor
         }) else { throw SupabaseServiceError.invalidSavingGoal }
         guard transactions.allSatisfy({ tx in
             guard tx.userID == authenticatedUserID,
@@ -268,7 +283,9 @@ struct PersonalSavingSyncBatch {
             let code = goal.effectiveCurrencyCode
             guard tx.currencyCode == nil || tx.currencyCode == code else { return false }
             if code != "IDR" && tx.amountMinorUnits == nil { return false }
-            return (tx.amountMinorUnits ?? PipoGoalCurrency.legacyMinor(tx.amount, code: code) ?? 0) > 0
+            let parsed = PipoGoalCurrency.legacyMinor(tx.amount, code: code)
+            let minor = tx.amountMinorUnits ?? parsed ?? 0
+            return minor > 0 && parsed == minor
         }) else {
             throw SupabaseServiceError.invalidOrUnownedTransaction
         }
