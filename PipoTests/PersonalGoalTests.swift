@@ -6,6 +6,30 @@ import XCTest
 
 final class PersonalGoalTests: XCTestCase {
 
+    func testGlobalV1ScheduledContributionExplanationUsesGoalCurrency() throws {
+        let start = Date(timeIntervalSince1970: 1_800_000_000)
+        let schedule = try XCTUnwrap(PersonalSavingSchedule(
+            targetAmount: 150_050,
+            startDate: start,
+            targetDate: start.addingTimeInterval(60 * 60 * 24 * 45),
+            rhythm: .weekly,
+            preferredDay: 2,
+            calendar: Calendar(identifier: .gregorian)
+        ))
+        let usdAmount = PipoGoalCurrency.formatted(Int64(schedule.amount), code: "USD")
+        let usdCopy = scheduleDetails(schedule, currencyCode: "USD")
+        XCTAssertTrue(usdCopy.contains(usdAmount))
+        XCTAssertFalse(usdCopy.contains("Rp"))
+
+        let exactOverride = 12_550
+        XCTAssertTrue(scheduleDetails(schedule, override: exactOverride, currencyCode: "USD")
+            .contains(PipoGoalCurrency.formatted(Int64(exactOverride), code: "USD")))
+        XCTAssertTrue(scheduleDetails(schedule, currencyCode: "JPY")
+            .contains(PipoGoalCurrency.formatted(Int64(schedule.amount), code: "JPY")))
+        XCTAssertTrue(scheduleDetails(schedule)
+            .contains(PersonalPlanFormatting.rupiah(schedule.amount)))
+    }
+
     @MainActor
     func testGlobalV1InterruptedOnboardingIsScopedAndDiscardedOnDeletion() {
         let owner = UUID()
