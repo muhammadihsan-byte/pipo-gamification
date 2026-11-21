@@ -341,7 +341,7 @@ struct RootView: View {
     }
 
     private var onboardingView: some View {
-        OnboardingContainerView { personalization in
+        OnboardingContainerView(ownerUserID: authStateManager.userID) { personalization in
             if isOnboardingQA {
                 if let userID = authStateManager.userID {
                     _ = OnboardingProfileStore.save(personalization, for: userID)
