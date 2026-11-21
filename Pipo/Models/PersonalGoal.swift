@@ -43,6 +43,8 @@ final class SubItem {
     var id: UUID
     var title: String
     var amount: Double
+    // Optional exact value for new multi-currency breakdown rows.
+    var amountMinorUnits: Int64?
     var isCompleted: Bool
     var goal: PersonalGoal?
 
@@ -50,12 +52,14 @@ final class SubItem {
         id: UUID = UUID(),
         title: String,
         amount: Double,
+        amountMinorUnits: Int64? = nil,
         isCompleted: Bool = false,
         goal: PersonalGoal? = nil
     ) {
         self.id = id
         self.title = title
         self.amount = amount
+        self.amountMinorUnits = amountMinorUnits
         self.isCompleted = isCompleted
         self.goal = goal
     }
@@ -69,6 +73,11 @@ final class PersonalGoal {
     var customCategory: String?
     var targetAmount: Double
     var currentAmount: Double
+    // Legacy local rows predate currencies and are IDR. Optional fields
+    // enable SwiftData lightweight migration without touching old history.
+    var currencyCode: String?
+    var targetMinorUnits: Int64?
+    var recordedMinorUnits: Int64?
     @Relationship(deleteRule: .cascade, inverse: \SubItem.goal)
     var subItems: [SubItem]
     var startDate: Date
@@ -95,6 +104,9 @@ final class PersonalGoal {
         customCategory: String? = nil,
         targetAmount: Double,
         currentAmount: Double = 0,
+        currencyCode: String? = nil,
+        targetMinorUnits: Int64? = nil,
+        recordedMinorUnits: Int64? = nil,
         subItems: [SubItem] = [],
         startDate: Date = .now,
         targetDate: Date,
@@ -112,6 +124,9 @@ final class PersonalGoal {
         self.customCategory = customCategory
         self.targetAmount = targetAmount
         self.currentAmount = currentAmount
+        self.currencyCode = currencyCode
+        self.targetMinorUnits = targetMinorUnits
+        self.recordedMinorUnits = recordedMinorUnits
         self.subItems = subItems
         self.startDate = startDate
         self.targetDate = targetDate
@@ -153,7 +168,24 @@ final class PersonalGoal {
         return true
     }
 
+    var effectiveCurrencyCode: String {
+        currencyCode == nil ? "IDR" : currencyCode!.uppercased()
+    }
+
+    var exactTargetMinor: Int64? {
+        targetMinorUnits ?? PipoGoalCurrency.legacyMinor(targetAmount, code: effectiveCurrencyCode)
+    }
+
+    var exactRecordedMinor: Int64? {
+        recordedMinorUnits ?? PipoGoalCurrency.legacyMinor(currentAmount, code: effectiveCurrencyCode)
+    }
+
     var progress: Double {
+        if let target = exactTargetMinor, target > 0, let recorded = exactRecordedMinor {
+            let fraction = PipoGoalCurrency.decimal(recorded, code: effectiveCurrencyCode)
+                / PipoGoalCurrency.decimal(target, code: effectiveCurrencyCode)
+            return min(max(NSDecimalNumber(decimal: fraction).doubleValue, 0), 1)
+        }
         guard targetAmount > 0 else { return 0 }
         return min(max(currentAmount / targetAmount, 0), 1)
     }
