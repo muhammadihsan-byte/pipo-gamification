@@ -314,32 +314,104 @@ final class PipoUIRecordingTests: XCTestCase {
         attachOnboardingScreen("Issue 48 — Goal hero no-cover, one progress rail")
     }
 
-    /// #42 safe-native UI regression: both new sheets are navigable, but
-    /// no account record changes can be confirmed without the backend gate.
+    /// Approved Option B: Goal Detail and Manage Plan use the SAME signed-in
+    /// fixture; screenshots never splice the 25% B00 and 60% B01 mockups.
+    /// No production data, plan fields, XP, or ledger are written by these taps.
+    func testManagePlanV2OverviewFlexibleImpactReviewAndMoneyOutSafety() {
+        continueAfterFailure = false
+        app.launchArguments = ["-pipo-dashboard-qa"]
+        app.launch()
+        tapButton("pipo.dashboard.focusGoal")
+        XCTAssertTrue(app.buttons["pipo.goal.recordSaving"].waitForExistence(timeout: 15))
+        attachOnboardingScreen("Manage Plan V2 BEFORE — Goal Detail same fixture")
+        tapButton("pipo.goal.planRevisionPreview")
+        XCTAssertTrue(app.staticTexts["Your plan, your pace."].waitForExistence(timeout: 15))
+        XCTAssertTrue(app.otherElements["pipo.plan.v2.recorded"].exists)
+        XCTAssertFalse(app.buttons["pipo.plan.v2.primary"].isEnabled)
+        attachOnboardingScreen("Manage Plan V2 B01 — Approved overview")
+        tapButton("pipo.plan.v2.editRhythm")
+        XCTAssertTrue(app.staticTexts["Find your pace."].waitForExistence(timeout: 10))
+        attachOnboardingScreen("Manage Plan V2 B03 — Rhythm options")
+        tapButton("pipo.plan.v2.rhythm.flexible")
+        XCTAssertTrue(app.staticTexts["Save when it feels right."].waitForExistence(timeout: 10))
+        XCTAssertTrue(app.staticTexts["Previous XP and saving history stay earned."].exists)
+        XCTAssertTrue(app.buttons["pipo.plan.v2.primary"].isEnabled)
+        attachOnboardingScreen("Manage Plan V2 B08 — Flexible no pressure")
+        tapButton("pipo.plan.v2.primary")
+        XCTAssertTrue(app.staticTexts["Here's what changes."].waitForExistence(timeout: 10))
+        XCTAssertTrue(app.staticTexts["No fixed schedule"].exists)
+        attachOnboardingScreen("Manage Plan V2 B04 — Flexible impact")
+        tapButton("pipo.plan.v2.primary")
+        XCTAssertTrue(app.staticTexts["Review your new plan."].waitForExistence(timeout: 10))
+        let finalSave = app.buttons["pipo.plan.v2.primary"]
+        XCTAssertTrue(finalSave.exists)
+        XCTAssertFalse(finalSave.isEnabled, "Server-owned plan revision is not approved")
+        XCTAssertTrue(app.staticTexts["The original plan remains active. This is a draft only."].exists)
+        attachOnboardingScreen("Manage Plan V2 B05 — Unsaved review")
+        tapButton("pipo.plan.v2.back")
+        XCTAssertTrue(app.staticTexts["Here's what changes."].exists)
+        tapButton("pipo.plan.v2.back")
+        XCTAssertTrue(app.staticTexts["Save when it feels right."].exists)
+        tapButton("pipo.plan.v2.back")
+        XCTAssertTrue(app.staticTexts["Your plan, your pace."].exists)
+
+        // Dirty draft cannot silently close; keep editing retains its inputs.
+        tapButton("pipo.plan.v2.back")
+        XCTAssertTrue(app.buttons["Discard draft"].waitForExistence(timeout: 10))
+        tapButton("Keep editing")
+        XCTAssertTrue(app.staticTexts["Your plan, your pace."].exists)
+        tapButton("pipo.plan.v2.back")
+        tapButton("Discard draft")
+        XCTAssertTrue(app.buttons["pipo.goal.moneyOutPreview"].waitForExistence(timeout: 15))
+        tapButton("pipo.goal.moneyOutPreview")
+        XCTAssertTrue(app.navigationBars["Money used elsewhere"].waitForExistence(timeout: 10))
+        XCTAssertTrue(app.textFields["pipo.card.moneyOut.amount"].exists)
+        attachOnboardingScreen("Manage Plan V2 REGRESSION — Money Out preserved")
+    }
+
+    func testManagePlanV2TargetAndDateEditorsAreFocusedAndNonMutating() {
+        continueAfterFailure = false
+        app.launchArguments = ["-pipo-dashboard-qa"]
+        app.launch()
+        tapButton("pipo.dashboard.focusGoal")
+        tapButton("pipo.goal.planRevisionPreview")
+        tapButton("pipo.plan.v2.editTarget")
+        XCTAssertTrue(app.staticTexts["Change the target."].waitForExistence(timeout: 10))
+        XCTAssertTrue(app.textFields["pipo.plan.v2.targetAmount"].exists)
+        attachOnboardingScreen("Manage Plan V2 B02 — Focused target")
+        // Keyboard can be shown without hiding target context or forcing a save.
+        let field = app.textFields["pipo.plan.v2.targetAmount"]
+        bringIntoView(field)
+        field.tap()
+        attachOnboardingScreen("Manage Plan V2 B10 — Keyboard safe target")
+        tapButton("pipo.plan.v2.back")
+        XCTAssertTrue(app.staticTexts["Your plan, your pace."].waitForExistence(timeout: 10))
+        tapButton("pipo.plan.v2.editDate")
+        XCTAssertTrue(app.staticTexts["Change the finish date."].waitForExistence(timeout: 10))
+        XCTAssertTrue(app.datePickers["pipo.plan.v2.finishDate"].exists ||
+                      app.buttons["pipo.plan.v2.finishDate"].exists,
+                      "The native date picker must remain VoiceOver discoverable")
+        attachOnboardingScreen("Manage Plan V2 B13 — Finish date")
+        XCTAssertFalse(app.buttons["pipo.plan.v2.primary"].isEnabled)
+    }
+
+    /// Legacy #42 regressions: both sheets still open, but neither can mutate
+    /// account history or complete a financial write.
     func testIssue42PlanAndMoneyOutRemainReviewOnly() {
         continueAfterFailure = false
         app.launchArguments = ["-pipo-dashboard-qa"]
         app.launch()
         tapButton("pipo.dashboard.focusGoal")
-        XCTAssertTrue(app.buttons["pipo.goal.planRevisionPreview"]
-                      .waitForExistence(timeout: 15))
         tapButton("pipo.goal.planRevisionPreview")
-        XCTAssertTrue(app.navigationBars["Manage plan"].waitForExistence(timeout: 12))
-        XCTAssertTrue(app.buttons["Save plan changes — coming after secure sync"]
-                      .exists)
-        XCTAssertFalse(app.buttons["Save plan changes — coming after secure sync"]
-                       .isEnabled)
-        attachOnboardingScreen("Issue 42 — Managed plan review, no writes")
-        tapButton("Done")
+        XCTAssertTrue(app.staticTexts["Your plan, your pace."].waitForExistence(timeout: 15))
+        XCTAssertFalse(app.buttons["pipo.plan.v2.primary"].isEnabled)
+        attachOnboardingScreen("Issue 42 — Approved V2 overview, no writes")
+        tapButton("pipo.plan.v2.back")
         tapButton("pipo.goal.moneyOutPreview")
-        XCTAssertTrue(app.navigationBars["Money used elsewhere"]
-                      .waitForExistence(timeout: 12))
-        // Capture the form hierarchy before typing so a regression in
-        // field exposure has usable visual evidence instead of a timeout.
+        XCTAssertTrue(app.navigationBars["Money used elsewhere"].waitForExistence(timeout: 12))
         attachOnboardingScreen("Issue 42 — Money Out input is visible")
         let input = app.textFields["pipo.card.moneyOut.amount"].firstMatch
-        XCTAssertTrue(input.waitForExistence(timeout: 12),
-                      "The approved Money Out input must remain an editable text field")
+        XCTAssertTrue(input.waitForExistence(timeout: 12))
         typeText("pipo.card.moneyOut.amount", value: "500000")
         tapButton("pipo.card.moneyOut.review")
         XCTAssertTrue(app.staticTexts["A CHANGE, NOT A RESET"]
