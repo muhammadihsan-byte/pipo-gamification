@@ -6,6 +6,9 @@ final class SavingTransaction {
     var id: UUID
     var goalId: UUID
     var amount: Double
+    // Exact minor-unit amount for newly recorded goal currencies.
+    var amountMinorUnits: Int64?
+    var currencyCode: String?
     var xpEarned: Int
     var date: Date
     var userID: UUID?
@@ -14,6 +17,8 @@ final class SavingTransaction {
         id: UUID = UUID(),
         goalId: UUID,
         amount: Double,
+        amountMinorUnits: Int64? = nil,
+        currencyCode: String? = nil,
         xpEarned: Int = 300,
         date: Date = .now,
         userID: UUID? = nil
@@ -21,6 +26,8 @@ final class SavingTransaction {
         self.id = id
         self.goalId = goalId
         self.amount = amount
+        self.amountMinorUnits = amountMinorUnits
+        self.currencyCode = currencyCode
         self.xpEarned = xpEarned
         self.date = date
         self.userID = userID
