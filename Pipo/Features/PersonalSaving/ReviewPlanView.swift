@@ -120,6 +120,7 @@ struct ReviewPlanView: View {
                 )
             },
             targetAmount: plan.targetAmount,
+            currencyCode: plan.currencyCode,
             onEdit: { onEdit(.target) }
         )
     }
@@ -607,7 +608,8 @@ struct PersonalGoalDetailView: View {
                     lines: goal.subItems.map {
                         PipoBudgetLine(id: $0.id, title: $0.title, amount: $0.amount)
                     },
-                    targetAmount: goal.targetAmount
+                    targetAmount: goal.targetAmount,
+                    currencyCode: goal.effectiveCurrencyCode
                 )
             }
 
