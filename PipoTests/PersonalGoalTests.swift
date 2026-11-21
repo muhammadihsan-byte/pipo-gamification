@@ -810,3 +810,97 @@ extension PersonalGoalTests {
         XCTAssertThrowsError(try journal.stage(request, ownerID: owner))
     }
 }
+
+// #42: a cloud ledger must never credit money that was not originally logged.
+extension PersonalGoalTests {
+    func testIssue42LedgerRejectsPhantomSavingsCorrection() {
+        let owner = UUID(), goal = UUID(), withdrawalID = UUID()
+        let saving = SavingTransaction(
+            goalId: goal, amount: 1_500_000, xpEarned: 300, userID: owner
+        )
+        let withdrawal = SavingAdjustmentEvent(
+            id: withdrawalID, goalID: goal, userID: owner,
+            kind: .moneyOut, amount: 500_000,
+            correctsEventID: nil, date: .now
+        )
+        let impossibleCorrection = SavingAdjustmentEvent(
+            id: UUID(), goalID: goal, userID: owner,
+            kind: .correction, amount: 600_000,
+            correctsEventID: withdrawalID, date: .now
+        )
+        XCTAssertThrowsError(try SavingLedgerSnapshot.reconstruct(
+            goalID: goal, ownerID: owner, savings: [saving],
+            adjustments: [withdrawal, impossibleCorrection]
+        )) { error in
+            XCTAssertEqual(error as? SavingLedgerError, .malformedEvent)
+        }
+    }
+
+    func testIssue42LedgerRejectsOverReversedRepeatedCorrections() throws {
+        let owner = UUID(), goal = UUID(), withdrawalID = UUID()
+        let saving = SavingTransaction(
+            goalId: goal, amount: 1_500_000, xpEarned: 300, userID: owner
+        )
+        let withdrawal = SavingAdjustmentEvent(
+            id: withdrawalID, goalID: goal, userID: owner,
+            kind: .moneyOut, amount: 500_000,
+            correctsEventID: nil, date: .now
+        )
+        let first = SavingAdjustmentEvent(
+            id: UUID(), goalID: goal, userID: owner,
+            kind: .correction, amount: 200_000,
+            correctsEventID: withdrawalID, date: .now
+        )
+        let tooMuch = SavingAdjustmentEvent(
+            id: UUID(), goalID: goal, userID: owner,
+            kind: .correction, amount: 350_000,
+            correctsEventID: withdrawalID, date: .now
+        )
+        XCTAssertThrowsError(try SavingLedgerSnapshot.reconstruct(
+            goalID: goal, ownerID: owner, savings: [saving],
+            adjustments: [first, withdrawal, tooMuch]
+        )) { error in
+            XCTAssertEqual(error as? SavingLedgerError, .malformedEvent)
+        }
+
+        // Increasing an already-corrected money-out is legitimate as long as
+        // the recorded balance remains non-negative and XP stays unchanged.
+        let validAdjustment = SavingAdjustmentEvent(
+            id: UUID(), goalID: goal, userID: owner,
+            kind: .correction, amount: -100_000,
+            correctsEventID: withdrawalID, date: .now
+        )
+        let valid = try SavingLedgerSnapshot.reconstruct(
+            goalID: goal, ownerID: owner, savings: [saving],
+            adjustments: [first, withdrawal, validAdjustment]
+        )
+        XCTAssertEqual(valid.netRecorded, 1_100_000)
+        XCTAssertEqual(valid.earnedXP, 300)
+    }
+
+    func testIssue42CloudRecoveryRejectsPhantomSavingsCorrection() {
+        let owner = UUID(), goal = UUID(), withdrawalID = UUID()
+        let original = SavingLedgerCloudAdjustment(
+            id: withdrawalID, goalID: goal, userID: owner,
+            kind: "money_out", amount: 500_000,
+            correctsEventID: nil, createdAt: "2026-11-19T13:00:00Z"
+        )
+        let forged = SavingLedgerCloudAdjustment(
+            id: UUID(), goalID: goal, userID: owner,
+            kind: "correction", amount: 600_000,
+            correctsEventID: withdrawalID,
+            createdAt: "2026-11-19T13:01:00Z"
+        )
+        let saving = SavingLedgerCloudContribution(
+            id: UUID(), goalID: goal, userID: owner,
+            amount: 1_500_000, xpEarned: 300,
+            date: "2026-11-19T12:00:00Z"
+        )
+        XCTAssertThrowsError(try SavingCloudLedgerReconciler.reconstruct(
+            goalID: goal, ownerID: owner,
+            contributions: [saving], adjustments: [original, forged]
+        )) { error in
+            XCTAssertEqual(error as? SavingLedgerError, .malformedEvent)
+        }
+    }
+}
