@@ -415,6 +415,14 @@ struct PipoManagePlanV2Sheet: View {
         NavigationStack {
             GeometryReader { geometry in
                 let horizontal: CGFloat = geometry.size.width <= 350 ? 16 : 20
+                // Compact iPhone layouts need a bottom breathing area for
+                // the primary action even when NavigationStack and a hosted
+                // sheet report mismatched safe-area geometry during rotation.
+                // Reserve this space by shrinking the scrollable editor, not
+                // by shifting or clipping the action itself.
+                let compactBottomReserve: CGFloat = horizontal <= 16
+                    ? max(geometry.safeAreaInsets.bottom, 40) + 16
+                    : 0
                 VStack(spacing: 0) {
                     topBar
                         .padding(.horizontal, horizontal)
@@ -468,6 +476,7 @@ struct PipoManagePlanV2Sheet: View {
                         .fixedSize(horizontal: false, vertical: true)
                         .layoutPriority(1)
                 }
+                .padding(.bottom, compactBottomReserve)
                 .frame(width: geometry.size.width,
                        height: geometry.size.height,
                        alignment: .top)
@@ -476,6 +485,13 @@ struct PipoManagePlanV2Sheet: View {
                     #if DEBUG
                     if horizontal <= 16 {
                         print("PIPO_320_GEOMETRY height=\(geometry.size.height) top=\(geometry.safeAreaInsets.top) bottom=\(geometry.safeAreaInsets.bottom)")
+                    }
+                    #endif
+                }
+                .onChange(of: geometry.size) { _ in
+                    #if DEBUG
+                    if horizontal <= 16 {
+                        print("PIPO_320_GEOMETRY_UPDATE height=\(geometry.size.height) top=\(geometry.safeAreaInsets.top) bottom=\(geometry.safeAreaInsets.bottom) reserved=\(compactBottomReserve)")
                     }
                     #endif
                 }
@@ -1004,6 +1020,12 @@ struct PipoManagePlanV2Sheet: View {
                     if horizontal <= 16 {
                         let r = metrics.frame(in: .global)
                         print("PIPO_320_FOOTER globalY=\(r.origin.y) height=\(r.height) bottom=\(r.maxY)")
+                    }
+                }
+                .onChange(of: metrics.size) { _ in
+                    if horizontal <= 16 {
+                        let r = metrics.frame(in: .global)
+                        print("PIPO_320_FOOTER_UPDATE globalY=\(r.origin.y) height=\(r.height) bottom=\(r.maxY)")
                     }
                 }
             }
