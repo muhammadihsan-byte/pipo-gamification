@@ -438,14 +438,30 @@ struct PersonalGoalDetailView: View {
         }
         .sheet(isPresented: $showingMoneyOutPreview) {
             if let goal = ownedGoal {
-                PipoMoneyOutReviewSheet(
-                    availableAmount: goal.currentAmount,
-                    targetAmount: goal.targetAmount,
-                    xpEarned: UserProfile.existing(
-                        for: authStateManager.userID, in: profiles
-                    )?.totalXP ?? 0,
-                    onClose: { showingMoneyOutPreview = false }
-                )
+                if goal.effectiveCurrencyCode == "IDR" {
+                    PipoMoneyOutReviewSheet(
+                        availableAmount: goal.currentAmount,
+                        targetAmount: goal.targetAmount,
+                        xpEarned: UserProfile.existing(
+                            for: authStateManager.userID, in: profiles
+                        )?.totalXP ?? 0,
+                        onClose: { showingMoneyOutPreview = false }
+                    )
+                } else {
+                    NavigationStack {
+                        ContentUnavailableView(
+                            "Money Out preview isn’t available in " + goal.effectiveCurrencyCode,
+                            systemImage: "hand.raised",
+                            description: Text("Your manually recorded savings stay intact. Multi-currency Money Out needs a separately validated ledger; no money has moved.")
+                        )
+                        .navigationTitle("Money used elsewhere")
+                        .toolbar {
+                            ToolbarItem(placement: .confirmationAction) {
+                                Button("Done") { showingMoneyOutPreview = false }
+                            }
+                        }
+                    }
+                }
             }
         }
         .alert("Goal not updated", isPresented: Binding(
