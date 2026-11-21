@@ -483,7 +483,7 @@ struct DashboardView: View {
                     }
                     Spacer(minLength: 6)
                     if let amount = plannedAmount(for: goal) {
-                        Text(money(amount))
+                        Text(money(amount, goal: goal))
                             .font(.subheadline.bold())
                             .multilineTextAlignment(.trailing)
                     }
@@ -1430,11 +1430,11 @@ enum DashboardSchedule {
         calendar: Calendar = .current
     ) -> Date? {
         guard goal.canRecordSaving, goal.rhythm != .flexible,
-              goal.targetAmount.isFinite,
-              goal.targetAmount >= 1,
-              goal.targetAmount < Double(Int.max),
+              let targetMinor = goal.exactTargetMinor,
+              targetMinor > 0,
+              let scheduledTarget = Int(exactly: targetMinor),
               let schedule = PersonalSavingSchedule(
-                  targetAmount: Int(goal.targetAmount),
+                  targetAmount: scheduledTarget,
                   startDate: goal.startDate,
                   targetDate: goal.targetDate,
                   rhythm: goal.rhythm,
