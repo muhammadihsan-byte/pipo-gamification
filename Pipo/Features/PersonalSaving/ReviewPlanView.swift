@@ -114,7 +114,7 @@ struct ReviewPlanView: View {
                 PipoBudgetLine(
                     id: item.id,
                     title: item.cleanTitle,
-                    amount: item.amountMinorUnits.map {
+                    amount: PipoGoalCurrency.parseMinor(item.amount, code: plan.currencyCode).map {
                         NSDecimalNumber(decimal: PipoGoalCurrency.decimal($0, code: plan.currencyCode)).doubleValue
                     } ?? -1
                 )
