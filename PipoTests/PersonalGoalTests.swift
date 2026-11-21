@@ -5,6 +5,58 @@ import XCTest
 @testable import Pipo
 
 final class PersonalGoalTests: XCTestCase {
+
+    /// Uses a unique disk-backed synthetic SwiftData store (never the user's
+    /// production container) to exercise the same relaunch persistence path.
+    @MainActor
+    func testGlobalV1GoalCurrencyAndExactHistorySurviveDiskReopen() throws {
+        let schema = Schema([
+            PersonalGoal.self, SubItem.self, SavingTransaction.self, UserProfile.self
+        ])
+        let storeURL = FileManager.default.temporaryDirectory
+            .appendingPathComponent("pipo-currency-v1-" + UUID().uuidString + ".store")
+        let configuration = ModelConfiguration(schema: schema, url: storeURL)
+        let first = try ModelContainer(for: schema, configurations: [configuration])
+        let context = ModelContext(first)
+        let owner = UUID()
+        let goal = PersonalGoal(
+            title: "Laptop in USD", category: .gadget,
+            targetAmount: 1500.50, currentAmount: 100.25,
+            currencyCode: "USD", targetMinorUnits: 150_050,
+            recordedMinorUnits: 10_025,
+            targetDate: .now.addingTimeInterval(86_400 * 45),
+            ownerUserID: owner
+        )
+        let saving = SavingTransaction(
+            goalId: goal.id, amount: 100.25, amountMinorUnits: 10_025,
+            currencyCode: "USD", userID: owner
+        )
+        let profile = UserProfile(
+            userID: owner, totalXP: 900, currentLevel: 2,
+            unlockedBadgeIds: ["first-save"]
+        )
+        context.insert(goal)
+        context.insert(saving)
+        context.insert(profile)
+        try context.save()
+
+        let reopened = try ModelContainer(for: schema, configurations: [configuration])
+        let reader = ModelContext(reopened)
+        let restored = try XCTUnwrap(reader.fetch(FetchDescriptor<PersonalGoal>())
+            .first(where: { $0.id == goal.id }))
+        XCTAssertEqual(restored.effectiveCurrencyCode, "USD")
+        XCTAssertEqual(restored.exactTargetMinor, 150_050)
+        XCTAssertEqual(restored.exactRecordedMinor, 10_025)
+        let history = try XCTUnwrap(reader.fetch(FetchDescriptor<SavingTransaction>())
+            .first(where: { $0.id == saving.id }))
+        XCTAssertEqual(history.currencyCode, "USD")
+        XCTAssertEqual(history.amountMinorUnits, 10_025)
+        let savedProfile = try XCTUnwrap(reader.fetch(FetchDescriptor<UserProfile>())
+            .first(where: { $0.userID == owner }))
+        XCTAssertEqual(savedProfile.totalXP, 900)
+        XCTAssertEqual(savedProfile.unlockedBadgeIds, ["first-save"])
+    }
+
     func testApprovedBudgetBUsesRecordedBreakdownNotSampleAmounts() {
         let goalID = UUID()
         let rows = [
