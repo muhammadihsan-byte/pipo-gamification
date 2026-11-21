@@ -123,8 +123,12 @@ struct PipoPlanV2Original: Equatable {
     @MainActor
     init(goal: PersonalGoal) {
         title = goal.title
-        target = PipoPlanV2Money.decimal(goal.targetAmount) ?? 0
-        recorded = PipoPlanV2Money.decimal(goal.currentAmount) ?? 0
+        target = goal.exactTargetMinor.map {
+            PipoGoalCurrency.decimal($0, code: goal.effectiveCurrencyCode)
+        } ?? 0
+        recorded = goal.exactRecordedMinor.map {
+            PipoGoalCurrency.decimal($0, code: goal.effectiveCurrencyCode)
+        } ?? 0
         targetDate = goal.targetDate
         startDate = goal.startDate
         rhythm = goal.rhythm
@@ -138,13 +142,18 @@ struct PipoPlanV2Original: Equatable {
         } else {
             preferredDay = nil
         }
-        currency = "IDR"
+        currency = goal.effectiveCurrencyCode
         budget = goal.subItems.sorted { $0.title.localizedCaseInsensitiveCompare($1.title) == .orderedAscending }
             .map {
                 PipoPlanV2Budget(
                     id: $0.id, title: $0.title,
                     input: PipoPlanV2Money.editable(
-                        PipoPlanV2Money.decimal($0.amount) ?? 0, currency: "IDR"
+                        PipoGoalCurrency.decimal(
+                            $0.amountMinorUnits ?? PipoGoalCurrency.legacyMinor(
+                                $0.amount, code: goal.effectiveCurrencyCode
+                            ) ?? 0,
+                            code: goal.effectiveCurrencyCode
+                        ), currency: goal.effectiveCurrencyCode
                     )
                 )
             }
