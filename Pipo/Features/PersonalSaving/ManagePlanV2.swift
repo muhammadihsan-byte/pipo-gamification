@@ -409,7 +409,7 @@ struct PipoManagePlanV2Sheet: View {
                             }
                             .padding(.top, 15)
                             content
-                            if step != .review {
+                            if step != .review && step != .overview {
                                 Text("Nothing changes in your saved records until a secure save is available.")
                                     .font(.footnote)
                                     .foregroundStyle(PipoTheme.cardMuted)
@@ -422,7 +422,9 @@ struct PipoManagePlanV2Sheet: View {
                         .frame(maxWidth: .infinity)
                     }
                     .scrollDismissesKeyboard(.interactively)
-                    footer(horizontal: horizontal)
+                    .safeAreaInset(edge: .bottom, spacing: 0) {
+                        footer(horizontal: horizontal)
+                    }
                 }
                 .background(.white)
             }
@@ -500,7 +502,10 @@ struct PipoManagePlanV2Sheet: View {
                         .accessibilityIdentifier("pipo.plan.v2.progress")
                 }
                 ProgressView(value: progress)
+                    .progressViewStyle(.linear)
                     .tint(PipoTheme.pink)
+                    .scaleEffect(x: 1, y: 2.5, anchor: .center)
+                    .frame(height: 10)
                     .accessibilityLabel("Manually recorded progress")
                     .accessibilityValue(progressText)
                 Text("Past savings and earned badges are preserved.")
