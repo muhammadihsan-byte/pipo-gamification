@@ -296,6 +296,7 @@ jobs:
             -resultBundlePath "$RUNNER_TEMP/PipoGlobalExperienceV1QA.xcresult" \
             -only-testing:PipoUITests/PipoUIRecordingTests/testPostLoginPersonalizationAndWidgetPreview \
             -only-testing:PipoUITests/PipoUIRecordingTests/testGlobalExperienceUSDGoalCurrencySelectionAndReopen \
+            -only-testing:PipoUITests/PipoUIRecordingTests/testGlobalV1AccessibilityLabelsAndTargetsAtLargeText \
             -only-testing:PipoUITests/PipoUIRecordingTests/testPersonalSavingJourney \
             -only-testing:PipoUITests/PipoUIRecordingTests/testManagePlanV2OverviewFlexibleImpactReviewAndMoneyOutSafety \
             -only-testing:PipoUITests/PipoUIRecordingTests/testManagePlanV2TargetAndDateEditorsAreFocusedAndNonMutating \
