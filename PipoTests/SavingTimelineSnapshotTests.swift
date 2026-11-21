@@ -74,40 +74,52 @@ final class SavingTimelineSnapshotTests: XCTestCase {
         }
     }
 
-    /// Keep the UIKit window for correct ScrollView and safe-area behavior,
-    /// but render the hosted content view at the requested snapshot size.
-    /// A UIWindowScene can resize a visible UIWindow to the simulator's native
-    /// screen height (e.g. >760pt), even when window.frame is set to 320x760.
-    /// Capturing window.drawHierarchy then clips a taller layout at 760pt.
+    /// Embed a fixed-size SwiftUI host as a child controller inside the live
+    /// UIWindow. UIWindowScene is free to resize its root view to the simulator's
+    /// physical dimensions; using a constrained child is necessary for genuine
+    /// 320×760 / 393×956 SwiftUI layout measurements.
+    ///
+    /// Do not relax the existing bottom-clearance assertion: the returned
+    /// screenshot must show the CTA fully inside the child viewport.
     private func renderInWindow<Content: View>(_ content: Content, size: CGSize) -> UIImage? {
         guard let scene = UIApplication.shared.connectedScenes
             .compactMap({ $0 as? UIWindowScene }).first else { return nil }
         let previousKeyWindow = scene.windows.first(where: { $0.isKeyWindow })
-        let controller = UIHostingController(rootView: content)
+        let container = UIViewController()
+        container.view.backgroundColor = .white
+        let host = UIHostingController(rootView: content)
+        host.view.backgroundColor = .white
         let window = UIWindow(windowScene: scene)
-        window.frame = CGRect(origin: .zero, size: size)
-        window.rootViewController = controller
+        window.rootViewController = container
         window.makeKeyAndVisible()
         defer {
             window.isHidden = true
             previousKeyWindow?.makeKeyAndVisible()
         }
-        // Layout and capture the 320x760 or 393x956 hosted scene itself,
-        // rather than the potentially native-height UIWindow container.
-        let target = CGRect(origin: .zero, size: size)
-        controller.view.frame = target
-        controller.view.setNeedsLayout()
-        controller.view.layoutIfNeeded()
+
+        container.addChild(host)
+        container.view.addSubview(host.view)
+        host.view.translatesAutoresizingMaskIntoConstraints = false
+        NSLayoutConstraint.activate([
+            host.view.leadingAnchor.constraint(equalTo: container.view.leadingAnchor),
+            host.view.topAnchor.constraint(equalTo: container.view.topAnchor),
+            host.view.widthAnchor.constraint(equalToConstant: size.width),
+            host.view.heightAnchor.constraint(equalToConstant: size.height)
+        ])
+        host.didMove(toParent: container)
+        container.view.setNeedsLayout()
+        container.view.layoutIfNeeded()
+        host.view.setNeedsLayout()
+        host.view.layoutIfNeeded()
         RunLoop.main.run(until: Date().addingTimeInterval(0.2))
-        controller.view.frame = target
-        controller.view.layoutIfNeeded()
-        guard abs(controller.view.bounds.width - size.width) < 1,
-              abs(controller.view.bounds.height - size.height) < 1 else {
-            return nil
-        }
+        container.view.layoutIfNeeded()
+        host.view.layoutIfNeeded()
+        guard abs(host.view.bounds.width - size.width) < 1,
+              abs(host.view.bounds.height - size.height) < 1 else { return nil }
+        let target = CGRect(origin: .zero, size: size)
         return UIGraphicsImageRenderer(size: size).image { context in
-            if !controller.view.drawHierarchy(in: target, afterScreenUpdates: true) {
-                controller.view.layer.render(in: context.cgContext)
+            if !host.view.drawHierarchy(in: target, afterScreenUpdates: true) {
+                host.view.layer.render(in: context.cgContext)
             }
         }
     }
