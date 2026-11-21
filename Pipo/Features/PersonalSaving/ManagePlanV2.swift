@@ -433,6 +433,17 @@ struct PipoManagePlanV2Sheet: View {
                             }
                             .padding(.top, 15)
                             content
+                            // Keep the safety note in scrollable content on narrow
+                            // devices so it cannot push the primary footer action
+                            // beneath the bottom edge of a 320pt screenshot.
+                            if horizontal <= 16 {
+                                Text(step == .review
+                                     ? "Prototype only · No changes saved"
+                                     : "Preview only · Changes are not saved")
+                                    .font(.footnote)
+                                    .foregroundStyle(PipoTheme.cardMuted)
+                                    .fixedSize(horizontal: false, vertical: true)
+                            }
                             if step != .review && step != .overview {
                                 Text("Nothing changes in your saved records until a secure save is available.")
                                     .font(.footnote)
@@ -941,11 +952,13 @@ struct PipoManagePlanV2Sheet: View {
 
     private func footer(horizontal: CGFloat) -> some View {
         VStack(alignment: .leading, spacing: 8) {
-            Text(step == .review
-                 ? "Prototype only · No changes saved"
-                 : "Preview only · Changes are not saved")
-                .font(.footnote)
-                .foregroundStyle(PipoTheme.cardMuted)
+            if horizontal > 16 {
+                Text(step == .review
+                     ? "Prototype only · No changes saved"
+                     : "Preview only · Changes are not saved")
+                    .font(.footnote)
+                    .foregroundStyle(PipoTheme.cardMuted)
+            }
             Button(action: continueForward) {
                 Text(actionLabel)
                     .font(.subheadline.bold())
