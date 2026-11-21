@@ -87,7 +87,9 @@ struct SavingLedgerSnapshot: Equatable {
             else { throw SavingLedgerError.invalidMoney }
             let (next, overflow) = saved.addingReportingOverflow(amount)
             let (xp, xpOverflow) = earnedXP.addingReportingOverflow(entry.xpEarned)
-            guard !overflow, !xpOverflow else { throw SavingLedgerError.invalidMoney }
+            guard !overflow, !xpOverflow,
+                  next <= SavingsAmountSafety.maxExactWholeIDR
+            else { throw SavingLedgerError.invalidMoney }
             saved = next
             earnedXP = xp
         }
@@ -133,6 +135,8 @@ struct SavingLedgerSnapshot: Equatable {
         let (net, overflow) = saved.addingReportingOverflow(delta)
         guard !overflow else { throw SavingLedgerError.invalidMoney }
         guard net >= 0 else { throw SavingLedgerError.overdrawn }
+        guard net <= SavingsAmountSafety.maxExactWholeIDR
+        else { throw SavingLedgerError.invalidMoney }
         return .init(netRecorded: net, earnedXP: earnedXP)
     }
 }
