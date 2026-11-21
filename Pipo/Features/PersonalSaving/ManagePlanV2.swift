@@ -25,7 +25,9 @@ enum PipoPlanV2Money {
     }
 
     static func locale(for currency: String) -> Locale {
-        currency == "IDR" ? Locale(identifier: "id_ID") : Locale.current
+        // Locale controls separators and display. The goal's ISO code
+        // controls units and precision. IDR is not inherently id_ID.
+        Locale.current
     }
 
     static func parse(_ raw: String, currency: String, locale: Locale? = nil) -> Decimal? {
@@ -70,10 +72,11 @@ enum PipoPlanV2Money {
         return result
     }
 
-    static func editable(_ value: Decimal, currency: String) -> String {
+    static func editable(_ value: Decimal, currency: String,
+                         locale: Locale? = nil) -> String {
         let formatter = NumberFormatter()
         formatter.numberStyle = .decimal
-        formatter.locale = locale(for: currency)
+        formatter.locale = locale ?? self.locale(for: currency)
         formatter.usesGroupingSeparator = true
         formatter.minimumFractionDigits = 0
         formatter.maximumFractionDigits = fractionDigits(for: currency)
