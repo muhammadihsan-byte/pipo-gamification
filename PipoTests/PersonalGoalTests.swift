@@ -1089,11 +1089,19 @@ extension PersonalGoalTests {
         XCTAssertEqual(PipoPlanV2Money.fractionDigits(for: "IDR"), 0)
         XCTAssertEqual(PipoPlanV2Money.fractionDigits(for: "JPY"), 0)
         XCTAssertEqual(PipoPlanV2Money.fractionDigits(for: "USD"), 2)
-        XCTAssertEqual(PipoPlanV2Money.editable(Decimal(6_000_000), currency: "IDR"), "6.000.000")
+        XCTAssertEqual(PipoPlanV2Money.editable(
+            Decimal(6_000_000), currency: "IDR", locale: idr
+        ), "6.000.000")
         XCTAssertEqual(PipoPlanV2Money.parse(
             PipoPlanV2Money.editable(Decimal(string: "1234.56")!, currency: "USD"),
             currency: "USD"
         ), Decimal(string: "1234.56"))
+        XCTAssertEqual(PipoPlanV2Money.parse(
+            PipoPlanV2Money.editable(Decimal(6_000_000), currency: "IDR", locale: us),
+            currency: "IDR", locale: us
+        ), Decimal(6_000_000))
+        XCTAssertEqual(PipoPlanV2Money.parse("6,000,000", currency: "IDR", locale: us),
+                       Decimal(6_000_000))
         XCTAssertEqual(PipoPlanV2Money.parse("6.600.000", currency: "IDR", locale: idr),
                        Decimal(6_600_000))
         XCTAssertNil(PipoPlanV2Money.parse("6.600.000,50", currency: "IDR", locale: idr))
