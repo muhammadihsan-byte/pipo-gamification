@@ -65,6 +65,8 @@ final class SavingTimelineSnapshotTests: XCTestCase {
             XCTAssertEqual(screenshot.size.width, width, accuracy: 1)
             XCTAssertEqual(screenshot.size.height, height, accuracy: 1)
             XCTAssertTrue(hasRenderedBodyContent(screenshot), name + " has a blank body")
+            XCTAssertTrue(hasVisibleFooterClearance(screenshot),
+                          name + " clips the footer action at the bottom edge")
             let attachment = XCTAttachment(image: screenshot)
             attachment.name = name
             attachment.lifetime = .keepAlways
@@ -95,6 +97,51 @@ final class SavingTimelineSnapshotTests: XCTestCase {
                 window.layer.render(in: context.cgContext)
             }
         }
+    }
+
+    /// Detect the regression where the pale footer CTA extends beyond the
+    /// screenshot boundary at 320pt. The bottom 2pt of the fixture must be
+    /// white, with sufficient dark text rendered above it in the footer area.
+    /// This complements (and never replaces) manual screenshot inspection.
+    private func hasVisibleFooterClearance(_ image: UIImage) -> Bool {
+        guard let cg = image.cgImage else { return false }
+        let width = cg.width
+        let height = cg.height
+        let bytesPerRow = width * 4
+        var pixels = [UInt8](repeating: 255, count: bytesPerRow * height)
+        let rendered = pixels.withUnsafeMutableBytes { buffer -> Bool in
+            guard let context = CGContext(
+                data: buffer.baseAddress,
+                width: width, height: height, bitsPerComponent: 8,
+                bytesPerRow: bytesPerRow, space: CGColorSpaceCreateDeviceRGB(),
+                bitmapInfo: CGBitmapInfo.byteOrder32Big.rawValue |
+                    CGImageAlphaInfo.premultipliedLast.rawValue
+            ) else { return false }
+            context.draw(cg, in: CGRect(x: 0, y: 0, width: width, height: height))
+            return true
+        }
+        guard rendered else { return false }
+        let bottomY = max(0, height - max(2, Int(image.scale * 2)))
+        for x in stride(from: width / 3, to: 2 * width / 3, by: 9) {
+            let index = bottomY * bytesPerRow + x * 4
+            // Previous 320pt snapshot had CTA cream (251,252,254) at
+            // the last row: that is a clipped button, not bottom clearance.
+            if pixels[index] < 254 || pixels[index + 1] < 254 || pixels[index + 2] < 254 {
+                return false
+            }
+        }
+        var hasFooterText = false
+        for y in stride(from: Int(Double(height) * 0.88), to: bottomY, by: 3) {
+            for x in stride(from: width / 4, to: 3 * width / 4, by: 5) {
+                let index = y * bytesPerRow + x * 4
+                if pixels[index] < 210 && pixels[index + 1] < 210 && pixels[index + 2] < 210 {
+                    hasFooterText = true
+                    break
+                }
+            }
+            if hasFooterText { break }
+        }
+        return hasFooterText
     }
 
     /// Fail visibly blank screenshots even if image dimensions and XCTest attachment export pass.
