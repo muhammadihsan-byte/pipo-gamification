@@ -313,6 +313,9 @@ struct CreateGoalView: View {
             VStack(alignment: .leading, spacing: 8) {
                 PersonalPlanFieldLabel(title: "Currency for this goal", status: "Required")
                 Button {
+                    // Reopening the sheet must not reuse an old search term,
+                    // otherwise choosing IDR then USD can yield zero matches.
+                    currencySearch = ""
                     showsCurrencyPicker = true
                 } label: {
                     HStack(spacing: 12) {
