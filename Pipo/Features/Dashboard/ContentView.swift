@@ -843,6 +843,9 @@ struct DashboardView: View {
                 transactions: ownedTransactions,
                 titleForGoal: { goalID in
                     ownedGoals.first(where: { $0.id == goalID })?.title ?? "Saving entry"
+                },
+                currencyForGoal: { goalID in
+                    ownedGoals.first(where: { $0.id == goalID })?.effectiveCurrencyCode ?? "IDR"
                 }
             )
         }
