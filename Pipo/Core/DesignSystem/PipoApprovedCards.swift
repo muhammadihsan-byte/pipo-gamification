@@ -494,6 +494,11 @@ struct PipoActivityHistoryDCard: View {
                         .foregroundStyle(Card44.muted)
                 } else {
                     ForEach(transactions.prefix(12)) { transaction in
+                        let amountText = PipoGoalCurrency.display(
+                            transaction.amount,
+                            code: transaction.currencyCode ?? currencyForGoal(transaction.goalId),
+                            exactMinor: transaction.amountMinorUnits
+                        )
                         HStack(alignment: .top, spacing: 12) {
                             VStack(spacing: 2) {
                                 Text(transaction.date.formatted(.dateTime.day()))
@@ -513,18 +518,14 @@ struct PipoActivityHistoryDCard: View {
                                     .foregroundStyle(Card44.muted)
                             }
                             Spacer(minLength: 0)
-                            Text("+ " + PipoGoalCurrency.display(transaction.amount,
-                                        code: transaction.currencyCode ?? currencyForGoal(transaction.goalId),
-                                        exactMinor: transaction.amountMinorUnits))
+                            Text("+ " + amountText)
                                 .font(.subheadline.bold())
                                 .foregroundStyle(Card44.accent)
                                 .multilineTextAlignment(.trailing)
                         }
                         .frame(minHeight: 48)
                         .accessibilityElement(children: .combine)
-                        .accessibilityLabel("\(titleForGoal(transaction.goalId)), saved \(PipoGoalCurrency.display(transaction.amount,
-                                        code: transaction.currencyCode ?? currencyForGoal(transaction.goalId),
-                                        exactMinor: transaction.amountMinorUnits)) on \(transaction.date.formatted(date: .abbreviated, time: .omitted))")
+                        .accessibilityLabel("\(titleForGoal(transaction.goalId)), saved \(amountText) on \(transaction.date.formatted(date: .abbreviated, time: .omitted))")
                     }
                 }
                 Text("Your own entries, not bank-verified transactions.")
