@@ -414,7 +414,8 @@ struct PersonalGoalDetailView: View {
                     if let goal = ownedGoal {
                         PipoActivityHistoryDCard(
                             transactions: ownedHistory(for: goal),
-                            titleForGoal: { _ in goal.title }
+                            titleForGoal: { _ in goal.title },
+                            currencyForGoal: { _ in goal.effectiveCurrencyCode }
                         )
                         .padding(20)
                     }
@@ -612,7 +613,8 @@ struct PersonalGoalDetailView: View {
 
             PipoActivityHistoryDCard(
                 transactions: ownedHistory(for: goal),
-                titleForGoal: { _ in goal.title }
+                titleForGoal: { _ in goal.title },
+                currencyForGoal: { _ in goal.effectiveCurrencyCode }
             )
             if goal.lifecycleState == .completed {
                 PipoCompletionBCard(goal: goal) {
