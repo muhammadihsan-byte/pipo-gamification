@@ -145,7 +145,7 @@ struct ReviewPlanView: View {
             if let schedule = plan.schedule {
                 summaryRow("Planned amount", value: money(plan.contributionOverride ?? schedule.amount))
                 summaryRow("First planned save", value: dateLabel(schedule.firstDate))
-                Text(scheduleDetails(schedule, override: plan.contributionOverride))
+                Text(scheduleDetails(schedule, override: plan.contributionOverride, currencyCode: plan.currencyCode))
                     .font(.caption)
                     .foregroundStyle(PersonalPlanStyle.muted)
             } else {
@@ -933,11 +933,17 @@ func scheduleTitle(_ schedule: PersonalSavingSchedule, rhythm: SavingRhythm) -> 
     return "\(schedule.count) \(rhythm.periodLabel)"
 }
 
-func scheduleDetails(_ schedule: PersonalSavingSchedule, override: Int? = nil) -> String {
-    if let override {
-        return "\(schedule.count) planned contributions at \(money(override)) each, from \(dateLabel(schedule.firstDate)) to \(dateLabel(schedule.lastDate))."
+func scheduleDetails(_ schedule: PersonalSavingSchedule, override: Int? = nil, currencyCode: String = "IDR") -> String {
+    // Schedule amounts are stored as minor units for goal-level currencies.
+    // Keep the legacy IDR copy identical for existing personal/group journeys.
+    let formattedAmount: (Int) -> String = { value in
+        currencyCode == "IDR" ? money(value) :
+            PipoGoalCurrency.formatted(Int64(value), code: currencyCode)
     }
-    let amount = money(schedule.amount)
+    if let override {
+        return "\(schedule.count) planned contributions at \(formattedAmount(override)) each, from \(dateLabel(schedule.firstDate)) to \(dateLabel(schedule.lastDate))."
+    }
+    let amount = formattedAmount(schedule.amount)
     let timeline = schedule.count == 1
         ? "Make one planned contribution on \(dateLabel(schedule.firstDate))."
         : "\(schedule.count) planned contributions from \(dateLabel(schedule.firstDate)) to \(dateLabel(schedule.lastDate))."
