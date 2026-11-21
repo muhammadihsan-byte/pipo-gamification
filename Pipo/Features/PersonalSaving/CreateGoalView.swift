@@ -4,6 +4,9 @@ struct PersonalGoalPlan {
     let title: String
     let category: GoalCategory
     let targetAmount: Double
+    // Exact currency and minor-unit value from validated Create Goal input.
+    var currencyCode: String = "IDR"
+    var targetMinorUnits: Int64? = nil
     let breakdown: [GoalBreakdownDraft]
     let startDate: Date
     let targetDate: Date
@@ -16,7 +19,8 @@ struct PersonalGoalPlan {
     var categoryTitle: String { customCategory ?? category.title }
 
     var schedule: PersonalSavingSchedule? {
-        guard let rupiah = Int(exactly: targetAmount) else { return nil }
+        guard let rupiah = targetMinorUnits.flatMap(Int.init(exactly:))
+            ?? Int(exactly: targetAmount) else { return nil }
         return PersonalSavingSchedule(
             targetAmount: rupiah,
             startDate: startDate,
@@ -60,6 +64,9 @@ struct CreateGoalView: View {
     @State private var category: GoalCategory
     @State private var customCategory = ""
     @State private var targetAmount = ""
+    @State private var currencyCode = PipoGoalCurrency.suggested()
+    @State private var showsCurrencyPicker = false
+    @State private var currencySearch = ""
     @State private var breakdown: [GoalBreakdownDraft] = []
     @State private var startDate: Date
     @State private var timeline: Timeline = .targetDate
@@ -119,6 +126,7 @@ struct CreateGoalView: View {
             if previous == .name && current != .name { wasEditingName = true }
         }
         .overlay { breakdownDialog }
+        .sheet(isPresented: $showsCurrencyPicker) { currencyPicker }
     }
 
     @ViewBuilder
@@ -262,21 +270,80 @@ struct CreateGoalView: View {
         }
     }
 
+    private var currencyPicker: some View {
+        NavigationStack {
+            List {
+                ForEach(PipoGoalCurrency.choices.filter {
+                    currencySearch.isEmpty || $0.localizedCaseInsensitiveContains(currencySearch)
+                    || PipoGoalCurrency.currencyName($0).localizedCaseInsensitiveContains(currencySearch)
+                }, id: \.self) { code in
+                    Button {
+                        if currencyCode != code {
+                            currencyCode = code
+                            targetAmount = ""
+                            contributionOverride = ""
+                            breakdown = []
+                            showValidation = false
+                        }
+                        showsCurrencyPicker = false
+                    } label: {
+                        HStack {
+                            Text(code).font(.headline)
+                            Text(PipoGoalCurrency.currencyName(code))
+                                .foregroundStyle(PersonalPlanStyle.muted)
+                            Spacer()
+                            if code == currencyCode { Image(systemName: "checkmark") }
+                        }
+                    }
+                    .accessibilityIdentifier("pipo.goal.currency." + code)
+                }
+            }
+            .searchable(text: $currencySearch, prompt: "Search code or currency")
+            .navigationTitle("Choose goal currency")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar { ToolbarItem(placement: .cancellationAction) {
+                Button("Done") { showsCurrencyPicker = false }
+            }}
+        }
+        .presentationDetents([.large])
+    }
+
     private var targetFields: some View {
         VStack(alignment: .leading, spacing: 20) {
             VStack(alignment: .leading, spacing: 8) {
+                PersonalPlanFieldLabel(title: "Currency for this goal", status: "Required")
+                Button {
+                    showsCurrencyPicker = true
+                } label: {
+                    HStack(spacing: 12) {
+                        VStack(alignment: .leading, spacing: 3) {
+                            Text(currencyCode).font(.headline)
+                            Text(PipoGoalCurrency.currencyName(currencyCode))
+                                .font(.caption).foregroundStyle(PersonalPlanStyle.muted)
+                        }
+                        Spacer()
+                        Text("Change").font(.subheadline.bold())
+                        Image(systemName: "chevron.right")
+                    }
+                    .frame(minHeight: 48)
+                    .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+                .accessibilityIdentifier("pipo.goal.currency.choose")
+                Text("Suggested from your device region. This applies only to this goal; no money is converted.")
+                    .font(.footnote).foregroundStyle(PersonalPlanStyle.muted)
                 PersonalPlanFieldLabel(title: "Target amount", status: "Required")
                 HStack(spacing: 3) {
-                    Text("Rp")
+                    Text(currencyCode == "IDR" ? "Rp" : currencyCode)
                     TextField("0", text: $targetAmount)
-                        .formatRupiahOnBlur($targetAmount)
-                        .keyboardType(.numberPad)
-                        .accessibilityLabel("Target amount in rupiah")
+                        .keyboardType(PipoPlanV2Money.fractionDigits(for: currencyCode) == 0 ? .numberPad : .decimalPad)
+                        .accessibilityLabel("Target amount in " + currencyCode)
+                        .accessibilityIdentifier("pipo.goal.currency.amount")
                 }
                 .font(.caption.weight(.medium))
                 .personalPlanField(invalid: showValidation && targetRupiah == nil)
                 if (showValidation || !targetAmount.isEmpty) && targetRupiah == nil {
-                    validationMessage("Enter a target greater than Rp0.")
+                    validationMessage("Enter a positive amount with valid " + currencyCode + " precision.")
                 }
             }
 
@@ -290,7 +357,7 @@ struct CreateGoalView: View {
                     HStack {
                         Text("Item")
                             .frame(maxWidth: .infinity, alignment: .leading)
-                        Text("Amount (Rp)")
+                        Text("Amount (" + currencyCode + ")")
                             .frame(width: 105, alignment: .leading)
                         Color.clear.frame(width: 44, height: 1)
                     }
@@ -304,10 +371,9 @@ struct CreateGoalView: View {
                             .accessibilityLabel("Breakdown item name")
                             .personalPlanField(height: 44, invalid: showValidation && item.cleanTitle.isEmpty)
                         TextField("0", text: $item.amount)
-                            .formatRupiahOnBlur($item.amount)
-                            .keyboardType(.numberPad)
-                            .accessibilityLabel("Amount in rupiah for \(item.cleanTitle.isEmpty ? "this item" : item.cleanTitle)")
-                            .personalPlanField(height: 44, invalid: (showValidation && item.rupiah == nil) || breakdownMismatch != nil)
+                            .keyboardType(PipoPlanV2Money.fractionDigits(for: currencyCode) == 0 ? .numberPad : .decimalPad)
+                            .accessibilityLabel("Amount in " + currencyCode + " for \(item.cleanTitle.isEmpty ? "this item" : item.cleanTitle)")
+                            .personalPlanField(height: 44, invalid: (showValidation && parsedItem(item) == nil) || breakdownMismatch != nil)
                             .frame(width: 105)
                         Button {
                             let id = item.id
@@ -481,13 +547,14 @@ struct CreateGoalView: View {
                 if let schedule {
                     VStack(alignment: .leading, spacing: 8) {
                         PersonalPlanFieldLabel(title: "Planned contribution")
-                        RupiahInput(label: "Planned contribution", text: $contributionOverride,
-                                    placeholder: PersonalPlanFormatting.digits(schedule.amount))
+                        TextField("Optional · " + money(schedule.amount), text: $contributionOverride)
+                            .keyboardType(PipoPlanV2Money.fractionDigits(for: currencyCode) == 0 ? .numberPad : .decimalPad)
+                            .personalPlanField()
                         if !contributionOverride.isEmpty {
                             Button { contributionOverride = "" } label: {
                                 Text("Use suggested amount").frame(minHeight: 44)
                             }
-                            if enteredContribution == nil { validationMessage("Enter a positive amount in rupiah.") }
+                            if enteredContribution == nil { validationMessage("Enter a positive amount in " + currencyCode + ".") }
                         }
                         Text("Leave this blank to use the suggested amount of \(money(schedule.amount))\(rhythm.unitLabel).")
                             .font(.caption)
@@ -508,12 +575,32 @@ struct CreateGoalView: View {
         PersonalPlanChoice(title: option.title, selected: rhythm == option) { rhythm = option }
     }
 
+    private func money(_ minor: Int) -> String {
+        PipoGoalCurrency.formatted(Int64(minor), code: currencyCode)
+    }
+
     private var cleanTitle: String { title.trimmingCharacters(in: .whitespacesAndNewlines) }
     private var cleanCategory: String { customCategory.trimmingCharacters(in: .whitespacesAndNewlines) }
-    private var targetRupiah: Int? { PersonalPlanFormatting.parseRupiah(targetAmount) }
+    // Existing variable names remain for surrounding plan UI compatibility;
+    // from now on these are currency MINOR units, never assumed rupiah.
+    private var targetRupiah: Int? { PipoGoalCurrency.parseMinor(targetAmount, code: currencyCode).flatMap(Int.init(exactly:)) }
 
-    private var breakdownTotal: Int? { breakdown.validBreakdownTotal }
-    private var enteredContribution: Int? { PersonalPlanFormatting.parseRupiah(contributionOverride) }
+    private func parsedItem(_ item: GoalBreakdownDraft) -> Int? {
+        PipoGoalCurrency.parseMinor(item.amount, code: currencyCode).flatMap(Int.init(exactly:))
+    }
+
+    private var breakdownTotal: Int? {
+        guard !breakdown.isEmpty else { return nil }
+        var total = 0
+        for item in breakdown {
+            guard !item.cleanTitle.isEmpty, let minor = parsedItem(item) else { return nil }
+            let (sum, overflow) = total.addingReportingOverflow(minor)
+            guard !overflow else { return nil }
+            total = sum
+        }
+        return total
+    }
+    private var enteredContribution: Int? { PipoGoalCurrency.parseMinor(contributionOverride, code: currencyCode).flatMap(Int.init(exactly:)) }
     private var validRhythm: Bool {
         rhythm == .flexible || (schedule != nil && (contributionOverride.isEmpty || enteredContribution != nil))
     }
@@ -565,7 +652,9 @@ struct CreateGoalView: View {
             return nil
         }
         return PersonalGoalPlan(
-            title: cleanTitle, category: category, targetAmount: Double(targetRupiah),
+            title: cleanTitle, category: category,
+            targetAmount: NSDecimalNumber(decimal: PipoGoalCurrency.decimal(Int64(targetRupiah), code: currencyCode)).doubleValue,
+            currencyCode: currencyCode, targetMinorUnits: Int64(targetRupiah),
             breakdown: breakdown, startDate: startDate, targetDate: targetDate, rhythm: rhythm,
             customCategory: category == .other ? cleanCategory : nil,
             preferredSavingDay: preferredSavingDay,
@@ -653,7 +742,10 @@ struct CreateGoalView: View {
         title = previous.title
         category = previous.category
         customCategory = checkpoint.customCategory
-        if let amount = Int(exactly: previous.targetAmount) { targetAmount = PersonalPlanFormatting.digits(amount) }
+        currencyCode = previous.currencyCode
+        if let minor = previous.targetMinorUnits {
+            targetAmount = PipoPlanV2Money.editable(PipoGoalCurrency.decimal(minor, code: currencyCode), currency: currencyCode)
+        }
         breakdown = previous.breakdown
         timeline = checkpoint.timeline
         dateEntry = checkpoint.date
