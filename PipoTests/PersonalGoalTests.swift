@@ -6,6 +6,38 @@ import XCTest
 
 final class PersonalGoalTests: XCTestCase {
 
+    @MainActor
+    func testGlobalV1ExactRemainingAndCompletionAvoidFloatingPointDrift() {
+        let goal = PersonalGoal(
+            title: "Small USD goal", category: .gadget,
+            targetAmount: 0.30, currentAmount: 0.20,
+            currencyCode: "USD", targetMinorUnits: 30,
+            recordedMinorUnits: 20,
+            targetDate: .now.addingTimeInterval(86_400),
+            ownerUserID: UUID()
+        )
+        XCTAssertEqual(goal.exactRemainingMinor, 10)
+        XCTAssertEqual(goal.remainingAmount, 0.10)
+        XCTAssertEqual(goal.lifecycleState, .active)
+        XCTAssertEqual(PipoGoalCurrency.formatted(goal.exactRemainingMinor!, code: "USD"),
+                       PipoGoalCurrency.formatted(10, code: "USD"))
+
+        // The Double cache must never complete a goal prematurely.
+        goal.currentAmount = 0.30
+        goal.recordedMinorUnits = 29
+        XCTAssertEqual(goal.lifecycleState, .active)
+        XCTAssertEqual(goal.exactRemainingMinor, 1)
+
+        // Nor should a Double that under-represents 0.9 prevent completion.
+        goal.targetAmount = 0.9
+        goal.currentAmount = 0.6 + 0.3
+        goal.targetMinorUnits = 90
+        goal.recordedMinorUnits = 90
+        XCTAssertEqual(goal.lifecycleState, .completed)
+        XCTAssertEqual(goal.exactRemainingMinor, 0)
+    }
+
+
     func testGlobalV1ScheduledContributionExplanationUsesGoalCurrency() throws {
         let start = Date(timeIntervalSince1970: 1_800_000_000)
         let schedule = try XCTUnwrap(PersonalSavingSchedule(
