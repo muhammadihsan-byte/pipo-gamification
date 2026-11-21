@@ -565,7 +565,7 @@ struct CreateGoalView: View {
                     }
                     PersonalPlanNote(
                         title: scheduleTitle(schedule, rhythm: rhythm),
-                        message: scheduleDetails(schedule, override: enteredContribution)
+                        message: scheduleDetails(schedule, override: enteredContribution, currencyCode: currencyCode)
                     )
                 } else {
                     validationMessage("There’s no saving date before your target. Choose another rhythm, saving day, or target date.")
