@@ -538,7 +538,7 @@ struct PersonalGoalDetailView: View {
                         Text("Manually recorded")
                             .font(.caption)
                             .foregroundStyle(PipoTheme.muted)
-                        Text(money(goal.currentAmount))
+                        Text(money(goal.currentAmount, goal: goal))
                             .font(.headline.weight(.bold))
                             .lineLimit(1)
                             .minimumScaleFactor(0.65)
@@ -549,7 +549,7 @@ struct PersonalGoalDetailView: View {
                         Text("Target")
                             .font(.caption)
                             .foregroundStyle(PipoTheme.muted)
-                        Text(money(goal.targetAmount))
+                        Text(money(goal.targetAmount, goal: goal))
                             .font(.subheadline.weight(.semibold))
                             .lineLimit(1)
                             .minimumScaleFactor(0.65)
@@ -589,7 +589,7 @@ struct PersonalGoalDetailView: View {
                 LabeledContent("Status", value: goal.lifecycleState.title)
                 LabeledContent("Target date", value: dateLabel(goal.targetDate))
                 if let override = goal.plannedContributionOverride {
-                    LabeledContent("Planned contribution", value: money(override) + goal.rhythm.unitLabel)
+                    LabeledContent("Planned contribution", value: money(override, goal: goal) + goal.rhythm.unitLabel)
                 }
                 LabeledContent(
                     "Saving rhythm",
@@ -882,6 +882,17 @@ enum PipoGoalPhotoProcessing {
     }
 }
 
+
+func money(_ amount: Double, goal: PersonalGoal) -> String {
+    let code = goal.effectiveCurrencyCode
+    let exact = amount == goal.targetAmount ? goal.exactTargetMinor :
+        amount == goal.currentAmount ? goal.exactRecordedMinor : nil
+    return PipoGoalCurrency.display(amount, code: code, exactMinor: exact)
+}
+
+func money(_ amount: Int, goal: PersonalGoal) -> String {
+    PipoGoalCurrency.formatted(Int64(amount), code: goal.effectiveCurrencyCode)
+}
 
 func money(_ amount: Int) -> String {
     PersonalPlanFormatting.rupiah(amount)
