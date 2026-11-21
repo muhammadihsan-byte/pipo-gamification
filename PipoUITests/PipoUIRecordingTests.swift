@@ -36,7 +36,10 @@ final class PipoUIRecordingTests: XCTestCase {
     /// Global V1 Option B: currency selection belongs to Create Goal and
     /// clears any amount entered under a different code. No network or live user.
     func testGlobalExperienceUSDGoalCurrencySelectionAndReopen() {
-        launchFromDashboard()
+        // A synthetic account in a separate on-disk simulator-only store,
+        // not the real user's SwiftData or Supabase environment.
+        app.launchArguments = ["-pipo-global-currency-qa", "-pipo-global-currency-qa-reset"]
+        app.launch()
         tapButton("Create a saving goal")
         tapButton("Personal saving")
         typeText("Goal name", value: "New Laptop USD")
@@ -83,6 +86,19 @@ final class PipoUIRecordingTests: XCTestCase {
         XCTAssertTrue(app.buttons["Save"].isEnabled)
         attachOnboardingScreen("Global V1 — Manual USD saving is not a bank transfer")
         tapButton("Save")
+
+        // Terminate and start an actual new app process against the same
+        // synthetic disk store. We must not call this a relaunch test without
+        // exercising a real restart.
+        app.terminate()
+        app.launchArguments = ["-pipo-global-currency-qa"]
+        app.launch()
+        let persistedGoal = app.staticTexts["New Laptop USD"].firstMatch
+        XCTAssertTrue(persistedGoal.waitForExistence(timeout: 20),
+                      "Stored USD goal must survive app relaunch")
+        persistedGoal.tap()
+        XCTAssertTrue(app.buttons["pipo.goal.recordSaving"].waitForExistence(timeout: 15))
+        attachOnboardingScreen("Global V1 — USD goal survives actual app restart")
         XCTAssertTrue(app.buttons["pipo.goal.planRevisionPreview"].waitForExistence(timeout: 15))
         tapButton("pipo.goal.planRevisionPreview")
         XCTAssertTrue(app.staticTexts["Your plan, your pace."].waitForExistence(timeout: 15))
