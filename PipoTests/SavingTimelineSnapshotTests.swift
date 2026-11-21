@@ -29,6 +29,49 @@ final class SavingTimelineSnapshotTests: XCTestCase {
             }
         }
     }
+    /// Approved B01: real SwiftUI/window layout at the Figma reference width
+    /// and the 320pt compact-width acceptance size. Screenshots are review
+    /// evidence; frame dimensions and non-blank body content are asserted.
+    func testManagePlanV2OverviewAt393And320PointWidths() {
+        let finish = Calendar.current.date(byAdding: .month, value: 4, to: .now)!
+        let goal = PersonalGoal(
+            title: "Bali holiday",
+            category: .trip,
+            targetAmount: 6_000_000,
+            currentAmount: 3_600_000,
+            subItems: [
+                SubItem(title: "Flights", amount: 2_000_000),
+                SubItem(title: "Accommodation", amount: 2_500_000),
+                SubItem(title: "Activities", amount: 1_000_000),
+                SubItem(title: "Other", amount: 500_000)
+            ],
+            startDate: .now,
+            targetDate: finish,
+            rhythm: .weekly,
+            preferredSavingDay: 3
+        )
+        XCTAssertEqual(goal.progress, 0.6, accuracy: 0.0001)
+        for width in [CGFloat(393), CGFloat(320)] {
+            let height: CGFloat = width == 393 ? 956 : 760
+            let name = "Manage-Plan-V2-B01-\(Int(width))pt"
+            let scene = PipoManagePlanV2Sheet(goal: goal, onClose: {})
+                .frame(width: width, height: height)
+            guard let screenshot = renderInWindow(
+                scene, size: CGSize(width: width, height: height)
+            ) else {
+                XCTFail(name + " did not render")
+                continue
+            }
+            XCTAssertEqual(screenshot.size.width, width, accuracy: 1)
+            XCTAssertEqual(screenshot.size.height, height, accuracy: 1)
+            XCTAssertTrue(hasRenderedBodyContent(screenshot), name + " has a blank body")
+            let attachment = XCTAttachment(image: screenshot)
+            attachment.name = name
+            attachment.lifetime = .keepAlways
+            add(attachment)
+        }
+    }
+
     /// Render SwiftUI inside a real UIWindow; ImageRenderer omits ScrollView body content.
     private func renderInWindow<Content: View>(_ content: Content, size: CGSize) -> UIImage? {
         guard let scene = UIApplication.shared.connectedScenes
