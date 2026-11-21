@@ -995,7 +995,8 @@ struct PipoManagePlanV2Sheet: View {
                     .font(.subheadline.bold())
                     .frame(maxWidth: .infinity, minHeight: 48)
                     .foregroundStyle(actionAllowed ? .white : PipoTheme.cardMuted)
-                    .background(actionAllowed ? PipoTheme.pink : PipoTheme.cream,
+                    // Accessible pink: white action text reaches >= 4.5:1 contrast.
+                    .background(actionAllowed ? PipoTheme.cardAccentReadable : PipoTheme.cream,
                                 in: RoundedRectangle(cornerRadius: 14))
             }
             .buttonStyle(.plain)
