@@ -7,11 +7,21 @@ enum PipoPlanV2Money {
     static let maximum = Decimal(9_007_199_254_740_991)
 
     static func fractionDigits(for currency: String) -> Int {
-        let formatter = NumberFormatter()
-        formatter.numberStyle = .currency
-        formatter.currencyCode = currency
-        // NSNumber/ISO 4217 currency metadata, not an IDR-only integer parser.
-        return min(max(formatter.maximumFractionDigits, 0), 3)
+        // NumberFormatter.maximumFractionDigits defaults to 2 on several
+        // platforms even after currencyCode is set. Use explicit ISO 4217
+        // minor units for non-two-decimal currencies; existing IDR plans
+        // were created with whole-rupiah inputs and remain whole IDR.
+        switch currency.uppercased() {
+        case "IDR", "JPY", "KRW", "VND", "CLP", "PYG", "ISK", "BIF",
+             "DJF", "GNF", "KMF", "RWF", "UGX", "VUV", "XAF", "XOF", "XPF":
+            return 0
+        case "BHD", "IQD", "JOD", "KWD", "LYD", "OMR", "TND":
+            return 3
+        case "CLF", "UYW":
+            return 4
+        default:
+            return 2
+        }
     }
 
     static func locale(for currency: String) -> Locale {
