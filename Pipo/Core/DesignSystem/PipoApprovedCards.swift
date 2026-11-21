@@ -246,7 +246,9 @@ struct PipoPlanOverviewBCard: View {
     var body: some View {
         TicketCard(style: .approvedCompact) {
             VStack(alignment: .leading, spacing: 10) {
-                Card44Eyebrow(text: goal.isGroupGoal ? "GROUP GOAL · DEVICE ONLY" : "PERSONAL SAVING PLAN")
+                Card44Eyebrow(text: goal.isGroupGoal
+                    ? "GROUP GOAL · DEVICE ONLY"
+                    : "PERSONAL SAVING PLAN · " + goal.effectiveCurrencyCode)
                 Text(goal.title)
                     .font(.title2.bold())
                     .foregroundStyle(Card44.ink)
