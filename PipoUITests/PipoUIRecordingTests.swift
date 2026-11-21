@@ -96,6 +96,8 @@ final class PipoUIRecordingTests: XCTestCase {
         let persistedGoal = app.staticTexts["New Laptop USD"].firstMatch
         XCTAssertTrue(persistedGoal.waitForExistence(timeout: 20),
                       "Stored USD goal must survive app relaunch")
+        XCTAssertFalse(app.staticTexts["Amount unavailable"].exists,
+                       "USD scheduled saving amount must render from exact minor units")
         persistedGoal.tap()
         XCTAssertTrue(app.buttons["pipo.goal.recordSaving"].waitForExistence(timeout: 15))
         attachOnboardingScreen("Global V1 — USD goal survives actual app restart")
