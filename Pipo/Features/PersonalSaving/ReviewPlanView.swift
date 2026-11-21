@@ -448,19 +448,29 @@ struct PersonalGoalDetailView: View {
                         onClose: { showingMoneyOutPreview = false }
                     )
                 } else {
-                    NavigationStack {
-                        ContentUnavailableView(
-                            "Money Out preview isn’t available in " + goal.effectiveCurrencyCode,
-                            systemImage: "hand.raised",
-                            description: Text("Your manually recorded savings stay intact. Multi-currency Money Out needs a separately validated ledger; no money has moved.")
-                        )
-                        .navigationTitle("Money used elsewhere")
-                        .toolbar {
-                            ToolbarItem(placement: .confirmationAction) {
-                                Button("Done") { showingMoneyOutPreview = false }
-                            }
-                        }
+                    VStack(spacing: 18) {
+                        Spacer(minLength: 12)
+                        Image(systemName: "hand.raised")
+                            .font(.system(size: 40, weight: .medium))
+                            .foregroundStyle(PipoTheme.deepPink)
+                            .accessibilityHidden(true)
+                        Text("Money Out preview isn’t available in " + goal.effectiveCurrencyCode)
+                            .font(.title3.bold())
+                            .multilineTextAlignment(.center)
+                            .foregroundStyle(PipoTheme.ink)
+                            .accessibilityIdentifier("pipo.currency.moneyOut.unavailable")
+                        Text("Your manually recorded savings stay intact. Multi-currency Money Out needs a separately validated ledger; no money has moved.")
+                            .font(.subheadline)
+                            .multilineTextAlignment(.center)
+                            .foregroundStyle(PipoTheme.muted)
+                        Spacer(minLength: 12)
+                        Button("Close preview") { showingMoneyOutPreview = false }
+                            .buttonStyle(PrimaryActionButtonStyle())
+                            .accessibilityIdentifier("pipo.currency.moneyOut.close")
                     }
+                    .padding(24)
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+                    .background(.white)
                 }
             }
         }
