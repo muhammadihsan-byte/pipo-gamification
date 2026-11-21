@@ -225,6 +225,22 @@ jobs:
             CODE_SIGNING_REQUIRED=NO \
             test 2>&1 | tee validation/all-approved-cards-qa.log
 
+      - name: Issue 42 — focused plan and money-out review-only simulator QA
+        if: github.event_name == 'pull_request' && github.head_ref == 'feat/pipo-42-reconciled-review-only'
+        shell: bash
+        run: |
+          set -euo pipefail
+          xcodebuild \
+            -project "$XCODE_PROJECT" \
+            -scheme "$XCODE_SCHEME" \
+            -destination "id=$SIMULATOR_UDID" \
+            -derivedDataPath "$RUNNER_TEMP/PipoDerivedData" \
+            -resultBundlePath "$RUNNER_TEMP/PipoIssue42ReviewQA.xcresult" \
+            -only-testing:PipoUITests/PipoUIRecordingTests/testIssue42PlanAndMoneyOutRemainReviewOnly \
+            CODE_SIGNING_ALLOWED=NO \
+            CODE_SIGNING_REQUIRED=NO \
+            test 2>&1 | tee validation/pipo-issue42-review-qa.log
+
       - name: Issue 48 — goal detail photo hero focused native iOS QA
         if: github.event_name == 'pull_request' && github.head_ref == 'feat/pipo-48-goal-photo-hero-v1'
         shell: bash
