@@ -38,6 +38,84 @@ final class PersonalGoalTests: XCTestCase {
     }
 
 
+    /// A disconnected device must retain account-owned goals, savings and XP
+    /// on disk before any cloud acknowledgement. Reopening and rebuilding the
+    /// batch must preserve immutable UUIDs so upstream UPSERT retry is safe.
+    /// HTTP rejection/ambiguous response is exercised separately by local
+    /// Auth+PostgREST QA; this test is SwiftData persistence, not connectivity.
+    @MainActor
+    func testGlobalV1OfflinePendingSavingPersistsAndReplaysWithoutCrossAccountLeak() throws {
+        let schema = Schema([
+            PersonalGoal.self, SubItem.self, SavingTransaction.self, UserProfile.self
+        ])
+        let url = FileManager.default.temporaryDirectory
+            .appendingPathComponent("pipo-offline-retry-" + UUID().uuidString + ".store")
+        let configuration = ModelConfiguration(schema: schema, url: url)
+        let writerContainer = try ModelContainer(for: schema, configurations: [configuration])
+        let writer = ModelContext(writerContainer)
+        let alice = UUID(), bob = UUID()
+        let goal = PersonalGoal(
+            title: "Offline laptop", category: .gadget,
+            targetAmount: 1500.50, currentAmount: 0.01,
+            currencyCode: "USD", targetMinorUnits: 150_050,
+            recordedMinorUnits: 1,
+            targetDate: .now.addingTimeInterval(86_400 * 40),
+            ownerUserID: alice
+        )
+        let saving = SavingTransaction(
+            goalId: goal.id, amount: 0.01, amountMinorUnits: 1,
+            currencyCode: "USD", xpEarned: 37, userID: alice
+        )
+        let profile = UserProfile(userID: alice, totalXP: 37)
+        writer.insert(goal)
+        writer.insert(saving)
+        writer.insert(profile)
+        try writer.save() // Simulates offline: no network request or server receipt.
+
+        // A true disk reopen, not a second ModelContext over the same container.
+        let reopened = try ModelContainer(for: schema, configurations: [configuration])
+        let reader = ModelContext(reopened)
+        let allGoals = try reader.fetch(FetchDescriptor<PersonalGoal>())
+        let allSavings = try reader.fetch(FetchDescriptor<SavingTransaction>())
+        let aliceGoals = AccountScope.visibleGoals(allGoals, userID: alice)
+            .filter { !$0.isGroupGoal }
+        let aliceSavings = AccountScope.visibleTransactions(
+            allSavings, goals: allGoals, userID: alice
+        )
+        XCTAssertEqual(aliceGoals.count, 1)
+        XCTAssertEqual(aliceSavings.count, 1)
+        XCTAssertEqual(aliceSavings[0].id, saving.id)
+        XCTAssertEqual(aliceSavings[0].amountMinorUnits, 1)
+        XCTAssertEqual(aliceGoals[0].recordedMinorUnits, 1)
+        XCTAssertEqual(try reader.fetch(FetchDescriptor<UserProfile>())
+            .first(where: { $0.userID == alice })?.totalXP, 37)
+
+        let firstTry = try PersonalSavingSyncBatch.make(
+            goals: aliceGoals, transactions: aliceSavings,
+            authenticatedUserID: alice
+        )
+        let retryAfterForeground = try PersonalSavingSyncBatch.make(
+            goals: aliceGoals, transactions: aliceSavings,
+            authenticatedUserID: alice
+        )
+        XCTAssertEqual(firstTry.goals, retryAfterForeground.goals)
+        XCTAssertEqual(firstTry.transactions, retryAfterForeground.transactions)
+        XCTAssertEqual(firstTry.goals[0].id, goal.id)
+        XCTAssertEqual(firstTry.transactions[0].id, saving.id)
+        XCTAssertEqual(firstTry.transactions[0].xpEarned, 37)
+        XCTAssertEqual(firstTry.transactions[0].userID, alice)
+        XCTAssertEqual(firstTry.goals[0].currencyCode, "USD")
+
+        XCTAssertTrue(AccountScope.visibleGoals(allGoals, userID: bob).isEmpty)
+        XCTAssertTrue(AccountScope.visibleTransactions(
+            allSavings, goals: allGoals, userID: bob
+        ).isEmpty)
+        XCTAssertThrowsError(try PersonalSavingSyncBatch.make(
+            goals: aliceGoals, transactions: aliceSavings,
+            authenticatedUserID: bob
+        ))
+    }
+
     func testGlobalV1ScheduledContributionExplanationUsesGoalCurrency() throws {
         let start = Date(timeIntervalSince1970: 1_800_000_000)
         let schedule = try XCTUnwrap(PersonalSavingSchedule(
