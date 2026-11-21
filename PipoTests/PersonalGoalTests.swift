@@ -6,6 +6,24 @@ import XCTest
 
 final class PersonalGoalTests: XCTestCase {
 
+    @MainActor
+    func testGlobalV1InterruptedOnboardingIsScopedAndDiscardedOnDeletion() {
+        let owner = UUID()
+        let another = UUID()
+        OnboardingProfileStore.saveDraft(.init(
+            stepNumber: OnboardingStep.motivation.rawValue,
+            nickname: "Pipo friend",
+            motivation: .excitingGoal
+        ), for: owner)
+        let draft = OnboardingProfileStore.loadDraft(for: owner)
+        XCTAssertEqual(draft?.nickname, "Pipo friend")
+        XCTAssertEqual(draft?.stepNumber, OnboardingStep.motivation.rawValue)
+        XCTAssertNil(OnboardingProfileStore.loadDraft(for: another),
+                     "Onboarding must never leak between accounts")
+        OnboardingProfileStore.delete(for: owner)
+        XCTAssertNil(OnboardingProfileStore.loadDraft(for: owner))
+    }
+
     /// Uses a unique disk-backed synthetic SwiftData store (never the user's
     /// production container) to exercise the same relaunch persistence path.
     @MainActor
