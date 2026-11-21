@@ -100,11 +100,13 @@ final class PipoUIRecordingTests: XCTestCase {
         XCTAssertTrue(app.buttons["pipo.goal.recordSaving"].waitForExistence(timeout: 15))
         attachOnboardingScreen("Global V1 — USD goal survives actual app restart")
         tapButton("pipo.goal.moneyOutPreview")
-        XCTAssertTrue(app.staticTexts["Money Out preview isn’t available in USD"]
-            .waitForExistence(timeout: 15))
+        attachOnboardingScreen("Global V1 — Non-IDR Money Out screen after tap")
+        XCTAssertTrue(app.staticTexts["pipo.currency.moneyOut.unavailable"]
+            .waitForExistence(timeout: 15),
+            "Non-IDR Money Out must present an explicit unsupported-state title")
         XCTAssertFalse(app.textFields["pipo.card.moneyOut.amount"].exists)
         attachOnboardingScreen("Global V1 — Non-IDR Money Out safely disabled")
-        tapButton("Done")
+        tapButton("pipo.currency.moneyOut.close")
         XCTAssertTrue(app.buttons["pipo.goal.planRevisionPreview"].waitForExistence(timeout: 15))
         tapButton("pipo.goal.planRevisionPreview")
         XCTAssertTrue(app.staticTexts["Your plan, your pace."].waitForExistence(timeout: 15))
