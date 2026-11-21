@@ -305,6 +305,59 @@ def main() -> None:
         and Decimal(str(a_read[1][0]["amount"])) == Decimal("0.01"),
         "Alice one-cent saving was altered after Bob's requests",
     )
+    # Offline and ambiguous-response replay: use the same immutable local UUID
+    # across all attempts. The disconnected attempt MUST hit only a local closed
+    # socket; no credentials or customer rows ever leave this ephemeral stack.
+    pending_id = "a7777777-7777-4777-8777-777777777777"
+    route = "/rest/v1/saving_transactions?on_conflict=id&select=id,user_id,goal_id,amount,xp_earned"
+    pending_body = {
+        "id": pending_id, "goal_id": a_goal, "amount": "0.02",
+        "xp_earned": 7,
+    }
+    try:
+        api("http://127.0.0.1:1", anon, route,
+            method="POST", bearer=a_token, body=pending_body,
+            prefer="resolution=merge-duplicates,return=representation")
+    except urllib.error.URLError:
+        pass  # Expected: no listener, analogous to an offline upload failure.
+    else:
+        raise LocalQAError("Closed-loopback offline attempt unexpectedly succeeded")
+    read_pending = "/rest/v1/saving_transactions?select=id,amount,xp_earned&id=eq." + pending_id
+    before = api(base, anon, read_pending, bearer=a_token)
+    require(before == (200, []),
+            "Disconnected attempt must not invent a cloud backup")
+
+    first_replay = api(
+        base, anon, route, method="POST", bearer=a_token, body=pending_body,
+        prefer="resolution=merge-duplicates,return=representation",
+    )
+    require(first_replay[0] in (200, 201)
+            and isinstance(first_replay[1], list)
+            and len(first_replay[1]) == 1
+            and first_replay[1][0]["id"] == pending_id,
+            "Foreground reconnect did not send exact pending UUID once")
+    # The client loses the first HTTP response after the server commits:
+    # replay the SAME request as after an uncertain timeout, never mint a new ID.
+    second_replay = api(
+        base, anon, route, method="POST", bearer=a_token, body=pending_body,
+        prefer="resolution=merge-duplicates,return=representation",
+    )
+    require(second_replay[0] in (200, 201)
+            and isinstance(second_replay[1], list)
+            and len(second_replay[1]) == 1,
+            "Ambiguous-response replay of the same UUID was not idempotent")
+    after = api(base, anon, read_pending, bearer=a_token)
+    require(after[0] == 200 and isinstance(after[1], list)
+            and len(after[1]) == 1
+            and after[1][0]["id"] == pending_id
+            and Decimal(str(after[1][0]["amount"])) == Decimal("0.02")
+            and after[1][0]["xp_earned"] == 7,
+            "Two online retries duplicated or changed the saved contribution/XP")
+    require(api(base, anon, read_pending, bearer=b_token) == (200, []),
+            "Pending/replayed Alice saving leaked to Bob")
+    print("PASS local Auth REST offline failure -> retry -> ambiguous response retry: "
+          "one saving UUID, exact cents and XP, no owner leak")
+
     print("PASS local signed JWT: Bob JPY, bidirectional RLS, write isolation, composite FK")
     print("PASS GLOBAL EXPERIENCE V1 LOCAL AUTH+POSTGREST E2E - ZERO PRODUCTION ACCESS")
 
