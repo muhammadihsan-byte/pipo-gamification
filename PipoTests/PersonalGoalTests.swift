@@ -1240,8 +1240,10 @@ extension PersonalGoalTests {
         XCTAssertEqual(original.recorded, Decimal(3_600_000))
         XCTAssertEqual(goal.progress, 0.6, accuracy: 0.0001)
         XCTAssertEqual(draft.target, Decimal(6_000_000))
-        draft.targetInput = "6.000.000"
-        XCTAssertFalse(draft.isDirty, "Equivalent IDR grouping is not a real edit")
+        // Grouping is determined by the display locale, not the goal currency.
+        // CI uses en_US while Indonesian devices commonly use id_ID.
+        draft.targetInput = PipoPlanV2Money.editable(Decimal(6_000_000), currency: "IDR")
+        XCTAssertFalse(draft.isDirty, "Equivalent locale grouping is not a real edit")
         draft.targetInput = "6600000"
         XCTAssertTrue(draft.isDirty)
         XCTAssertNotNil(draft.validationError, "Existing item allocation must reconcile")
