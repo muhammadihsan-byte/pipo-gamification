@@ -71,8 +71,14 @@ enum PipoPlanV2Money {
     }
 
     static func editable(_ value: Decimal, currency: String) -> String {
-        let raw = NSDecimalNumber(decimal: value).stringValue
-        return raw.replacingOccurrences(of: ".", with: locale(for: currency).decimalSeparator ?? ".")
+        let formatter = NumberFormatter()
+        formatter.numberStyle = .decimal
+        formatter.locale = locale(for: currency)
+        formatter.usesGroupingSeparator = true
+        formatter.minimumFractionDigits = 0
+        formatter.maximumFractionDigits = fractionDigits(for: currency)
+        return formatter.string(from: NSDecimalNumber(decimal: value))
+            ?? NSDecimalNumber(decimal: value).stringValue
     }
 
     static func formatted(_ value: Decimal, currency: String) -> String {
@@ -379,7 +385,9 @@ struct PipoManagePlanV2Sheet: View {
         case .target: "Only the future plan changes."
         case .breakdown: "Match your categories to the proposed target."
         case .date: "Give your goal a little more time."
-        case .rhythm: "Updates begin next saving period."
+        case .rhythm: draft.rhythm == .flexible
+            ? "No scheduled dates or streaks."
+            : "Updates begin next saving period."
         case .impact: "Take a look before deciding."
         case .review: "A secure save isn't available yet."
         }
@@ -585,13 +593,20 @@ struct PipoManagePlanV2Sheet: View {
     private var targetEditor: some View {
         VStack(alignment: .leading, spacing: 17) {
             sectionTitle("TARGET AMOUNT · " + currency)
-            TextField("Target amount", text: $draft.targetInput)
-                .keyboardType(PipoPlanV2Money.fractionDigits(for: currency) == 0 ? .numberPad : .decimalPad)
-                .font(.title3.bold())
-                .padding(14)
-                .background(PipoTheme.cream, in: RoundedRectangle(cornerRadius: 12))
-                .focused($focusedInput, equals: "target")
-                .accessibilityIdentifier("pipo.plan.v2.targetAmount")
+            HStack(spacing: 2) {
+                Text(currency == "IDR" ? "Rp" : currency)
+                    .font(.title3.bold())
+                    .foregroundStyle(PipoTheme.cardInk)
+                    .accessibilityHidden(true)
+                TextField("Target amount", text: $draft.targetInput)
+                    .keyboardType(PipoPlanV2Money.fractionDigits(for: currency) == 0 ? .numberPad : .decimalPad)
+                    .font(.title3.bold())
+                    .focused($focusedInput, equals: "target")
+                    .accessibilityLabel("Target amount in " + currency)
+                    .accessibilityIdentifier("pipo.plan.v2.targetAmount")
+            }
+            .padding(14)
+            .background(PipoTheme.cream, in: RoundedRectangle(cornerRadius: 12))
             Text("Current goal · " + money(original.target))
                 .font(.footnote)
                 .foregroundStyle(PipoTheme.cardMuted)
@@ -723,7 +738,7 @@ struct PipoManagePlanV2Sheet: View {
                                 .foregroundStyle(PipoTheme.cardInk)
                             Text(rhythm == .flexible ? "Record whenever you choose. No streak pressure." :
                                     rhythm == .monthly ? "Choose a calendar date." :
-                                    "Plan future saving reminders.")
+                                    "Choose a weekday for future suggestions.")
                                 .font(.footnote)
                                 .foregroundStyle(PipoTheme.cardMuted)
                                 .fixedSize(horizontal: false, vertical: true)
