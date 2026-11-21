@@ -238,7 +238,9 @@ struct PipoPlanV2Draft: Equatable {
         let left = normalized(budget)
         let right = normalized(original.budget)
         let budgetChanged = left.count != right.count ||
-            zip(left, right).contains { a, b in a.0 != b.0 || a.1 != b.1 }
+            zip(left, right).contains { pair in
+                pair.0.0 != pair.1.0 || pair.0.1 != pair.1.1
+            }
         let dateChanged = !Calendar.current.isDate(finishDate, inSameDayAs: original.targetDate)
         let rhythmChanged = rhythm != original.rhythm ||
             ((rhythm != .flexible && rhythm != .daily) &&
