@@ -142,7 +142,13 @@ final class PersonalGoal {
     // Progress determines completion, independent of an earlier paused state.
     // Unrecognized legacy values revert safely to an active goal.
     var lifecycleState: GoalLifecycleState {
-        if targetAmount > 0 && currentAmount >= targetAmount { return .completed }
+        // Exact minor units, not a floating-point cache, decide completion.
+        // Original legacy rows fall back only if exact migration is unavailable.
+        if let target = exactTargetMinor, let recorded = exactRecordedMinor {
+            if target > 0 && recorded >= target { return .completed }
+        } else if targetAmount > 0 && currentAmount >= targetAmount {
+            return .completed
+        }
         switch lifecycleRaw {
         case GoalLifecycleState.paused.rawValue: return .paused
         case GoalLifecycleState.archived.rawValue: return .archived
@@ -194,8 +200,20 @@ final class PersonalGoal {
         customCategory ?? category.title
     }
 
+    var exactRemainingMinor: Int64? {
+        guard let target = exactTargetMinor, let recorded = exactRecordedMinor,
+              target >= 0, recorded >= 0 else { return nil }
+        // Subtracting non-negative Int64 values in this order cannot overflow.
+        return target > recorded ? target - recorded : 0
+    }
+
     var remainingAmount: Double {
-        max(targetAmount - currentAmount, 0)
+        if let remaining = exactRemainingMinor {
+            return NSDecimalNumber(decimal: PipoGoalCurrency.decimal(
+                remaining, code: effectiveCurrencyCode
+            )).doubleValue
+        }
+        return max(targetAmount - currentAmount, 0)
     }
 }
 
