@@ -414,7 +414,7 @@ struct PersonalGoalDetailView: View {
         }
         .sheet(isPresented: $showingPlanRevisionPreview) {
             if let goal = ownedGoal {
-                PipoPlanRevisionReviewSheet(goal: goal) {
+                PipoManagePlanV2Sheet(goal: goal) {
                     showingPlanRevisionPreview = false
                 }
             }
@@ -958,90 +958,6 @@ private struct PipoMoneyOutReviewSheet: View {
                 ToolbarItem(placement: .confirmationAction) {
                     Button("Done", action: onClose)
                 }
-            }
-        }
-    }
-}
-
-
-/// Review-only plan editor. It must not persist changes until versioned,
-/// future-only plan updates and stale-write handling are implemented.
-private struct PipoPlanRevisionReviewSheet: View {
-    let goal: PersonalGoal
-    let onClose: () -> Void
-
-    @State private var targetText = ""
-    @State private var targetDate = Date.now
-    @State private var rhythm: SavingRhythm = .weekly
-
-    private var amount: Int? {
-        PersonalPlanFormatting.parseRupiah(targetText)
-    }
-
-    private var budgetMatches: Bool {
-        guard let amount else { return false }
-        if goal.subItems.isEmpty { return true }
-        let values = goal.subItems.compactMap { Int(exactly: $0.amount) }
-        guard values.count == goal.subItems.count else { return false }
-        var sum = 0
-        for value in values {
-            let (next, overflow) = sum.addingReportingOverflow(value)
-            guard !overflow else { return false }
-            sum = next
-        }
-        return sum == amount
-    }
-
-    var body: some View {
-        NavigationStack {
-            Form {
-                Section("Your revised plan") {
-                    TextField("Target in IDR", text: $targetText)
-                        .keyboardType(.numberPad)
-                        .accessibilityIdentifier("pipo.plan.preview.target")
-                    DatePicker("Target date", selection: $targetDate,
-                               in: Date.now..., displayedComponents: .date)
-                    Picker("Saving rhythm", selection: $rhythm) {
-                        ForEach(SavingRhythm.allCases) { item in
-                            Text(item.rawValue).tag(item)
-                        }
-                    }
-                }
-                Section("Before and after") {
-                    LabeledContent("Already recorded", value: money(goal.currentAmount))
-                    LabeledContent("Original target", value: money(goal.targetAmount))
-                    if let amount, amount > 0,
-                       Calendar.current.startOfDay(for: targetDate) >= Calendar.current.startOfDay(for: .now) {
-                        LabeledContent("New target", value: money(amount))
-                        LabeledContent("Still to record",
-                                       value: money(max(Double(amount) - goal.currentAmount, 0)))
-                    } else {
-                        Text("Choose a future date and a valid target.")
-                            .foregroundStyle(PipoTheme.muted)
-                    }
-                    if !budgetMatches {
-                        Text("Your budget items must add up exactly to the new target. Edit the breakdown before saving.")
-                            .foregroundStyle(PipoTheme.deepPink)
-                    }
-                }
-                Section {
-                    Text("Preview only. Past contributions, XP and rhythm history are untouched. The change is not saved.")
-                        .font(.footnote)
-                    Button("Save plan changes — coming after secure sync") {}
-                        .disabled(true)
-                }
-            }
-            .navigationTitle("Manage plan")
-            .navigationBarTitleDisplayMode(.inline)
-            .toolbar {
-                ToolbarItem(placement: .confirmationAction) {
-                    Button("Done", action: onClose)
-                }
-            }
-            .onAppear {
-                targetText = String(Int(goal.targetAmount))
-                targetDate = max(goal.targetDate, Date.now)
-                rhythm = goal.rhythm
             }
         }
     }
