@@ -59,6 +59,7 @@ Files:
 - [Review-only schema](../supabase/proposals/issue28_pay_schema_v2_REVIEW_ONLY.sql)
 - [Disposable PG17 test](../supabase/local_qa/test_issue28_pay_schema_v2.sql)
 - [Static safety checks](../scripts/test_issue28_pay_schema_foundation.py)
+- [Real disposable local GoTrue signed A/B JWT + PostgREST test](../scripts/local_authenticated_pay_v2_qa.py)
 - [CI](../.github/workflows/issue28-pay-schema-local-qa.yml)
 
 Checks:
@@ -70,6 +71,7 @@ Checks:
 6. Refund before purchase (terminal tombstone), refund after purchase, late purchase replay after refund, Lifetime Pro revocation, **retired SKU refund while new grant denied**, revision and count recomputation. Public wrapper rejects ordinary authenticated callers.
 7. Auth-admin account deletion cascade; transactional test fixture fully rolled back.
 8. Workflow uses **disposable postgres:17 GitHub Actions service** and source snapshot; no live Supabase connections or Apple billing.
+9. Independent disposable **Supabase local GoTrue + PostgREST** A/B QA obtains two real local signed JWTs, checks owner-scoped RPC, denies direct UPDATE/INSERT and public service RPC, and simulates service-only grant, replay, cross-owner rejection, refund and late event. This is **not a real signed Apple JWS, deployed Supabase or physical iPhone test**.
 
 ## Next independent development gates
 
