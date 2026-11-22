@@ -761,6 +761,10 @@ struct PipoManagePlanV2Sheet: View {
                        in: Date.now..., displayedComponents: .date)
                 .datePickerStyle(.compact)
                 .frame(minHeight: 50)
+                // SwiftUI's compact native picker can expose an empty outer
+                // accessibility label under large Dynamic Type. Keep the
+                // control itself named without replacing its native behavior.
+                .accessibilityLabel("Finish date")
                 .accessibilityIdentifier("pipo.plan.v2.finishDate")
             Text("Previously · " + dateLabel(original.targetDate))
                 .font(.footnote)
