@@ -9,6 +9,7 @@ struct ReviewPlanView: View {
     let onBack: () -> Void
     let onEdit: (PersonalPlanStep) -> Void
     let onCreated: (UUID) -> Void
+    let onLater: (UUID) -> Void
 
     @Environment(\.modelContext) private var modelContext
     @Environment(SubscriptionManager.self) private var subscriptionManager
@@ -165,10 +166,10 @@ struct ReviewPlanView: View {
                 .frame(width: 94, height: 99)
                 .accessibilityHidden(true)
 
-            Text("Your plan is ready!")
+            Text("Well, look at that.")
                 .font(.title3.bold())
                 .accessibilityAddTraits(.isHeader)
-            Text("Pipo is cheering you on. Take it one save at a time.")
+            Text("\(plan.title) is officially a plan. No saving has been recorded yet.")
                 .font(.footnote)
                 .foregroundStyle(PersonalPlanStyle.muted)
 
@@ -192,9 +193,22 @@ struct ReviewPlanView: View {
             .background(PersonalPlanStyle.blush, in: RoundedRectangle(cornerRadius: 16))
             .overlay { RoundedRectangle(cornerRadius: 16).strokeBorder(PersonalPlanStyle.pink.opacity(0.35)) }
 
-            Button("Done") { onCreated(goalID) }
+            Text("No saving has been recorded yet. Pipo doesn't move or verify money.")
+                .font(.footnote)
+                .foregroundStyle(PersonalPlanStyle.muted)
+                .accessibilityIdentifier("pipo.firstSave.planDisclosure")
+
+            Button("View my goal") { onCreated(goalID) }
                 .buttonStyle(PersonalPlanPrimaryStyle())
-                .accessibilityHint("Opens your new saving goal")
+                .accessibilityIdentifier("pipo.firstSave.viewGoal")
+                .accessibilityHint("Opens your new goal without recording a saving")
+
+            Button("I'll do it later") { onLater(goalID) }
+                .font(.subheadline.weight(.semibold))
+                .foregroundStyle(PersonalPlanStyle.berry)
+                .frame(maxWidth: .infinity, minHeight: 44)
+                .accessibilityIdentifier("pipo.firstSave.later")
+                .accessibilityHint("Returns home without recording a saving")
         }
     }
 
@@ -327,6 +341,7 @@ struct PersonalGoalDetailView: View {
     private let recordSaving: () -> Void
 
     @Query private var goals: [PersonalGoal]
+    @Query private var allGoals: [PersonalGoal]
     @Query private var transactions: [SavingTransaction]
     @Query private var profiles: [UserProfile]
     @Environment(AuthStateManager.self) private var authStateManager
@@ -363,6 +378,29 @@ struct PersonalGoalDetailView: View {
         return goal
     }
 
+    private func isFirstSaveEligible(for goal: PersonalGoal) -> Bool {
+        guard let userID = authStateManager.userID,
+              AccountScope.owns(goal, userID: userID), !goal.isGroupGoal,
+              goal.currentAmount == 0,
+              UserProfile.existing(for: userID, in: profiles)?
+                .unlockedBadgeIds.contains(PipoBadge.firstSave.rawValue) != true
+        else { return false }
+        // Only the dashboard's actual focus goal can advertise the first
+        // account saving. Another empty goal must use the generic CTA.
+        let active = AccountScope.visibleGoals(allGoals, userID: userID)
+            .filter(\.canRecordSaving)
+        let personal = active.filter { !$0.isGroupGoal }
+        let candidates = personal.isEmpty ? active : personal
+        let focused = active.first(where: { $0.isFocusPreferred == true }) ??
+            candidates.max { lhs, rhs in
+                lhs.progress == rhs.progress
+                    ? lhs.createdAt < rhs.createdAt
+                    : lhs.progress < rhs.progress
+            }
+        guard focused?.id == goal.id else { return false }
+        return !transactions.contains { $0.userID == userID }
+    }
+
     var body: some View {
         GeometryReader { geometry in
             ScrollView {
@@ -397,7 +435,8 @@ struct PersonalGoalDetailView: View {
             }
             .safeAreaInset(edge: .bottom, spacing: 0) {
                 if let goal = ownedGoal, goal.canRecordSaving {
-                    Button("Record a saving", action: recordSaving)
+                    Button(isFirstSaveEligible(for: goal) ? "Record my first save" : "Record a saving",
+                           action: recordSaving)
                         .buttonStyle(PrimaryActionButtonStyle())
                         .accessibilityIdentifier("pipo.goal.recordSaving")
                         .padding(.horizontal, 24)

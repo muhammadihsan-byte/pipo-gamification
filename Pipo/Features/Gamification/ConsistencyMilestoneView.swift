@@ -5,36 +5,51 @@ struct ConsistencyMilestoneView: View {
     let xpEarned: Int
     let streakDays: Int
     let badgeTitles: [String]
+    let isFirstSave: Bool
     let onViewAchievements: () -> Void
 
     init(
         xpEarned: Int = GamificationManager.xpPerSaving,
         streakDays: Int,
         badgeTitles: [String] = [],
+        isFirstSave: Bool = false,
         onViewAchievements: @escaping () -> Void
     ) {
         self.xpEarned = xpEarned
         self.streakDays = streakDays
         self.badgeTitles = badgeTitles
+        self.isFirstSave = isFirstSave
         self.onViewAchievements = onViewAchievements
     }
 
     var body: some View {
         VStack(spacing: 0) {
             VStack(spacing: 18) {
-                Text("That counts!\nNice work.")
+                Text(isFirstSave ? "Your first save!" : "That counts!\nNice work.")
                     .font(.system(size: 30, weight: .bold, design: .rounded))
                     .multilineTextAlignment(.center)
                     .foregroundStyle(PipoTheme.ink)
                     .padding(.top, 54)
 
-                Text("Every step you take builds momentum.")
+                Text(isFirstSave
+                     ? "You recorded a saving for the first time. That's a real step."
+                     : "Every step you take builds momentum.")
                     .font(.subheadline)
                     .multilineTextAlignment(.center)
                     .foregroundStyle(PipoTheme.muted)
 
-                rewardSummary
-                    .padding(.top, 4)
+                if isFirstSave {
+                    firstSaveReward.padding(.top, 4)
+                    Text("That counts!")
+                        .font(.subheadline.bold())
+                        .foregroundStyle(PipoTheme.deepPink)
+                        .padding(.horizontal, 20)
+                        .padding(.vertical, 10)
+                        .background(PipoTheme.palePink, in: Capsule())
+                        .accessibilityIdentifier("pipo.firstSave.bubble")
+                } else {
+                    rewardSummary.padding(.top, 4)
+                }
 
                 PipoMascotView(companion: .celebration)
                     .frame(maxWidth: 340)
@@ -57,6 +72,34 @@ struct ConsistencyMilestoneView: View {
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .background(.white)
         .preferredColorScheme(.light)
+    }
+
+    private var firstSaveReward: some View {
+        HStack(spacing: 16) {
+            Image("PipoBadge_first-save")
+                .resizable()
+                .scaledToFit()
+                .frame(width: 64, height: 64)
+                .accessibilityHidden(true)
+            VStack(alignment: .leading, spacing: 6) {
+                Text("+\(xpEarned) XP")
+                    .font(.title3.bold())
+                    .foregroundStyle(PipoTheme.deepPink)
+                Text("First Step unlocked")
+                    .font(.subheadline.bold())
+                    .foregroundStyle(PipoTheme.ink)
+                    .accessibilityIdentifier("pipo.firstSave.badge")
+                if badgeTitles.count > 1 {
+                    Text("+\(badgeTitles.count - 1) more badges unlocked")
+                        .font(.caption)
+                        .foregroundStyle(PipoTheme.muted)
+                }
+            }
+            Spacer(minLength: 0)
+        }
+        .padding(16)
+        .background(PipoTheme.palePink, in: RoundedRectangle(cornerRadius: 16))
+        .accessibilityElement(children: .contain)
     }
 
     private var rewardSummary: some View {

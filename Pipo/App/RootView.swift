@@ -304,6 +304,7 @@ struct RootView: View {
                 xpEarned: navigationManager.milestoneXPEarned,
                 streakDays: navigationManager.milestoneStreakDays,
                 badgeTitles: navigationManager.milestoneNewBadges,
+                isFirstSave: navigationManager.milestoneIsFirstSave,
                 onViewAchievements: {
                     navigationManager.requestAchievementsOpen()
                     navigationManager.isMilestonePresented = false
@@ -405,7 +406,8 @@ struct RootView: View {
                 navigationManager.transactionDidComplete(
                     xpEarned: xpEarned,
                     streakDays: streakDays,
-                    badgeTitles: badges.map(\.title)
+                    badgeTitles: badges.map(\.title),
+                    isFirstSave: badges.contains(.firstSave)
                 )
                 // Group plans are not shared or sent to other people yet.
                 // Only personal goals have deployed cloud ownership rules.
@@ -635,6 +637,13 @@ struct RootView: View {
                         // post-save snapshot, so newly created plans are queued.
                         enqueuePersonalSavingsSync(for: userID)
                     }
+                },
+                onLater: { _ in
+                    // Zero-progress goal remains saved; "later" creates no reward.
+                    navigationManager.popToRoot()
+                    if let userID = authStateManager.userID {
+                        enqueuePersonalSavingsSync(for: userID)
+                    }
                 }
             )
         case .personalGoal(let goalID):
@@ -648,6 +657,7 @@ struct RootView: View {
                 xpEarned: navigationManager.milestoneXPEarned,
                 streakDays: navigationManager.milestoneStreakDays,
                 badgeTitles: navigationManager.milestoneNewBadges,
+                isFirstSave: navigationManager.milestoneIsFirstSave,
                 onViewAchievements: {
                     navigationManager.requestAchievementsOpen()
                     navigationManager.popToRoot()

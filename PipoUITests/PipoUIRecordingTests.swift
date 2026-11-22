@@ -29,7 +29,7 @@ final class PipoUIRecordingTests: XCTestCase {
 
         XCTAssertTrue(app.staticTexts["Review your saving plan"].waitForExistence(timeout: 20))
         tapButton("Start saving plan")
-        tapButton("Done")
+        tapButton("View my goal")
         XCTAssertTrue(app.staticTexts["Pipo QA Personal Trip"].waitForExistence(timeout: 20))
     }
 
@@ -76,7 +76,7 @@ final class PipoUIRecordingTests: XCTestCase {
         XCTAssertTrue(app.staticTexts["Review your saving plan"].waitForExistence(timeout: 15))
         attachOnboardingScreen("Global V1 — USD review before local creation")
         tapButton("Start saving plan")
-        tapButton("Done")
+        tapButton("View my goal")
         XCTAssertTrue(app.staticTexts["New Laptop USD"].waitForExistence(timeout: 20))
         attachOnboardingScreen("Global V1 — Goal Detail USD after local save")
         XCTAssertTrue(app.buttons["pipo.goal.recordSaving"].exists)
@@ -124,6 +124,98 @@ final class PipoUIRecordingTests: XCTestCase {
         XCTAssertTrue(app.staticTexts["TARGET AMOUNT · USD"].waitForExistence(timeout: 15))
         XCTAssertFalse(app.buttons["pipo.plan.v2.primary"].isEnabled)
         attachOnboardingScreen("Global V1 — Manage Plan V2 goal-level currency")
+    }
+
+
+    /// Issue #40: runs against an isolated, disk-backed synthetic account.
+    /// A DEBUG-only failed local persistence must preserve the typed amount,
+    /// leave XP/badges unchanged and allow a real first-saving retry.
+    func testIssue40FirstSaveActivationSurvivesFailureAndRelaunch() {
+        continueAfterFailure = false
+        app.launchArguments = [
+            "-pipo-global-currency-qa", "-pipo-global-currency-qa-reset",
+            "-pipo-first-save-force-persist-error"
+        ]
+        app.launch()
+
+        XCTAssertTrue(app.staticTexts["Your first saving goal"].waitForExistence(timeout: 20))
+        // Transparency copy sits below the folded Home viewport on compact
+        // devices; capture the scroll instead of asserting an offscreen AX row.
+        attachOnboardingScreen("Issue 40 — no goals, manual money disclosure")
+        tapButton("Create a saving goal")
+        tapButton("Personal saving")
+        typeText("Goal name", value: "First Step QA")
+        tapButton("Continue")
+
+        // The real existing five-step creation flow is preserved.
+        XCTAssertTrue(app.staticTexts["How much do you need?"].waitForExistence(timeout: 15))
+        tapButton("pipo.goal.currency.choose")
+        let currencySearch = app.searchFields.firstMatch
+        XCTAssertTrue(currencySearch.waitForExistence(timeout: 15))
+        currencySearch.tap()
+        currencySearch.typeText("IDR")
+        tapButton("pipo.goal.currency.IDR")
+        typeText("pipo.goal.currency.amount", value: "6000000")
+        tapButton("Continue")
+        interactWithCalendar()
+        tapButton("Continue")
+        tapButton("Continue")
+        XCTAssertTrue(app.staticTexts["Review your saving plan"].waitForExistence(timeout: 15))
+        tapButton("Start saving plan")
+        XCTAssertTrue(app.staticTexts["Well, look at that."].waitForExistence(timeout: 15))
+        XCTAssertFalse(app.staticTexts["First Step unlocked"].exists,
+                       "Creating a plan is not recording a contribution")
+        attachOnboardingScreen("Issue 40 — plan ready with no earned rewards")
+        tapButton("pipo.firstSave.later")
+
+        let record = app.buttons["pipo.dashboard.recordSaving"].firstMatch
+        XCTAssertTrue(record.waitForExistence(timeout: 20))
+        XCTAssertEqual(record.label, "Record my first save")
+        attachOnboardingScreen("Issue 40 — new zero-progress focus goal and no-pressure choice")
+
+        tapButton("pipo.dashboard.recordSaving")
+        let amount = app.textFields["Amount in IDR"].firstMatch
+        XCTAssertTrue(amount.waitForExistence(timeout: 15))
+        XCTAssertFalse(app.buttons["Save"].isEnabled, "Empty amount cannot be saved")
+        typeText("Amount in IDR", value: "75000")
+        XCTAssertTrue(app.buttons["Save"].isEnabled)
+        attachOnboardingScreen("Issue 40 — manually recorded amount, no auto-fill")
+        tapButton("Save")
+
+        XCTAssertTrue(app.staticTexts["pipo.firstSave.saveError"].waitForExistence(timeout: 12),
+                      "A local write failure must remain on the entry sheet")
+        XCTAssertEqual(amount.value as? String, "75000",
+                       "An unsuccessful write must preserve the amount for retry")
+        XCTAssertFalse(app.staticTexts["First Step unlocked"].exists,
+                       "XP and badges are never awarded for a failed save")
+        attachOnboardingScreen("Issue 40 — failed local write keeps entered money")
+        tapButton("Cancel")
+
+        // The new goal is already durably saved; failed contribution is not.
+        app.terminate()
+        app.launchArguments = ["-pipo-global-currency-qa"]
+        app.launch()
+        XCTAssertTrue(record.waitForExistence(timeout: 20))
+        XCTAssertEqual(record.label, "Record my first save",
+                       "No phantom saving after force-quit and relaunch")
+
+        tapButton("pipo.dashboard.recordSaving")
+        typeText("Amount in IDR", value: "75000")
+        tapButton("Save")
+        XCTAssertTrue(app.staticTexts["pipo.firstSave.badge"].waitForExistence(timeout: 20),
+                      "First Step badge must appear after persisted first saving")
+        XCTAssertTrue(app.staticTexts["pipo.firstSave.bubble"].exists)
+        XCTAssertTrue(app.staticTexts["+300 XP"].exists)
+        attachOnboardingScreen("Issue 40 — persisted first saving earns First Step and XP")
+
+        app.terminate()
+        app.launchArguments = ["-pipo-global-currency-qa"]
+        app.launch()
+        XCTAssertTrue(record.waitForExistence(timeout: 20))
+        XCTAssertEqual(record.label, "Record a saving",
+                       "Return visit cannot offer or replay the first-saving reward")
+        XCTAssertFalse(app.staticTexts["First Step unlocked"].exists)
+        attachOnboardingScreen("Issue 40 — recorded progress survives restart without celebration")
     }
 
     func testGroupSavingJourney() {

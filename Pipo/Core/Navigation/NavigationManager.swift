@@ -20,6 +20,7 @@ final class NavigationManager {
     var isMilestonePresented = false
     var milestoneStreakDays = 0
     var milestoneNewBadges: [String] = []
+    var milestoneIsFirstSave = false
     var pendingAchievementsRequest = false
     var milestoneXPEarned = GamificationManager.xpPerSaving
     var selectedRhythm: SavingRhythm = .monthly
@@ -53,6 +54,7 @@ final class NavigationManager {
         milestoneXPEarned = GamificationManager.xpPerSaving
         milestoneStreakDays = 0
         milestoneNewBadges = []
+        milestoneIsFirstSave = false
         pendingAchievementsRequest = false
         selectedRhythm = .monthly
         preferredDepositDay = 25
@@ -70,11 +72,13 @@ final class NavigationManager {
     }
 
     func transactionDidComplete(
-        xpEarned: Int, streakDays: Int, badgeTitles: [String] = []
+        xpEarned: Int, streakDays: Int, badgeTitles: [String] = [],
+        isFirstSave: Bool = false
     ) {
         milestoneXPEarned = xpEarned
         milestoneStreakDays = max(streakDays, 0)
         milestoneNewBadges = badgeTitles
+        milestoneIsFirstSave = isFirstSave
         isMilestonePresented = true
     }
 
