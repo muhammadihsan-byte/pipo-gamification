@@ -1068,8 +1068,11 @@ final class SavingPlanBudgetV2IntentJournal {
     /// only the exact decoded response from the authenticated server.
     func recordVerifiedResponse(
         _ response: SavingPlanBudgetV2WireResponse,
-        requestID: UUID, ownerID: UUID
+        requestID: UUID, ownerID: UUID, authenticatedOwnerID: UUID
     ) throws {
+        guard ownerID == authenticatedOwnerID else {
+            throw SavingPlanBudgetV2JournalError.accountChanged
+        }
         var entries = try all(for: ownerID)
         guard let i = entries.firstIndex(where: { $0.requestID == requestID })
         else { throw SavingPlanBudgetV2JournalError.unknownIntent }
