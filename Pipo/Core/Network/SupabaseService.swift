@@ -532,6 +532,296 @@ enum SavingPlanCASReceiptValidator {
     }
 }
 
+// MARK: - #80: Durable local plan-edit intent (inactive, NO network send)
+//
+// Stored separately per authenticated owner using an atomic write, without a
+// SwiftData schema migration. This is a delivery journal, not a second source
+// of financial truth. A staged/acknowledged entry NEVER updates goal totals,
+// XP, badges, currency or the current SwiftData plan. All transitions are
+// called explicitly; there is no automatic retry or background task.
+
+enum SavingPlanCASJournalError: Error, Equatable {
+    case invalidJournal
+    case idempotencyConflict
+    case goalAlreadyPending
+    case tooManyIntents
+    case unknownIntent
+    case invalidTransition
+    case unverifiedReadback
+    case userDecisionRequired
+}
+
+struct PendingSavingPlanCASIntent: Codable, Equatable, Sendable {
+    enum State: String, Codable, Sendable {
+        case staged       // Not confirmed: timeout and offline remain here.
+        case acknowledged // Exact RPC receipt verified, readback still needed.
+        case conflicted   // Latest server revision differs; user must decide.
+    }
+
+    let ownerID: UUID
+    let requestID: UUID
+    let goalID: UUID
+    let expectedRevision: Int64
+    let targetMinorUnits: Int64
+    let currencyCode: String
+    let targetDate: String
+    let rhythm: String
+    let preferredSavingDay: Int?
+    let plannedContributionMinorUnits: Int64?
+    let createdAt: Date
+    var state: State
+    var responseRevision: Int64?
+
+    init(request: SavingPlanCASRequest, ownerID: UUID, createdAt: Date = .now) throws {
+        guard let target = PipoGoalCurrency.minorUnits(
+                request.targetAmount, code: request.currencyCode),
+              request.targetDate.count <= 40,
+              (request.plannedContributionOverride == nil ||
+               PipoGoalCurrency.minorUnits(
+                 request.plannedContributionOverride!, code: request.currencyCode) != nil)
+        else { throw SavingPlanCASJournalError.invalidJournal }
+        self.ownerID = ownerID
+        requestID = request.requestID
+        goalID = request.goalID
+        expectedRevision = request.expectedRevision
+        targetMinorUnits = target
+        currencyCode = request.currencyCode
+        targetDate = request.targetDate
+        rhythm = request.rhythm
+        preferredSavingDay = request.preferredSavingDay
+        plannedContributionMinorUnits = request.plannedContributionOverride.flatMap {
+            PipoGoalCurrency.minorUnits($0, code: request.currencyCode)
+        }
+        self.createdAt = createdAt
+        state = .staged
+        responseRevision = nil
+    }
+
+    /// Treat every on-disk entry as untrusted after relaunch. A malformed
+    /// payload fails the whole journal closed, never silently drops edits.
+    func checkedRequest(for ownerID: UUID) throws -> SavingPlanCASRequest {
+        guard self.ownerID == ownerID,
+              expectedRevision >= 0 && expectedRevision < Int64.max,
+              let date = ISO8601DateFormatter().date(from: targetDate),
+              createdAt.timeIntervalSince1970.isFinite
+        else { throw SavingPlanCASJournalError.invalidJournal }
+        let canonical = try SavingPlanCASRequest(
+            requestID: requestID, goalID: goalID, expectedRevision: expectedRevision,
+            targetMinorUnits: targetMinorUnits, currencyCode: currencyCode,
+            targetDate: date, rhythm: rhythm,
+            preferredSavingDay: preferredSavingDay,
+            plannedContributionMinorUnits: plannedContributionMinorUnits
+        )
+        guard canonical.targetDate == targetDate else {
+            throw SavingPlanCASJournalError.invalidJournal
+        }
+        switch state {
+        case .staged:
+            guard responseRevision == nil else {
+                throw SavingPlanCASJournalError.invalidJournal
+            }
+        case .acknowledged:
+            guard responseRevision == expectedRevision + 1 else {
+                throw SavingPlanCASJournalError.invalidJournal
+            }
+        case .conflicted:
+            guard let responseRevision, responseRevision >= 0,
+                  responseRevision != expectedRevision else {
+                throw SavingPlanCASJournalError.invalidJournal
+            }
+        }
+        return canonical
+    }
+}
+
+/// Must be constructed ONLY from an authenticated, RLS-authorized server
+/// current-goal fetch; this structure alone does not prove authorization.
+struct SavingPlanCASGoalReadback: Equatable, Sendable {
+    let ownerID: UUID
+    let goalID: UUID
+    let revision: Int64
+    let targetMinorUnits: Int64
+    let currencyCode: String
+    let targetDate: Date
+    let rhythm: String
+    let preferredSavingDay: Int?
+    let plannedContributionMinorUnits: Int?
+}
+
+/// No caller automatically drains this queue. No app production action is
+/// currently wired to stage, acknowledge, resolve, or finish an intent.
+@MainActor
+final class SavingPlanCASIntentJournal {
+    private let directory: URL
+    private let files: FileManager
+    private let maximumEntries = 100
+
+    init(directory: URL, fileManager: FileManager = .default) {
+        self.directory = directory
+        files = fileManager
+    }
+
+    static func inApplicationSupport() throws -> SavingPlanCASIntentJournal {
+        let root = try FileManager.default.url(
+            for: .applicationSupportDirectory, in: .userDomainMask,
+            appropriateFor: nil, create: true
+        )
+        return SavingPlanCASIntentJournal(
+            directory: root.appendingPathComponent(
+                "PipoPendingPlanCAS", isDirectory: true
+            )
+        )
+    }
+
+    func all(for ownerID: UUID) throws -> [PendingSavingPlanCASIntent] {
+        let url = fileURL(for: ownerID)
+        guard files.fileExists(atPath: url.path) else { return [] }
+        let entries: [PendingSavingPlanCASIntent]
+        do {
+            entries = try JSONDecoder().decode(
+                [PendingSavingPlanCASIntent].self, from: Data(contentsOf: url)
+            )
+        } catch {
+            throw SavingPlanCASJournalError.invalidJournal
+        }
+        guard entries.count <= maximumEntries else {
+            throw SavingPlanCASJournalError.tooManyIntents
+        }
+        var ids = Set<UUID>(), goals = Set<UUID>()
+        for entry in entries {
+            guard ids.insert(entry.requestID).inserted,
+                  goals.insert(entry.goalID).inserted
+            else { throw SavingPlanCASJournalError.invalidJournal }
+            do { _ = try entry.checkedRequest(for: ownerID) }
+            catch { throw SavingPlanCASJournalError.invalidJournal }
+        }
+        return entries
+    }
+
+    /// Must run BEFORE any attempted RPC, with one stable UUID. Blocks a
+    /// second unresolved edit to the same goal (including a conflict).
+    @discardableResult
+    func stage(_ request: SavingPlanCASRequest, ownerID: UUID) throws
+        -> PendingSavingPlanCASIntent {
+        var entries = try all(for: ownerID)
+        if let previous = entries.first(where: { $0.requestID == request.requestID }) {
+            guard try previous.checkedRequest(for: ownerID) == request else {
+                throw SavingPlanCASJournalError.idempotencyConflict
+            }
+            return previous
+        }
+        guard !entries.contains(where: { $0.goalID == request.goalID }) else {
+            throw SavingPlanCASJournalError.goalAlreadyPending
+        }
+        guard entries.count < maximumEntries else {
+            throw SavingPlanCASJournalError.tooManyIntents
+        }
+        let intent = try PendingSavingPlanCASIntent(request: request, ownerID: ownerID)
+        entries.append(intent)
+        try persist(entries, for: ownerID)
+        return intent
+    }
+
+    /// Accept no success or conflict merely from HTTP 200. The receipt
+    /// validator compares exact goal/UUID/amount/date/currency/revision.
+    func recordVerifiedResponse(
+        _ response: SavingPlanCASWireResponse, requestID: UUID, ownerID: UUID
+    ) throws {
+        var entries = try all(for: ownerID)
+        guard let index = entries.firstIndex(where: { $0.requestID == requestID })
+        else { throw SavingPlanCASJournalError.unknownIntent }
+        let expected = try entries[index].checkedRequest(for: ownerID)
+        let result = try SavingPlanCASReceiptValidator.verify(response, for: expected)
+        let nextState: PendingSavingPlanCASIntent.State
+        let revision: Int64
+        switch result {
+        case .applied(_, let accepted):
+            nextState = .acknowledged
+            revision = accepted
+        case .conflict(let current):
+            nextState = .conflicted
+            revision = current
+        }
+        if entries[index].state != .staged {
+            guard entries[index].state == nextState,
+                  entries[index].responseRevision == revision
+            else { throw SavingPlanCASJournalError.invalidTransition }
+            return
+        }
+        entries[index].state = nextState
+        entries[index].responseRevision = revision
+        try persist(entries, for: ownerID)
+    }
+
+    /// Receipt alone is insufficient: a replayed receipt might refer to an
+    /// older state. Only remove after a fresh, owner-scoped CURRENT server
+    /// readback matches the entire original amendment and exact revision.
+    func finishVerifiedCurrentReadback(
+        requestID: UUID, ownerID: UUID, current: SavingPlanCASGoalReadback
+    ) throws {
+        var entries = try all(for: ownerID)
+        guard let index = entries.firstIndex(where: { $0.requestID == requestID })
+        else { throw SavingPlanCASJournalError.unknownIntent }
+        let item = entries[index]
+        guard item.state == .acknowledged,
+              item.ownerID == ownerID, current.ownerID == ownerID,
+              current.goalID == item.goalID,
+              current.revision == item.responseRevision,
+              current.targetMinorUnits == item.targetMinorUnits,
+              current.currencyCode == item.currencyCode,
+              ISO8601DateFormatter().string(from: current.targetDate) == item.targetDate,
+              current.rhythm == item.rhythm,
+              current.preferredSavingDay == item.preferredSavingDay,
+              (current.plannedContributionMinorUnits.map(Int64.init)
+                    == item.plannedContributionMinorUnits)
+        else { throw SavingPlanCASJournalError.unverifiedReadback }
+        entries.remove(at: index)
+        try persist(entries, for: ownerID)
+    }
+
+    /// No silent last-write-wins. A conflict stays until the user explicitly
+    /// discards/rebases the draft in a future reviewed UI.
+    func discardConflictedAfterUserDecision(
+        requestID: UUID, ownerID: UUID, userConfirmedDiscard: Bool
+    ) throws {
+        guard userConfirmedDiscard else {
+            throw SavingPlanCASJournalError.userDecisionRequired
+        }
+        var entries = try all(for: ownerID)
+        guard let index = entries.firstIndex(where: { $0.requestID == requestID })
+        else { throw SavingPlanCASJournalError.unknownIntent }
+        guard entries[index].state == .conflicted else {
+            throw SavingPlanCASJournalError.invalidTransition
+        }
+        entries.remove(at: index)
+        try persist(entries, for: ownerID)
+    }
+
+    private func fileURL(for ownerID: UUID) -> URL {
+        directory.appendingPathComponent(
+            ownerID.uuidString.lowercased() + ".json", isDirectory: false
+        )
+    }
+
+    private func persist(
+        _ entries: [PendingSavingPlanCASIntent], for ownerID: UUID
+    ) throws {
+        try files.createDirectory(
+            at: directory, withIntermediateDirectories: true
+        )
+        let bytes = try JSONEncoder().encode(entries)
+        #if os(iOS)
+        // Protected while the device is locked; use a strong iOS data-
+        // protection class rather than writing an unprotected JSON queue.
+        try bytes.write(to: fileURL(for: ownerID),
+                        options: [.atomic, .completeFileProtectionUnlessOpen])
+        #else
+        // Linux-only isolated contract harness, never an app delivery path.
+        try bytes.write(to: fileURL(for: ownerID), options: [.atomic])
+        #endif
+    }
+}
+
 enum SavingMoneyOutRequestError: Error, Equatable {
     case invalidAmount
     case invalidNote
