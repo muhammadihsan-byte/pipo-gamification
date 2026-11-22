@@ -94,7 +94,7 @@ class PlanRevisionCASProposalSafety(unittest.TestCase):
         self.assertRegex(self.qa, r"(?m)^ROLLBACK;$")
         self.assertIn("SET LOCAL ROLE authenticated;", self.qa)
         self.assertIn("request.jwt.claim.sub", self.qa)
-        self.assertIn("same payload", self.doc)
+        self.assertIn("same request UUID", self.doc)
         self.assertIn("TWO committed sessions", self.doc)
         for contract in ("client spoofed initial revision", "stale revision",
                          "UUID reused with changed payload",
