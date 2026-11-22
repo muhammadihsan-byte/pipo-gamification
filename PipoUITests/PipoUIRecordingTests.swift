@@ -769,7 +769,13 @@ final class PipoUIRecordingTests: XCTestCase {
         XCTAssertFalse(app.buttons["pipo.plan.v2.primary"].isEnabled)
         attachOnboardingScreen("Issue 42 — Approved V2 overview, no writes")
         tapButton("pipo.plan.v2.back")
-        tapButton("pipo.goal.moneyOutPreview")
+        XCTAssertTrue(app.buttons["pipo.goal.moneyOutPreview"].waitForExistence(timeout: 15))
+        // The pinned Record Saving footer can intercept the raw button
+        // centre even when accessibility reports Money Out as hittable.
+        // Use the same unobscured-tap helper as the passed Manage Plan V2 QA.
+        tapButtonAboveSavingFooter("pipo.goal.moneyOutPreview")
+        XCTAssertFalse(app.navigationBars["Record a saving"].exists,
+                       "Money Out must not accidentally open Record Saving")
         XCTAssertTrue(app.navigationBars["Money used elsewhere"].waitForExistence(timeout: 12))
         attachOnboardingScreen("Issue 42 — Money Out input is visible")
         let input = app.textFields["pipo.card.moneyOut.amount"].firstMatch
