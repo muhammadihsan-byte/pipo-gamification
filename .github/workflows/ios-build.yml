@@ -256,7 +256,9 @@ jobs:
         id: manage_plan
         if: >-
           (github.event_name == 'workflow_dispatch' && inputs.validation_mode == 'manage-plan-qa') ||
-          (github.event_name == 'pull_request' && github.head_ref == 'feat/pipo-manage-plan-v2-option-b')
+          (github.event_name == 'pull_request' &&
+           (github.head_ref == 'feat/pipo-manage-plan-v2-option-b' ||
+            github.head_ref == 'polish/pipo-dev2-manage-global-v1'))
         shell: bash
         run: |
           set -euo pipefail
