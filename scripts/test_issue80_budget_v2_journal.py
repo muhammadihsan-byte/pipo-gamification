@@ -113,13 +113,18 @@ require(try reopened.pending(for: otherOwner).isEmpty,
 let wrongAmount = try receipt(["target_amount":1.01])
 rejectsContract {
     try reopened.recordVerifiedResponse(wrongAmount,
-        requestID: requestID, ownerID: owner)
+        requestID: requestID, ownerID: owner, authenticatedOwnerID: owner)
 }
 require(try reopened.pending(for: owner).first?.state == .staged,
         "Untrusted receipt must leave intent untouched")
+rejects(.accountChanged) {
+    try reopened.recordVerifiedResponse(
+        try receipt(), requestID: requestID, ownerID: owner,
+        authenticatedOwnerID: otherOwner)
+}
 
 try reopened.recordVerifiedResponse(try receipt(),
-    requestID: requestID, ownerID: owner)
+    requestID: requestID, ownerID: owner, authenticatedOwnerID: owner)
 let acknowledged = try reopened.pending(for: owner).first!
 require(acknowledged.state == .acknowledged,
         "RPC receipt is not final verification")
@@ -168,7 +173,8 @@ let conflict: SavingPlanBudgetV2WireResponse = try JSONDecoder().decode(
     from: Data(("{\"status\":\"conflict\",\"goal_id\":\"" +
         secondGoal.uuidString + "\",\"current_revision\":2}").utf8))
 try afterRestart.recordVerifiedResponse(
-    conflict, requestID: secondID, ownerID: owner)
+    conflict, requestID: secondID, ownerID: owner,
+    authenticatedOwnerID: owner)
 rejects(.userDecisionRequired) {
     try afterRestart.discardConflictedAfterUserDecision(
         requestID: secondID, ownerID: owner, userConfirmedDiscard: false)
