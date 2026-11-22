@@ -32,19 +32,24 @@ def guard() -> None:
             "Refusing non-loopback PostgreSQL")
     require(os.getenv("PGDATABASE") == DB, "Refusing non-disposable database")
     require(os.getenv("PGUSER") == "postgres", "Refusing unrecognized QA superuser")
+    require(os.getenv("PGPASSWORD") == "disposable-test-only",
+            "Refusing unexpected PostgreSQL credentials")
     require("pipo.allow_synthetic_auth_qa=staging-only" in os.getenv("PGOPTIONS", ""),
             "Missing explicit disposable QA PGOPTIONS")
     require(os.getenv("PGPORT", "5432").isdigit(), "Invalid test port")
     response = subprocess.run(
         ["psql", "-X", "-qAt", "-v", "ON_ERROR_STOP=1", "-c",
-         "SELECT current_database(),inet_server_addr(),current_user,"
-         "to_regclass('private.pipo_plan_revision_receipts') IS NOT NULL"],
+         "SELECT current_database(),current_user,"
+         "to_regclass('private.pipo_plan_revision_receipts') IS NOT NULL,"
+         "current_setting('server_version_num')::integer >= 170000"],
         text=True, capture_output=True, timeout=10, check=True,
     )
     fields = response.stdout.strip().split("|")
-    require(len(fields) == 4 and fields[0] == DB and
-            fields[1] in {"127.0.0.1", "::1"} and fields[2] == "postgres"
-            and fields[3] == "t", "Unsafe or incomplete local PG test setup")
+    # Docker's internal server interface is a bridge IP; require the
+    # CLIENT to connect via PGHOST=loopback and verify DB, QA role,
+    # pinned disposable credential, receipt schema and PG17 instead.
+    require(fields == [DB, "postgres", "t", "t"],
+            "Unsafe or incomplete local PG test setup")
 
 def admin(sql: str) -> str:
     x = subprocess.run(
