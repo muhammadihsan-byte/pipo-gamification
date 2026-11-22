@@ -7,6 +7,7 @@ on:
       - "supabase/proposals/issue28_pay_schema_v2_REVIEW_ONLY.sql"
       - "supabase/local_qa/test_issue28_pay_schema_v2.sql"
       - "scripts/test_issue28_pay_schema_foundation.py"
+      - "scripts/local_authenticated_pay_v2_qa.py"
       - ".github/workflows/issue28-pay-schema-local-qa.yml"
       - "supabase/local_qa/bootstrap.sql"
       - "supabase/local_qa/20261120052238_verified_schema_snapshot.sql"
@@ -88,4 +89,47 @@ jobs:
             echo '- Real signed Apple JWS, notifications, webhook authenticity, live Auth A/B and StoreKit sandbox require future dedicated QA.'
             echo '- Catalog is empty by default. No purchase is enabled or processed.'
             echo '- No SQL was applied to connected production Supabase.'
+          } >> "$GITHUB_STEP_SUMMARY"
+
+  local-signed-auth-postgrest:
+    name: "Pay V2 - disposable signed Auth A/B + PostgREST"
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install pinned local Supabase CLI
+        uses: supabase/setup-cli@v3.2.0
+        with:
+          version: 3.2.0
+      - name: Validate local-only runner and test script
+        shell: bash
+        run: |
+          set -euo pipefail
+          supabase --version
+          supabase start --help >/dev/null
+          python3 -m py_compile scripts/local_authenticated_pay_v2_qa.py
+      - name: Start disposable signed Auth / PostgREST stack on loopback
+        shell: bash
+        run: |
+          set -euo pipefail
+          supabase start --exclude studio,imgproxy,realtime,storage-api,edge-runtime,logflare,vector,supavisor,postgres-meta,mailpit
+      - name: Verify real two-user JWT, owner RLS and service-only RPC
+        shell: bash
+        run: |
+          set -euo pipefail
+          if ! command -v psql >/dev/null 2>&1; then
+            sudo apt-get update -qq
+            sudo apt-get install -y postgresql-client
+          fi
+          python3 scripts/local_authenticated_pay_v2_qa.py
+      - name: Report signed-local-only boundary
+        if: always()
+        shell: bash
+        run: |
+          {
+            echo '## Issue #28 Pay Schema Local Auth'
+            echo '- Disposable local GoTrue-signed JWT + PostgREST: **NOT production**.'
+            echo '- Service-only Apple events use synthetic receipts and proof hashes.'
+            echo '- Apple JWS, Apple Server API and Notifications v2 remain completely unverified.'
+            echo '- No customer, Apple purchase, production database, feature activation or checkout.'
           } >> "$GITHUB_STEP_SUMMARY"
