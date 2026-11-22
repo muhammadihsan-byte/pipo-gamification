@@ -39,6 +39,9 @@ jobs:
       - name: Validate Issue 80 dormant Swift CAS contract on Linux (no Xcode)
         run: python3 -m unittest -v scripts/test_issue80_client_contract.py
 
+      - name: Validate Issue 80 create-only goal and cloud readback (Swift on Linux, no Xcode)
+        run: python3 -m unittest -v scripts/test_issue80_create_only_readback.py
+
       - name: Compile isolated QA scripts (syntax only)
         run: |
           python3 -m py_compile \
@@ -52,6 +55,6 @@ jobs:
           {
             echo '## PR Fast Checks'
             echo 'Repository preflight, roadmap safety, and offline QA-harness tests.'
-            echo 'Does not compile Swift, exercise a simulator, or replace the iOS Build and Test gate.'
+            echo 'Compiles isolated Foundation-only Swift contracts on Linux; does NOT build the iOS app, exercise a simulator, or replace native validation.'
             echo "Commit: \`${{ github.event.pull_request.head.sha || github.sha }}\`"
           } >> "$GITHUB_STEP_SUMMARY"
