@@ -1,4 +1,5 @@
 import SwiftUI
+import UIKit
 
 struct PersonalGoalPlan {
     let title: String
@@ -68,7 +69,6 @@ struct CreateGoalView: View {
     @State private var showsCurrencyPicker = false
     @State private var currencySearch = ""
     @State private var focusAmountAfterCurrencySelection = false
-    @FocusState private var currencySearchFocused: Bool
     @FocusState private var targetAmountFocused: Bool
     @State private var breakdown: [GoalBreakdownDraft] = []
     @State private var startDate: Date
@@ -138,7 +138,7 @@ struct CreateGoalView: View {
             // can leave the previous search responder above the target step.
             // Fully release search focus before directing attention to the
             // amount entry the user is about to edit.
-            currencySearchFocused = false
+            dismissCurrencySearchKeyboard()
             currencySearch = ""
             if focusAmountAfterCurrencySelection {
                 focusAmountAfterCurrencySelection = false
@@ -288,6 +288,16 @@ struct CreateGoalView: View {
         }
     }
 
+    // iOS 17-compatible dismissal of UIKit search responders. SwiftUI's
+    // searchFocused(_:) is iOS 18+ and cannot be used with Pipo's deployment
+    // target. We still transfer focus to amount only after sheet onDismiss.
+    private func dismissCurrencySearchKeyboard() {
+        UIApplication.shared.sendAction(
+            #selector(UIResponder.resignFirstResponder),
+            to: nil, from: nil, for: nil
+        )
+    }
+
     private var currencyPicker: some View {
         NavigationStack {
             List {
@@ -296,9 +306,10 @@ struct CreateGoalView: View {
                     || PipoGoalCurrency.currencyName($0).localizedCaseInsensitiveContains(currencySearch)
                 }, id: \.self) { code in
                     Button {
-                        // Release .searchable keyboard ownership before the
-                        // selected-currency sheet disappears.
-                        currencySearchFocused = false
+                        // Native .searchable can retain keyboard ownership while
+                        // its sheet is closing. Resign it before dismissal on
+                        // all supported iOS deployment versions.
+                        dismissCurrencySearchKeyboard()
                         if currencyCode != code {
                             currencyCode = code
                             targetAmount = ""
@@ -341,12 +352,11 @@ struct CreateGoalView: View {
             }
             .listStyle(.plain)
             .searchable(text: $currencySearch, prompt: "Search code or currency")
-            .searchFocused($currencySearchFocused)
             .navigationTitle("Choose goal currency")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar { ToolbarItem(placement: .cancellationAction) {
                 Button("Done") {
-                    currencySearchFocused = false
+                    dismissCurrencySearchKeyboard()
                     showsCurrencyPicker = false
                 }
             }}
@@ -362,7 +372,6 @@ struct CreateGoalView: View {
                     // Reopening the sheet must not reuse an old search term,
                     // otherwise choosing IDR then USD can yield zero matches.
                     currencySearch = ""
-                    currencySearchFocused = false
                     targetAmountFocused = false
                     showsCurrencyPicker = true
                 } label: {
