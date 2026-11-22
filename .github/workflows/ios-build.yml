@@ -910,6 +910,11 @@ jobs:
             -only-testing:PipoTests \
             CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO \
             test 2>&1 | tee validation/issue80-bridge-native.log
+          grep -q 'testIssue80LegacyBridgeKeepsLocalSavingAndXPOnReopen' \
+            validation/issue80-bridge-native.log || {
+              echo 'Bridge native SwiftData/XCTest case was not executed' >&2
+              exit 1
+            }
           grep -Eq 'Test Suite|Executed [1-9][0-9]* tests?' \
             validation/issue80-bridge-native.log
 
