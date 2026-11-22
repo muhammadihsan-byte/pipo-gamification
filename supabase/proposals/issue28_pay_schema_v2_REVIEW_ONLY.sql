@@ -237,7 +237,10 @@ BEGIN
   SELECT * INTO v_catalog
     FROM pipo_billing_private.apple_catalog
     WHERE environment=p_environment AND product_id=p_product_id
-      AND bundle_id=p_bundle_id AND enabled=true;
+      AND bundle_id=p_bundle_id
+      -- A RETIRED SKU still needs refunds/revocations processed. New
+      -- purchases for retired SKU remain blocked, not blindly minted.
+      AND (enabled=true OR p_action IN ('refunded','revoked'));
   IF NOT FOUND THEN
     RAISE EXCEPTION 'Apple product/environment/bundle not in enabled server catalog'
       USING ERRCODE = '22023';
@@ -346,6 +349,42 @@ BEGIN
 END
 $apply$;
 
+-- Public PostgREST is exposed by default; the trusted Edge verifier must
+-- not require exposing private tables/schemas. This thin INVOKER RPC has
+-- EXECUTE for service_role ONLY. Mere possession of a user JWT is not proof.
+CREATE FUNCTION public.pipo_internal_ingest_verified_apple_event_v1(
+  p_environment text,
+  p_event_id text,
+  p_transaction_id text,
+  p_original_transaction_id text,
+  p_product_id text,
+  p_bundle_id text,
+  p_user_id uuid,
+  p_app_account_token uuid,
+  p_action text,
+  p_proof_sha256 text,
+  p_apple_signed_at timestamptz
+)
+RETURNS TABLE(
+  owner_id uuid, personal_slots integer, group_slots integer,
+  lifetime_pro boolean, entitlement_revision bigint
+)
+LANGUAGE sql VOLATILE SECURITY INVOKER SET search_path = ''
+AS $internal_rpc$
+  SELECT * FROM pipo_billing_private.apply_verified_apple_event_v1(
+    p_environment, p_event_id, p_transaction_id, p_original_transaction_id,
+    p_product_id, p_bundle_id, p_user_id, p_app_account_token,
+    p_action, p_proof_sha256, p_apple_signed_at
+  )
+$internal_rpc$;
+
+REVOKE ALL ON FUNCTION public.pipo_internal_ingest_verified_apple_event_v1(
+  text,text,text,text,text,text,uuid,uuid,text,text,timestamptz
+) FROM PUBLIC, anon, authenticated;
+GRANT EXECUTE ON FUNCTION public.pipo_internal_ingest_verified_apple_event_v1(
+  text,text,text,text,text,text,uuid,uuid,text,text,timestamptz
+) TO service_role;
+
 REVOKE ALL ON FUNCTION pipo_billing_private.apply_verified_apple_event_v1(
   text,text,text,text,text,text,uuid,uuid,text,text,timestamptz
 ) FROM PUBLIC, anon, authenticated;
@@ -363,6 +402,11 @@ BEGIN
      OR has_function_privilege(
        'authenticated',
        'pipo_billing_private.apply_verified_apple_event_v1(text,text,text,text,text,text,uuid,uuid,text,text,timestamptz)',
+       'EXECUTE'
+     )
+     OR has_function_privilege(
+       'authenticated',
+       'public.pipo_internal_ingest_verified_apple_event_v1(text,text,text,text,text,text,uuid,uuid,text,text,timestamptz)',
        'EXECUTE'
      )
   THEN RAISE EXCEPTION 'Pay V2 grant boundary broken'; END IF;
