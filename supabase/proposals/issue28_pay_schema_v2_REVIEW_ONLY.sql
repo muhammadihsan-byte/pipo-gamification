@@ -138,6 +138,22 @@ CREATE POLICY pipo_entitlements_v2_select_owner
   FOR SELECT TO authenticated
   USING (user_id = (select auth.uid()));
 
+-- Explicit service_role policies work on both real Supabase (where that
+-- role usually bypasses RLS) and a faithful *non-bypass* disposable test role.
+-- There is NO policy granting any private event/receipt rights to clients.
+CREATE POLICY pipo_entitlements_v2_service
+  ON public.pipo_entitlements_v2 FOR ALL TO service_role
+  USING (true) WITH CHECK (true);
+CREATE POLICY pipo_iap_catalog_service
+  ON pipo_billing_private.apple_catalog FOR ALL TO service_role
+  USING (true) WITH CHECK (true);
+CREATE POLICY pipo_iap_transactions_service
+  ON pipo_billing_private.apple_transactions FOR ALL TO service_role
+  USING (true) WITH CHECK (true);
+CREATE POLICY pipo_iap_events_service
+  ON pipo_billing_private.apple_events FOR ALL TO service_role
+  USING (true) WITH CHECK (true);
+
 -- Returning a single zero-entitlement row for a first-time authenticated user
 -- avoids assuming that a profile has been created. No client-owned user arg.
 CREATE FUNCTION public.pipo_read_entitlements_v2()
