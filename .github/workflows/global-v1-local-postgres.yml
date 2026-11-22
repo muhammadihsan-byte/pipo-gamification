@@ -85,13 +85,25 @@ jobs:
           set -euo pipefail
           psql -X -v ON_ERROR_STOP=1 -f supabase/local_qa/test_issue42_immutable_history.sql
 
+      - name: Apply Issue 29 immutable ledger ACL to disposable PostgreSQL ONLY
+        shell: bash
+        run: |
+          set -euo pipefail
+          psql -X -v ON_ERROR_STOP=1 -f supabase/proposals/issue_29_immutable_contribution_acl_REVIEW_ONLY.sql
+
+      - name: Verify authenticated A/B ledger ACL, UUID retry and whole-account erasure
+        shell: bash
+        run: |
+          set -euo pipefail
+          psql -X -v ON_ERROR_STOP=1 -f supabase/local_qa/test_issue29_ledger_acl.sql
+
       - name: Explicitly report test scope
         if: always()
         shell: bash
         run: |
           echo "LOCAL QA: disposable postgres:17 service on an ephemeral GitHub Linux runner."
           echo "NO Supabase project, database branch, production Auth users, secrets, or billing change."
-          echo "Verified by SQL: initial schema, currency trigger, RLS, composite FK, and REVIEW-ONLY contribution guard."
+          echo "Verified by SQL: initial schema, currency guard, RLS, FK, #42 contribution guard, #29 client ACL and Auth deletion cascade."
           echo "NOT VERIFIED: real Auth JWT signing / PostgREST request routing / live Supabase 2-user roundtrip."
 
   local-auth-postgrest:
