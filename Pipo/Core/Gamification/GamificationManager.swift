@@ -352,11 +352,24 @@ enum AchievementEngine {
               goal.ownerUserID == userID,
               transaction.userID == userID,
               transaction.goalId == goal.id else { return [] }
-        // History includes every owned goal: "First Step" is an account-wide first,
-        // while rhythm, planned and recovery rules remain scoped to this goal.
-        let accountHistory = history.filter {
-            $0.userID == userID && $0.id != transaction.id && $0.date <= transaction.date
+        // Badge evaluation must use trustworthy, unique persisted events.
+        // Never re-award a transaction already present in the journal, even
+        // if a migrated profile has missing/older unlocked badge IDs.
+        guard !history.contains(where: { $0.id == transaction.id }) else { return [] }
+        let ownedHistory = history.filter { $0.userID == userID }
+        var seenEventIDs = Set<UUID>()
+        // Conflicting imported/replayed IDs must not inflate planned days,
+        // streaks or milestone awards. Fail closed without rewriting history.
+        guard ownedHistory.allSatisfy({ seenEventIDs.insert($0.id).inserted }) else {
+            return []
         }
+
+        // "First Step" means the first *recorded* account event, not the
+        // chronologically earliest value in its Date field. A previous event
+        // on another goal can have a later date (cross-goal backfilling).
+        // The goal's planned/recovery calculations still use only events
+        // dated no later than the new event.
+        let accountHistory = ownedHistory.filter { $0.date <= transaction.date }
         let existing = accountHistory.filter { $0.goalId == goal.id }
         let priorDates = existing.map(\.date)
         let all = existing + [transaction]
@@ -371,7 +384,7 @@ enum AchievementEngine {
             asOf: transaction.date, calendar: calendar
         )
 
-        var eligible: [PipoBadge] = accountHistory.isEmpty ? [.firstSave] : []
+        var eligible: [PipoBadge] = ownedHistory.isEmpty ? [.firstSave] : []
         if SavingConsistency.isPlannedContribution(date: transaction.date,
                                                   amount: transaction.amount,
                                                   goal: goal, calendar: calendar) {

@@ -502,6 +502,125 @@ final class GamificationManagerTests: XCTestCase {
         XCTAssertEqual(profile.lastSavingDate, accountLatest)
     }
 
+
+    @MainActor
+    func testEarlierDatedNewGoalNeverReAwardsFirstStepAfterAnotherGoalWasSaved() {
+        let owner = UUID()
+        // Mimics a migrated profile with saving history but no stored badge IDs.
+        let profile = UserProfile(userID: owner)
+        let goal = PersonalGoal(
+            title: "Trip", category: .trip, targetAmount: 1_000,
+            startDate: makeDate(day: 1), targetDate: makeDate(day: 31),
+            rhythm: .weekly, ownerUserID: owner
+        )
+        let laterOtherGoal = SavingTransaction(
+            goalId: UUID(), amount: 80, date: makeDate(day: 25), userID: owner
+        )
+        let backdatedNewSaving = SavingTransaction(
+            goalId: goal.id, amount: 300, date: makeDate(day: 9), userID: owner
+        )
+        goal.currentAmount = 300
+        let unlocked = AchievementEngine.grant(
+            profile: profile, goal: goal, transaction: backdatedNewSaving,
+            history: [laterOtherGoal], previousAmount: 0
+        )
+        XCTAssertFalse(unlocked.contains(.firstSave),
+                       "Existing account saving blocks a second First Step even if date is later")
+        XCTAssertTrue(unlocked.contains(.quarterWay),
+                      "Valid progress awards remain available without fabricated First Step")
+        XCTAssertFalse(profile.unlockedBadgeIds.contains(PipoBadge.firstSave.rawValue))
+    }
+
+    @MainActor
+    func testAccountSwitchKeepsOtherAccountsOutOfFirstStepEligibility() {
+        let ownerA = UUID()
+        let ownerB = UUID()
+        let profileA = UserProfile(userID: ownerA)
+        let profileB = UserProfile(userID: ownerB)
+        let goalB = PersonalGoal(
+            title: "New phone", category: .gadget, targetAmount: 1_000,
+            startDate: makeDate(day: 1), targetDate: makeDate(day: 31),
+            rhythm: .flexible, ownerUserID: ownerB
+        )
+        let aHistory = SavingTransaction(
+            goalId: UUID(), amount: 150, date: makeDate(day: 25), userID: ownerA
+        )
+        let bFirst = SavingTransaction(
+            goalId: goalB.id, amount: 100, date: makeDate(day: 9), userID: ownerB
+        )
+        goalB.currentAmount = 100
+        let awards = AchievementEngine.grant(
+            profile: profileB, goal: goalB, transaction: bFirst,
+            history: [aHistory], previousAmount: 0
+        )
+        XCTAssertTrue(awards.contains(.firstSave))
+        XCTAssertEqual(profileB.unlockedBadgeIds, [PipoBadge.firstSave.rawValue])
+        XCTAssertTrue(profileA.unlockedBadgeIds.isEmpty,
+                      "Changing accounts cannot mutate the previous account's rewards")
+        XCTAssertTrue(AchievementEngine.grant(
+            profile: profileA, goal: goalB, transaction: bFirst,
+            history: [aHistory], previousAmount: 0
+        ).isEmpty, "Foreign owner cannot grant badges to a different profile")
+    }
+
+    @MainActor
+    func testReplayedContributionUUIDCannotUnlockBadgesOnMigratedEmptyProfile() {
+        let owner = UUID()
+        let originalEventID = UUID()
+        let profile = UserProfile(userID: owner)
+        let goal = PersonalGoal(
+            title: "Trip", category: .trip, targetAmount: 1_000,
+            startDate: makeDate(day: 1), targetDate: makeDate(day: 31),
+            ownerUserID: owner
+        )
+        goal.currentAmount = 300
+        let saved = SavingTransaction(
+            id: originalEventID, goalId: goal.id, amount: 300,
+            date: makeDate(day: 9), userID: owner
+        )
+        let replay = SavingTransaction(
+            id: originalEventID, goalId: goal.id, amount: 300,
+            date: makeDate(day: 9), userID: owner
+        )
+        XCTAssertTrue(AchievementEngine.grant(
+            profile: profile, goal: goal, transaction: replay,
+            history: [saved], previousAmount: 0
+        ).isEmpty)
+        XCTAssertTrue(profile.unlockedBadgeIds.isEmpty,
+                      "Replaying an already recorded event must not mint awards")
+    }
+
+    @MainActor
+    func testDuplicateHistoricalUUIDsCannotInflatePlannedAndMilestoneRewards() {
+        let owner = UUID()
+        let duplicateID = UUID()
+        let profile = UserProfile(userID: owner)
+        let goal = PersonalGoal(
+            title: "Trip", category: .trip, targetAmount: 1_000,
+            startDate: makeDate(day: 1), targetDate: makeDate(day: 31),
+            rhythm: .weekly, ownerUserID: owner
+        )
+        let original = SavingTransaction(
+            id: duplicateID, goalId: goal.id, amount: 100,
+            date: makeDate(day: 1), userID: owner
+        )
+        let importedDuplicate = SavingTransaction(
+            id: duplicateID, goalId: goal.id, amount: 100,
+            date: makeDate(day: 8), userID: owner
+        )
+        let current = SavingTransaction(
+            goalId: goal.id, amount: 300,
+            date: makeDate(day: 15), userID: owner
+        )
+        goal.currentAmount = 500
+        XCTAssertTrue(AchievementEngine.grant(
+            profile: profile, goal: goal, transaction: current,
+            history: [original, importedDuplicate], previousAmount: 200
+        ).isEmpty)
+        XCTAssertTrue(profile.unlockedBadgeIds.isEmpty,
+                      "Ambiguous imported event IDs must be reconciled, not rewarded")
+    }
+
     @MainActor
     private func makeGoal() -> PersonalGoal {
         PersonalGoal(
