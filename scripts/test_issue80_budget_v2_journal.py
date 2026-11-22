@@ -212,13 +212,9 @@ class BudgetCASV2JournalChecks(unittest.TestCase):
             root = Path(folder)
             (root / "Contract.swift").write_text(FIXTURE + "\n" + only)
             (root / "main.swift").write_text(
-                "import Foundation\
-try MainActor.assumeIsolated {\
-"
+                "import Foundation\ntry MainActor.assumeIsolated {\n"
                 + HARNESS.split("import Foundation", 1)[1]
-                + "\
-}\
-"
+                + "\n}\n"
             )
             binary = root / "journal"
             compiled = subprocess.run(
