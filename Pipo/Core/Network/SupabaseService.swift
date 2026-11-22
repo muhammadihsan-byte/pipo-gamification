@@ -1088,7 +1088,9 @@ final class SavingPlanBudgetV2IntentJournal {
             revision = current
         }
         if entries[i].state != .staged {
-            guard entries[i].state == next,
+            let isExactRepeat = entries[i].state == next
+                || (entries[i].state == .verified && next == .acknowledged)
+            guard isExactRepeat,
                   entries[i].responseRevision == revision
             else { throw SavingPlanBudgetV2JournalError.invalidTransition }
             return
