@@ -10,6 +10,8 @@ on:
       - "supabase/proposals/issue_42_money_out_ledger_REVIEW_ONLY.sql"
       - "supabase/proposals/issue_29_immutable_contribution_acl_REVIEW_ONLY.sql"
       - "supabase/proposals/issue_80_plan_revision_cas_REVIEW_ONLY.sql"
+      - "supabase/proposals/issue_80_budget_cas_v2_REVIEW_ONLY.sql"
+      - "supabase/local_qa/test_issue80_budget_cas_v2_STAGING_ONLY.sql"
       - "scripts/local_authenticated_issue80_cas_qa.py"
       - "scripts/test_issue80_concurrent_sessions.py"
       - ".github/workflows/global-v1-local-postgres.yml"
@@ -122,6 +124,20 @@ jobs:
         run: |
           set -euo pipefail
           python3 scripts/test_issue80_concurrent_sessions.py
+
+      - name: Install review-only Issue 80 atomic budget CAS V2 on disposable PostgreSQL ONLY
+        shell: bash
+        run: |
+          set -euo pipefail
+          psql -X -v ON_ERROR_STOP=1 -f supabase/proposals/issue_80_budget_cas_v2_REVIEW_ONLY.sql
+
+      - name: Validate atomic goal-budget revision, rollback, auth and historical XP
+        shell: bash
+        env:
+          PGOPTIONS: "-c pipo.allow_synthetic_auth_qa=staging-only"
+        run: |
+          set -euo pipefail
+          psql -X -v ON_ERROR_STOP=1 -f supabase/local_qa/test_issue80_budget_cas_v2_STAGING_ONLY.sql
 
       - name: Explicitly report test scope
         if: always()
