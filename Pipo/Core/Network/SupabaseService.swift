@@ -741,6 +741,292 @@ enum SavingGoalCreateReadbackVerifier {
     }
 }
 
+// MARK: - #80: Durable first-goal create journal (inactive, NO network)
+//
+// Separate from the pending *plan-edit* journal. A goal's UUID itself is
+// the stable INSERT idempotency key, including across timeout and relaunch.
+// No automatic retries, live calls, SwiftData mutation, XP, or money movement.
+
+enum SavingGoalCreateJournalError: Error, Equatable {
+    case invalidJournal
+    case idempotencyConflict
+    case tooManyPendingGoals
+    case unknownGoal
+    case accountChanged
+    case untrustedReadback
+    case invalidTransition
+    case userDecisionRequired
+}
+
+struct PendingSavingGoalCreateIntent: Codable, Equatable, Sendable {
+    enum State: String, Codable, Sendable {
+        case staged       // Server response unknown: keep original create UUID.
+        case verified     // Exact owner/goal/revision-zero readback; local merge pending.
+        case conflicted   // Owned goal exists but differs; user decision required.
+    }
+
+    let ownerID: UUID
+    let goalID: UUID
+    let title: String
+    let category: String
+    let customCategory: String?
+    let targetMinorUnits: Int64
+    let currencyCode: String
+    let startDate: String
+    let targetDate: String
+    let rhythm: String
+    let preferredSavingDay: Int?
+    let plannedContributionMinorUnits: Int64?
+    let createdAt: Date
+    var state: State
+    var observedRevision: Int64?
+
+    init(request: SavingGoalCreateOnlyRequest, createdAt: Date = .now) throws {
+        guard let amount = PipoGoalCurrency.minorUnits(
+                request.targetAmount, code: request.currencyCode),
+              createdAt.timeIntervalSince1970.isFinite,
+              (request.plannedContributionOverride == nil ||
+               PipoGoalCurrency.minorUnits(
+                 request.plannedContributionOverride!, code: request.currencyCode) != nil)
+        else { throw SavingGoalCreateJournalError.invalidJournal }
+
+        ownerID = request.expectedOwnerID
+        goalID = request.goalID
+        title = request.title
+        category = request.category
+        customCategory = request.customCategory
+        targetMinorUnits = amount
+        currencyCode = request.currencyCode
+        startDate = request.startDate
+        targetDate = request.targetDate
+        rhythm = request.rhythm
+        preferredSavingDay = request.preferredSavingDay
+        plannedContributionMinorUnits = request.plannedContributionOverride.flatMap {
+            PipoGoalCurrency.minorUnits($0, code: request.currencyCode)
+        }
+        self.createdAt = createdAt
+        state = .staged
+        observedRevision = nil
+    }
+
+    /// An on-disk JSON file is untrusted even when named after this user.
+    /// Reconstruct the canonical request and check every immutable field.
+    func checkedRequest(for ownerID: UUID) throws -> SavingGoalCreateOnlyRequest {
+        guard self.ownerID == ownerID,
+              createdAt.timeIntervalSince1970.isFinite,
+              startDate.count <= 40, targetDate.count <= 40,
+              let start = ISO8601DateFormatter().date(from: startDate),
+              let target = ISO8601DateFormatter().date(from: targetDate)
+        else { throw SavingGoalCreateJournalError.invalidJournal }
+        let canonical: SavingGoalCreateOnlyRequest
+        do {
+            canonical = try SavingGoalCreateOnlyRequest(
+                goalID: goalID, ownerID: ownerID,
+                title: title, category: category, customCategory: customCategory,
+                targetMinorUnits: targetMinorUnits, currencyCode: currencyCode,
+                startDate: start, targetDate: target, rhythm: rhythm,
+                preferredSavingDay: preferredSavingDay,
+                plannedContributionMinorUnits: plannedContributionMinorUnits
+            )
+        } catch {
+            throw SavingGoalCreateJournalError.invalidJournal
+        }
+        guard canonical.title == title,
+              canonical.customCategory == customCategory,
+              canonical.startDate == startDate, canonical.targetDate == targetDate
+        else { throw SavingGoalCreateJournalError.invalidJournal }
+        switch state {
+        case .staged:
+            guard observedRevision == nil else {
+                throw SavingGoalCreateJournalError.invalidJournal
+            }
+        case .verified:
+            guard observedRevision == 0 else {
+                throw SavingGoalCreateJournalError.invalidJournal
+            }
+        case .conflicted:
+            guard let observedRevision, observedRevision >= 0 else {
+                throw SavingGoalCreateJournalError.invalidJournal
+            }
+        }
+        return canonical
+    }
+}
+
+/// The journal itself NEVER treats an INSERT success, HTTP 409 or timeout as
+/// a verified create. Only a FRESH, session-checked, owner-filtered SELECT
+/// may be passed to recordReadback. This trust boundary is caller-enforced.
+@MainActor
+final class SavingGoalCreateIntentJournal {
+    private let directory: URL
+    private let files: FileManager
+    private let maximumEntries = 100
+
+    init(directory: URL, fileManager: FileManager = .default) {
+        self.directory = directory
+        self.files = fileManager
+    }
+
+    static func inApplicationSupport() throws -> SavingGoalCreateIntentJournal {
+        let root = try FileManager.default.url(
+            for: .applicationSupportDirectory, in: .userDomainMask,
+            appropriateFor: nil, create: true
+        )
+        return SavingGoalCreateIntentJournal(
+            directory: root.appendingPathComponent(
+                "PipoPendingGoalCreates", isDirectory: true
+            )
+        )
+    }
+
+    func all(for ownerID: UUID) throws -> [PendingSavingGoalCreateIntent] {
+        let path = fileURL(for: ownerID)
+        guard files.fileExists(atPath: path.path) else { return [] }
+        let entries: [PendingSavingGoalCreateIntent]
+        do {
+            entries = try JSONDecoder().decode(
+                [PendingSavingGoalCreateIntent].self,
+                from: Data(contentsOf: path)
+            )
+        } catch {
+            throw SavingGoalCreateJournalError.invalidJournal
+        }
+        guard entries.count <= maximumEntries else {
+            throw SavingGoalCreateJournalError.tooManyPendingGoals
+        }
+        var ids = Set<UUID>()
+        for entry in entries {
+            guard ids.insert(entry.goalID).inserted else {
+                throw SavingGoalCreateJournalError.invalidJournal
+            }
+            _ = try entry.checkedRequest(for: ownerID)
+        }
+        return entries
+    }
+
+    /// Persist BEFORE attempting a future authenticated INSERT. Never
+    /// regenerate the goal UUID on relaunch or after an ambiguous timeout.
+    @discardableResult
+    func stage(_ request: SavingGoalCreateOnlyRequest, ownerID: UUID) throws
+        -> PendingSavingGoalCreateIntent {
+        guard request.expectedOwnerID == ownerID else {
+            throw SavingGoalCreateJournalError.accountChanged
+        }
+        var entries = try all(for: ownerID)
+        if let earlier = entries.first(where: { $0.goalID == request.goalID }) {
+            guard try earlier.checkedRequest(for: ownerID) == request else {
+                throw SavingGoalCreateJournalError.idempotencyConflict
+            }
+            return earlier
+        }
+        guard entries.count < maximumEntries else {
+            throw SavingGoalCreateJournalError.tooManyPendingGoals
+        }
+        let entry = try PendingSavingGoalCreateIntent(request: request)
+        entries.append(entry)
+        try persist(entries, for: ownerID)
+        return entry
+    }
+
+    /// Nil/unauthorized readback never changes state. An owned mismatching
+    /// row becomes a CONFLICT rather than a new INSERT or an overwrite.
+    /// No state transition performs a network request or changes SwiftData.
+    @discardableResult
+    func recordReadback(
+        _ row: SavingGoalAuthoritativeCloudRow?,
+        goalID: UUID,
+        ownerID: UUID,
+        authenticatedOwnerID: UUID
+    ) throws -> PendingSavingGoalCreateIntent.State {
+        guard authenticatedOwnerID == ownerID else {
+            throw SavingGoalCreateJournalError.accountChanged
+        }
+        var entries = try all(for: ownerID)
+        guard let i = entries.firstIndex(where: { $0.goalID == goalID }) else {
+            throw SavingGoalCreateJournalError.unknownGoal
+        }
+        let request = try entries[i].checkedRequest(for: ownerID)
+
+        // Missing row means unknown/invisible, NOT a safe reason to create
+        // another UUID or drop the pending entry.
+        guard let row else {
+            throw SavingGoalCreateContractError.missingOrInvisible
+        }
+        guard row.ownerID == ownerID, row.goalID == goalID,
+              row.planRevision >= 0 else {
+            throw SavingGoalCreateJournalError.untrustedReadback
+        }
+        let next: PendingSavingGoalCreateIntent.State
+        do {
+            try SavingGoalCreateReadbackVerifier.verify(
+                row, for: request, authenticatedOwnerID: authenticatedOwnerID
+            )
+            next = .verified
+        } catch SavingGoalCreateContractError.remotelyRevised {
+            next = .conflicted
+        } catch SavingGoalCreateContractError.mismatchedRemoteGoal {
+            next = .conflicted
+        }
+        let observed = row.planRevision
+        if entries[i].state != .staged {
+            guard entries[i].state == next,
+                  entries[i].observedRevision == observed else {
+                throw SavingGoalCreateJournalError.invalidTransition
+            }
+            return next
+        }
+        entries[i].state = next
+        entries[i].observedRevision = observed
+        try persist(entries, for: ownerID)
+        return next
+    }
+
+    /// Deliberately NO automatic "finish verified" method: cloud readback
+    /// alone cannot guarantee the local SwiftData/create ledger reconciliation
+    /// has completed. Release integration must add an explicit audited gate.
+
+    func discardConflictedAfterUserDecision(
+        goalID: UUID, ownerID: UUID, userConfirmedDiscard: Bool
+    ) throws {
+        guard userConfirmedDiscard else {
+            throw SavingGoalCreateJournalError.userDecisionRequired
+        }
+        var entries = try all(for: ownerID)
+        guard let i = entries.firstIndex(where: { $0.goalID == goalID }) else {
+            throw SavingGoalCreateJournalError.unknownGoal
+        }
+        guard entries[i].state == .conflicted else {
+            throw SavingGoalCreateJournalError.invalidTransition
+        }
+        entries.remove(at: i)
+        try persist(entries, for: ownerID)
+    }
+
+    private func fileURL(for ownerID: UUID) -> URL {
+        directory.appendingPathComponent(
+            ownerID.uuidString.lowercased() + ".json", isDirectory: false
+        )
+    }
+
+    private func persist(
+        _ entries: [PendingSavingGoalCreateIntent], for ownerID: UUID
+    ) throws {
+        try files.createDirectory(
+            at: directory, withIntermediateDirectories: true
+        )
+        let data = try JSONEncoder().encode(entries)
+        #if os(iOS)
+        try data.write(
+            to: fileURL(for: ownerID),
+            options: [.atomic, .completeFileProtectionUnlessOpen]
+        )
+        #else
+        // Ephemeral, isolated Linux Swift harness only.
+        try data.write(to: fileURL(for: ownerID), options: [.atomic])
+        #endif
+    }
+}
+
 // MARK: - #80: Durable local plan-edit intent (inactive, NO network send)
 //
 // Stored separately per authenticated owner using an atomic write, without a
