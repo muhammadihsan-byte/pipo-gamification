@@ -781,6 +781,388 @@ enum SavingPlanBudgetV2ReceiptValidator {
     }
 }
 
+// MARK: - #80: Budget CAS V2 durable intent + owner-verified readback (DORMANT)
+//
+// Distinct from the old *target-only* V1 journal. No RPC or UI calls this
+// component. An acknowledged RPC is NOT sufficient to resolve a local draft.
+// There is intentionally no "finish" method: native SwiftData merge, release
+// bridge, authenticated network fetch and owner approval are still required.
+
+enum SavingPlanBudgetV2JournalError: Error, Equatable {
+    case invalidJournal
+    case accountChanged
+    case idempotencyConflict
+    case goalAlreadyPending
+    case tooManyIntents
+    case unknownIntent
+    case invalidTransition
+    case unverifiedReadback
+    case userDecisionRequired
+}
+
+struct SavingPlanBudgetV2CloudSnapshot: Decodable, Sendable {
+    let status: String
+    let goalID: UUID
+    let planRevision: Int64
+    let currencyCode: String
+    let budgetSnapshotState: String
+    let targetAmount: Decimal
+    let targetDate: String
+    let rhythm: String
+    let preferredSavingDay: Int?
+    let plannedContributionOverride: Decimal?
+    let items: [SavingPlanBudgetV2Item]
+
+    enum CodingKeys: String, CodingKey {
+        case status, rhythm, items
+        case goalID = "goal_id"
+        case planRevision = "plan_revision"
+        case currencyCode = "currency_code"
+        case budgetSnapshotState = "budget_snapshot_state"
+        case targetAmount = "target_amount"
+        case targetDate = "target_date"
+        case preferredSavingDay = "preferred_saving_day"
+        case plannedContributionOverride = "planned_contribution_override"
+    }
+}
+
+/// This verifies CONTENT only. Caller must first get the snapshot from a
+/// fresh authenticated pipo_read_plan_budget_v2 RPC, checking currentUser
+/// equals the expected owner both BEFORE and AFTER the awaited request.
+enum SavingPlanBudgetV2SnapshotVerifier {
+    static func matchesCurrent(
+        _ snapshot: SavingPlanBudgetV2CloudSnapshot,
+        request: SavingPlanBudgetV2Request,
+        authenticatedOwnerID: UUID
+    ) -> Bool {
+        let standard = ISO8601DateFormatter()
+        let fractional = ISO8601DateFormatter()
+        fractional.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+        guard let serverDate = fractional.date(from: snapshot.targetDate)
+                ?? standard.date(from: snapshot.targetDate),
+              let wantedDate = standard.date(from: request.targetDate)
+        else { return false }
+        return authenticatedOwnerID == request.expectedOwnerID
+            && snapshot.status == "snapshot"
+            && snapshot.goalID == request.goalID
+            && snapshot.planRevision == request.expectedRevision + 1
+            && snapshot.currencyCode == request.currencyCode
+            && snapshot.budgetSnapshotState == "synced"
+            && snapshot.targetAmount == request.targetAmount
+            && abs(serverDate.timeIntervalSince1970
+                   - wantedDate.timeIntervalSince1970) < 0.001
+            && snapshot.rhythm == request.rhythm
+            && snapshot.preferredSavingDay == request.preferredSavingDay
+            && snapshot.plannedContributionOverride
+                == request.plannedContributionOverride
+            && snapshot.items == request.items
+    }
+}
+
+struct PendingSavingPlanBudgetV2Intent: Codable, Equatable, Sendable {
+    struct StoredItem: Codable, Equatable, Sendable {
+        let id: UUID
+        let title: String
+        let minorUnits: Int64
+        let isCompleted: Bool
+    }
+
+    enum State: String, Codable, Sendable {
+        case staged          // Original request retained across timeout/relaunch
+        case acknowledged    // Receipt checked; still need FRESH cloud read
+        case verified        // Cloud read checked; local SwiftData NOT merged
+        case conflicted      // Must obtain explicit decision on stale edit
+        case discarded       // Durable terminal UUID tombstone after decision
+    }
+
+    let ownerID: UUID
+    let requestID: UUID
+    let goalID: UUID
+    let expectedRevision: Int64
+    let targetMinorUnits: Int64
+    let currencyCode: String
+    let targetDate: String
+    let rhythm: String
+    let preferredSavingDay: Int?
+    let plannedContributionMinorUnits: Int64?
+    let items: [StoredItem]
+    let budgetImportConfirmed: Bool
+    let createdAt: Date
+    var state: State
+    var responseRevision: Int64?
+
+    init(request: SavingPlanBudgetV2Request, ownerID: UUID,
+         createdAt: Date = .now) throws {
+        guard request.expectedOwnerID == ownerID,
+              let target = PipoGoalCurrency.minorUnits(
+                request.targetAmount, code: request.currencyCode),
+              target > 0, request.targetDate.count <= 40,
+              createdAt.timeIntervalSince1970.isFinite
+        else { throw SavingPlanBudgetV2JournalError.invalidJournal }
+        self.ownerID = ownerID
+        requestID = request.requestID
+        goalID = request.goalID
+        expectedRevision = request.expectedRevision
+        targetMinorUnits = target
+        currencyCode = request.currencyCode
+        targetDate = request.targetDate
+        rhythm = request.rhythm
+        preferredSavingDay = request.preferredSavingDay
+        plannedContributionMinorUnits = request.plannedContributionOverride.flatMap {
+            PipoGoalCurrency.minorUnits($0, code: request.currencyCode)
+        }
+        items = try request.items.map { item in
+            guard let minor = PipoGoalCurrency.minorUnits(
+                item.amount, code: request.currencyCode), minor > 0
+            else { throw SavingPlanBudgetV2JournalError.invalidJournal }
+            return StoredItem(id: item.id, title: item.title,
+                              minorUnits: minor, isCompleted: item.isCompleted)
+        }
+        budgetImportConfirmed = request.budgetImportConfirmed
+        self.createdAt = createdAt
+        state = .staged
+        responseRevision = nil
+    }
+
+    /// All JSON is UNTRUSTED on relaunch. Reconstruct the canonical V2 RPC
+    /// request rather than trusting decoded item totals/UUIDs/currency.
+    func checkedRequest(for expectedOwnerID: UUID) throws
+        -> SavingPlanBudgetV2Request {
+        guard ownerID == expectedOwnerID,
+              let date = ISO8601DateFormatter().date(from: targetDate),
+              createdAt.timeIntervalSince1970.isFinite
+        else { throw SavingPlanBudgetV2JournalError.invalidJournal }
+        do {
+            let budget = try items.map {
+                try SavingPlanBudgetV2Item(
+                    id: $0.id, title: $0.title, minorUnits: $0.minorUnits,
+                    currencyCode: currencyCode, isCompleted: $0.isCompleted
+                )
+            }
+            let reconstructed = try SavingPlanBudgetV2Request(
+                requestID: requestID, goalID: goalID,
+                expectedRevision: expectedRevision,
+                ownerID: expectedOwnerID, currencyCode: currencyCode,
+                targetMinorUnits: targetMinorUnits, targetDate: date,
+                rhythm: rhythm, preferredSavingDay: preferredSavingDay,
+                plannedContributionMinorUnits: plannedContributionMinorUnits,
+                items: budget,
+                cloudBudgetNeedsReview: budgetImportConfirmed,
+                userReviewedBudget: budgetImportConfirmed
+            )
+            guard reconstructed.targetDate == targetDate,
+                  reconstructed.items == budget,
+                  reconstructed.budgetImportConfirmed == budgetImportConfirmed
+            else { throw SavingPlanBudgetV2JournalError.invalidJournal }
+            switch state {
+            case .staged:
+                guard responseRevision == nil else {
+                    throw SavingPlanBudgetV2JournalError.invalidJournal
+                }
+            case .acknowledged, .verified:
+                guard responseRevision == expectedRevision + 1 else {
+                    throw SavingPlanBudgetV2JournalError.invalidJournal
+                }
+            case .conflicted, .discarded:
+                guard let responseRevision,
+                      responseRevision >= 0,
+                      responseRevision != expectedRevision else {
+                    throw SavingPlanBudgetV2JournalError.invalidJournal
+                }
+            }
+            return reconstructed
+        } catch {
+            throw SavingPlanBudgetV2JournalError.invalidJournal
+        }
+    }
+}
+
+/// No production call site. No automatic retry/rebase, no clearing of a
+/// verified V2 intent before separately reviewed SwiftData reconciliation.
+@MainActor
+final class SavingPlanBudgetV2IntentJournal {
+    private let directory: URL
+    private let files: FileManager
+    private let maximumEntries = 100 // no silent eviction/compaction
+
+    init(directory: URL, fileManager: FileManager = .default) {
+        self.directory = directory
+        files = fileManager
+    }
+
+    static func inApplicationSupport() throws -> SavingPlanBudgetV2IntentJournal {
+        let root = try FileManager.default.url(
+            for: .applicationSupportDirectory, in: .userDomainMask,
+            appropriateFor: nil, create: true
+        )
+        return SavingPlanBudgetV2IntentJournal(
+            directory: root.appendingPathComponent(
+                "PipoPendingBudgetCASV2", isDirectory: true
+            )
+        )
+    }
+
+    func all(for ownerID: UUID) throws -> [PendingSavingPlanBudgetV2Intent] {
+        let url = fileURL(for: ownerID)
+        guard files.fileExists(atPath: url.path) else { return [] }
+        let entries: [PendingSavingPlanBudgetV2Intent]
+        do {
+            entries = try JSONDecoder().decode(
+                [PendingSavingPlanBudgetV2Intent].self, from: Data(contentsOf: url)
+            )
+        } catch {
+            throw SavingPlanBudgetV2JournalError.invalidJournal
+        }
+        guard entries.count <= maximumEntries else {
+            throw SavingPlanBudgetV2JournalError.tooManyIntents
+        }
+        var ids = Set<UUID>(), activeGoals = Set<UUID>()
+        for entry in entries {
+            guard ids.insert(entry.requestID).inserted else {
+                throw SavingPlanBudgetV2JournalError.invalidJournal
+            }
+            if entry.state != .discarded {
+                guard activeGoals.insert(entry.goalID).inserted else {
+                    throw SavingPlanBudgetV2JournalError.invalidJournal
+                }
+            }
+            _ = try entry.checkedRequest(for: ownerID)
+        }
+        return entries
+    }
+
+    func pending(for ownerID: UUID) throws -> [PendingSavingPlanBudgetV2Intent] {
+        try all(for: ownerID).filter { $0.state != .discarded }
+    }
+
+    /// Staging must precede network I/O; an exact retry keeps the UUID and
+    /// immutable budget. A different payload with the same UUID fails.
+    @discardableResult
+    func stage(_ request: SavingPlanBudgetV2Request, ownerID: UUID) throws
+        -> PendingSavingPlanBudgetV2Intent {
+        guard request.expectedOwnerID == ownerID else {
+            throw SavingPlanBudgetV2JournalError.accountChanged
+        }
+        var entries = try all(for: ownerID)
+        if let previous = entries.first(where: { $0.requestID == request.requestID }) {
+            guard try previous.checkedRequest(for: ownerID) == request else {
+                throw SavingPlanBudgetV2JournalError.idempotencyConflict
+            }
+            return previous
+        }
+        guard !entries.contains(where: {
+            $0.goalID == request.goalID && $0.state != .discarded
+        }) else { throw SavingPlanBudgetV2JournalError.goalAlreadyPending }
+        guard entries.count < maximumEntries else {
+            throw SavingPlanBudgetV2JournalError.tooManyIntents
+        }
+        let pending = try PendingSavingPlanBudgetV2Intent(
+            request: request, ownerID: ownerID
+        )
+        entries.append(pending)
+        try persist(entries, for: ownerID)
+        return pending
+    }
+
+    /// Caller must validate Auth before AND after the awaited RPC, and pass
+    /// only the exact decoded response from the authenticated server.
+    func recordVerifiedResponse(
+        _ response: SavingPlanBudgetV2WireResponse,
+        requestID: UUID, ownerID: UUID
+    ) throws {
+        var entries = try all(for: ownerID)
+        guard let i = entries.firstIndex(where: { $0.requestID == requestID })
+        else { throw SavingPlanBudgetV2JournalError.unknownIntent }
+        let request = try entries[i].checkedRequest(for: ownerID)
+        let outcome = try SavingPlanBudgetV2ReceiptValidator.verify(
+            response, for: request
+        )
+        let next: PendingSavingPlanBudgetV2Intent.State
+        let revision: Int64
+        switch outcome {
+        case .applied(_, let accepted):
+            next = .acknowledged
+            revision = accepted
+        case .conflict(let current):
+            next = .conflicted
+            revision = current
+        }
+        if entries[i].state != .staged {
+            guard entries[i].state == next,
+                  entries[i].responseRevision == revision
+            else { throw SavingPlanBudgetV2JournalError.invalidTransition }
+            return
+        }
+        entries[i].state = next
+        entries[i].responseRevision = revision
+        try persist(entries, for: ownerID)
+    }
+
+    /// Never mark a receipt completed on response alone. This stage still
+    /// does NOT change any SwiftData, savings, XP, achievements or local items.
+    func recordAuthenticatedCurrentReadback(
+        _ snapshot: SavingPlanBudgetV2CloudSnapshot,
+        requestID: UUID, ownerID: UUID, authenticatedOwnerID: UUID
+    ) throws {
+        guard ownerID == authenticatedOwnerID else {
+            throw SavingPlanBudgetV2JournalError.accountChanged
+        }
+        var entries = try all(for: ownerID)
+        guard let i = entries.firstIndex(where: { $0.requestID == requestID })
+        else { throw SavingPlanBudgetV2JournalError.unknownIntent }
+        guard entries[i].state == .acknowledged || entries[i].state == .verified
+        else { throw SavingPlanBudgetV2JournalError.invalidTransition }
+        let request = try entries[i].checkedRequest(for: ownerID)
+        guard SavingPlanBudgetV2SnapshotVerifier.matchesCurrent(
+            snapshot, request: request, authenticatedOwnerID: authenticatedOwnerID
+        ) else { throw SavingPlanBudgetV2JournalError.unverifiedReadback }
+        if entries[i].state == .verified { return }
+        entries[i].state = .verified
+        try persist(entries, for: ownerID)
+    }
+
+    /// User chooses to DISCARD after a stale conflict; keep an immutable
+    /// tombstone to prevent accidental UUID reuse during later restarts.
+    func discardConflictedAfterUserDecision(
+        requestID: UUID, ownerID: UUID, userConfirmedDiscard: Bool
+    ) throws {
+        guard userConfirmedDiscard else {
+            throw SavingPlanBudgetV2JournalError.userDecisionRequired
+        }
+        var entries = try all(for: ownerID)
+        guard let i = entries.firstIndex(where: { $0.requestID == requestID })
+        else { throw SavingPlanBudgetV2JournalError.unknownIntent }
+        guard entries[i].state == .conflicted else {
+            throw SavingPlanBudgetV2JournalError.invalidTransition
+        }
+        entries[i].state = .discarded
+        try persist(entries, for: ownerID)
+    }
+
+    private func fileURL(for ownerID: UUID) -> URL {
+        directory.appendingPathComponent(
+            ownerID.uuidString.lowercased() + ".json", isDirectory: false
+        )
+    }
+
+    private func persist(
+        _ entries: [PendingSavingPlanBudgetV2Intent], for ownerID: UUID
+    ) throws {
+        try files.createDirectory(
+            at: directory, withIntermediateDirectories: true
+        )
+        let data = try JSONEncoder().encode(entries)
+        #if os(iOS)
+        try data.write(
+            to: fileURL(for: ownerID),
+            options: [.atomic, .completeFileProtectionUnlessOpen]
+        )
+        #else
+        try data.write(to: fileURL(for: ownerID), options: [.atomic])
+        #endif
+    }
+}
+
 // MARK: - #80: Dormant insert-only goal and authoritative readback contract
 //
 // This is an unconnected contract, NOT a network operation. The live app
