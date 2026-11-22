@@ -65,6 +65,61 @@ final class PersonalGoalTests: XCTestCase {
     }
 
 
+    /// The next recorded saving must cause the full owner-scoped backlog to
+    /// be replayed, not only the newest local transaction. UUID identities are
+    /// stable across retries; another account's records never enter the batch.
+    @MainActor
+    func testGlobalV1ReconnectingWithNextSavingIncludesEarlierOfflineBacklog() throws {
+        let alice = UUID(), bob = UUID()
+        let aliceGoal = PersonalGoal(
+            title: "Laptop", category: .gadget, targetAmount: 10,
+            currentAmount: 0.03, currencyCode: "USD", targetMinorUnits: 1_000,
+            recordedMinorUnits: 3,
+            targetDate: .now.addingTimeInterval(86_400 * 40), ownerUserID: alice
+        )
+        let bobGoal = PersonalGoal(
+            title: "Bob's trip", category: .trip, targetAmount: 500,
+            currencyCode: "USD", targetMinorUnits: 50_000,
+            targetDate: .now.addingTimeInterval(86_400 * 40), ownerUserID: bob
+        )
+        // First saving was recorded offline; second was made after reconnect.
+        let offline = SavingTransaction(
+            goalId: aliceGoal.id, amount: 0.01, amountMinorUnits: 1,
+            currencyCode: "USD", xpEarned: 5, userID: alice
+        )
+        let justRecorded = SavingTransaction(
+            goalId: aliceGoal.id, amount: 0.02, amountMinorUnits: 2,
+            currencyCode: "USD", xpEarned: 7, userID: alice
+        )
+        let foreign = SavingTransaction(
+            goalId: bobGoal.id, amount: 0.03, amountMinorUnits: 3,
+            currencyCode: "USD", xpEarned: 8, userID: bob
+        )
+        let allGoals = [aliceGoal, bobGoal]
+        let allTransactions = [offline, justRecorded, foreign]
+        let ownedGoals = AccountScope.visibleGoals(allGoals, userID: alice)
+            .filter { !$0.isGroupGoal }
+        let ownedTransactions = AccountScope.visibleTransactions(
+            allTransactions, goals: allGoals, userID: alice
+        )
+        XCTAssertEqual(Set(ownedTransactions.map(\.id)),
+                       Set([offline.id, justRecorded.id]))
+        let firstRetry = try PersonalSavingSyncBatch.make(
+            goals: ownedGoals, transactions: ownedTransactions,
+            authenticatedUserID: alice
+        )
+        XCTAssertEqual(Set(firstRetry.transactions.map(\.id)),
+                       Set([offline.id, justRecorded.id]))
+        XCTAssertEqual(firstRetry.transactions.map(\.xpEarned).reduce(0, +), 12)
+        XCTAssertTrue(firstRetry.transactions.allSatisfy { $0.userID == alice })
+        let secondRetry = try PersonalSavingSyncBatch.make(
+            goals: ownedGoals, transactions: ownedTransactions,
+            authenticatedUserID: alice
+        )
+        XCTAssertEqual(secondRetry.transactions, firstRetry.transactions)
+        XCTAssertEqual(secondRetry.goals, firstRetry.goals)
+    }
+
     /// A disconnected device must retain account-owned goals, savings and XP
     /// on disk before any cloud acknowledgement. Reopening and rebuilding the
     /// batch must preserve immutable UUIDs so upstream UPSERT retry is safe.
