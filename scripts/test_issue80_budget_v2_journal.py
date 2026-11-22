@@ -211,7 +211,15 @@ class BudgetCASV2JournalChecks(unittest.TestCase):
         with tempfile.TemporaryDirectory() as folder:
             root = Path(folder)
             (root / "Contract.swift").write_text(FIXTURE + "\n" + only)
-            (root / "main.swift").write_text(HARNESS)
+            (root / "main.swift").write_text(
+                "import Foundation\
+try MainActor.assumeIsolated {\
+"
+                + HARNESS.split("import Foundation", 1)[1]
+                + "\
+}\
+"
+            )
             binary = root / "journal"
             compiled = subprocess.run(
                 [swiftc, "-swift-version", "5", "-o", str(binary),
