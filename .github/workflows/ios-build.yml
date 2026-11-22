@@ -27,6 +27,7 @@ on:
           - global-experience-qa
           - dashboard-a11y-qa
           - first-save-qa
+          - spark-goal-qa
   push:
     tags:
       - "v*-rc*"
@@ -447,6 +448,42 @@ jobs:
           }
           exit "$QA_STATUS"
 
+      - name: Issue 69 — Spark per-goal Home/Detail screenshot and MP4 QA
+        id: spark_goal
+        if: >-
+          (github.event_name == 'workflow_dispatch' && inputs.validation_mode == 'spark-goal-qa') ||
+          (github.event_name == 'pull_request' && github.head_ref == 'feat/pipo-69-per-goal-spark-integration')
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p validation
+          xcrun simctl boot "$SIMULATOR_UDID" || true
+          xcrun simctl bootstatus "$SIMULATOR_UDID" -b
+          xcrun simctl io "$SIMULATOR_UDID" recordVideo --codec=h264 \
+            validation/pipo-issue69-spark-goal-qa.mp4 > validation/spark-goal-recording.log 2>&1 &
+          VIDEO_PID=$!
+          sleep 2
+          set +e
+          xcodebuild \
+            -project "$XCODE_PROJECT" \
+            -scheme "$XCODE_SCHEME" \
+            -destination "id=$SIMULATOR_UDID" \
+            -derivedDataPath "$RUNNER_TEMP/PipoDerivedData" \
+            -resultBundlePath "$RUNNER_TEMP/PipoSparkGoalQA.xcresult" \
+            -only-testing:PipoUITests/PipoUIRecordingTests/testIssue69SparkPerGoalHomeFocusAndDetail \
+            CODE_SIGNING_ALLOWED=NO \
+            CODE_SIGNING_REQUIRED=NO \
+            test 2>&1 | tee validation/pipo-issue69-spark-goal-qa.log
+          QA_STATUS=${PIPESTATUS[0]}
+          set -e
+          kill -INT "$VIDEO_PID" 2>/dev/null || true
+          wait "$VIDEO_PID" 2>/dev/null || true
+          test -s validation/pipo-issue69-spark-goal-qa.mp4 || {
+            echo "Spark per-goal QA MP4 missing or empty" >&2
+            exit 1
+          }
+          exit "$QA_STATUS"
+
       - name: P0 authentication and deletion simulator safety QA
         if: >-
           github.event_name == 'pull_request' &&
@@ -493,7 +530,7 @@ jobs:
         if: always()
         shell: bash
         run: |
-          for bundle in "$RUNNER_TEMP/PipoTestResults.xcresult" "$RUNNER_TEMP/PipoDashboardResults.xcresult" "$RUNNER_TEMP/PipoAuthQAResults.xcresult" "$RUNNER_TEMP/PipoCardParityResults.xcresult" "$RUNNER_TEMP/PipoAllCardsQAResults.xcresult" "$RUNNER_TEMP/PipoGoalPhotoHeroQA.xcresult" "$RUNNER_TEMP/PipoIssue42ReviewQA.xcresult" "$RUNNER_TEMP/PipoManagePlanV2QA.xcresult" "$RUNNER_TEMP/PipoGlobalExperienceV1QA.xcresult" "$RUNNER_TEMP/PipoDashboardAccessibilityQA.xcresult" "$RUNNER_TEMP/PipoFirstSaveQA.xcresult"; do
+          for bundle in "$RUNNER_TEMP/PipoTestResults.xcresult" "$RUNNER_TEMP/PipoDashboardResults.xcresult" "$RUNNER_TEMP/PipoAuthQAResults.xcresult" "$RUNNER_TEMP/PipoCardParityResults.xcresult" "$RUNNER_TEMP/PipoAllCardsQAResults.xcresult" "$RUNNER_TEMP/PipoGoalPhotoHeroQA.xcresult" "$RUNNER_TEMP/PipoIssue42ReviewQA.xcresult" "$RUNNER_TEMP/PipoManagePlanV2QA.xcresult" "$RUNNER_TEMP/PipoGlobalExperienceV1QA.xcresult" "$RUNNER_TEMP/PipoDashboardAccessibilityQA.xcresult" "$RUNNER_TEMP/PipoFirstSaveQA.xcresult" "$RUNNER_TEMP/PipoSparkGoalQA.xcresult"; do
             if test -d "$bundle"; then
               name="$(basename "$bundle" .xcresult)"
               mkdir -p "validation/visual-qa/$name"
@@ -522,6 +559,7 @@ jobs:
             ${{ runner.temp }}/PipoGlobalExperienceV1QA.xcresult
             ${{ runner.temp }}/PipoDashboardAccessibilityQA.xcresult
             ${{ runner.temp }}/PipoFirstSaveQA.xcresult
+            ${{ runner.temp }}/PipoSparkGoalQA.xcresult
           if-no-files-found: warn
           retention-days: 7
 
@@ -538,6 +576,7 @@ jobs:
           GLOBAL_V1: ${{ steps.global_v1.outcome }}
           DASHBOARD_A11Y: ${{ steps.dashboard_a11y.outcome }}
           FIRST_SAVE: ${{ steps.first_save.outcome }}
+          SPARK_GOAL: ${{ steps.spark_goal.outcome }}
         run: |
           {
             echo '## Pipo iOS QA checkpoint'
@@ -553,6 +592,7 @@ jobs:
             echo "| Global Experience V1 focused simulator QA | ${GLOBAL_V1:-not-selected} |"
             echo "| Dashboard B accessibility simulator QA | ${DASHBOARD_A11Y:-not-selected} |"
             echo "| Issue 40 first-saving activation simulator QA | ${FIRST_SAVE:-not-selected} |"
+            echo "| Issue 69 Spark Home/Goal Detail simulator QA | ${SPARK_GOAL:-not-selected} |"
             echo ''
             echo 'A skipped focused suite was not executed, and does not count as QA evidence.'
             echo 'Manual focused QA is supplemental; required PR checks still apply before merge.'

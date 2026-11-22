@@ -394,6 +394,60 @@ final class PipoUIRecordingTests: XCTestCase {
         attachOnboardingScreen("Dashboard B — confirmed saving milestone")
     }
 
+
+    /// #69: native-screen proof from the existing DEBUG-only account fixture.
+    /// All saving records come from seeded SwiftData, not mock streak labels.
+    func testIssue69SparkPerGoalHomeFocusAndDetail() {
+        continueAfterFailure = false
+        app.launchArguments = ["-pipo-dashboard-qa"]
+        app.launch()
+
+        let homeFocus = app.buttons["pipo.dashboard.focusGoal"].firstMatch
+        XCTAssertTrue(homeFocus.waitForExistence(timeout: 25))
+        XCTAssertTrue(homeFocus.label.contains("Bali holiday"))
+        let activeChip = app.descendants(matching: .any)
+            .matching(identifier: "pipo.spark.chip.Active").firstMatch
+        XCTAssertTrue(activeChip.waitForExistence(timeout: 15),
+                      "Focus goal must render a Spark based on its saved weekly periods")
+        XCTAssertTrue(activeChip.label.contains("week"), activeChip.label)
+        bringIntoView(activeChip)
+        attachOnboardingScreen("Issue 69 — Focus goal Spark from three recorded weeks")
+
+        tapButton("pipo.dashboard.focusGoal")
+        let heading = app.staticTexts["YOUR SAVING RHYTHM"].firstMatch
+        XCTAssertTrue(heading.waitForExistence(timeout: 15),
+                      "Goal Detail must reuse the exact goal's streak projection")
+        bringIntoView(heading)
+        let detailChip = app.descendants(matching: .any)
+            .matching(identifier: "pipo.spark.chip.Active").firstMatch
+        XCTAssertTrue(detailChip.exists, "Goal Detail should show the same active weekly state")
+        XCTAssertEqual(detailChip.label, activeChip.label,
+                       "Home and Goal Detail must agree for the same goal")
+        XCTAssertTrue(app.progressIndicators["pipo.goal.progress"].exists,
+                      "Streak chip must not replace the one real goal progress rail")
+        attachOnboardingScreen("Issue 69 — Goal Detail rhythm below manual progress")
+
+        // Restart the synthetic in-memory fixture to navigate back to Home.
+        // No real account, sync, XP or bank data is touched.
+        app.terminate()
+        app.launchArguments = ["-pipo-dashboard-qa"]
+        app.launch()
+        tapButton("pipo.dashboard.tab.goals")
+        let secondary = app.buttons.matching(
+            NSPredicate(format: "label CONTAINS %@", "New iPad")
+        ).firstMatch
+        XCTAssertTrue(secondary.waitForExistence(timeout: 20))
+        XCTAssertTrue(secondary.label.contains("No streak yet"),
+                      "Another goal must not inherit Bali's three weekly periods")
+        let group = app.buttons.matching(
+            NSPredicate(format: "label CONTAINS %@", "Bandung trip")
+        ).firstMatch
+        XCTAssertTrue(group.waitForExistence(timeout: 12))
+        XCTAssertFalse(group.label.contains("streak"),
+                       "Device-local group plan must not claim personal Spark")
+        attachOnboardingScreen("Issue 69 — Other goals keep independent streak status")
+    }
+
     /// #18: Exercise both Dashboard B metric cards at an iOS accessibility
     /// text category. This is a simulator layout/accessibility-tree proxy,
     /// not a substitute for VoiceOver focus order or physical-device review.
