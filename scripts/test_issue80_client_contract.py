@@ -132,6 +132,7 @@ for corrupted in [
         fatalError("Corrupted receipt accepted")
     } catch SavingPlanCASContractError.invalidServerResponse {}
 }
+try MainActor.assumeIsolated {
 // Dormant account-isolated journal: no HTTP client, no actual money writes.
 let temporary = FileManager.default.temporaryDirectory
     .appendingPathComponent("pipo-cas-qa-" + UUID().uuidString, isDirectory: true)
@@ -256,6 +257,7 @@ check(try restarted.all(for: accountA).isEmpty,
       "Malformed B journal must not expose or erase A records")
 
 print("PASS: #80 per-owner atomic pending intent, idempotency, relaunch, conflict and readback")
+}
 
 print("PASS: #80 Swift exact-decimal CAS request, explicit null, conflict and receipt guards")
 '''
