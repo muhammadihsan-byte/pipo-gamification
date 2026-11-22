@@ -1,0 +1,58 @@
+name: Issue 28 Apple Purchase Verification - Node Foundation
+
+on:
+  pull_request:
+    branches: [main, feat/issue28-pay-schema-foundation-review]
+    paths:
+      - "services/apple-verifier/**"
+      - ".github/workflows/issue28-apple-verifier-node.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: issue28-apple-verifier-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  node-official-apple-verifier:
+    name: Apple official Node verifier - fail-closed tests
+    runs-on: ubuntu-24.04
+    timeout-minutes: 12
+    defaults:
+      run:
+        working-directory: services/apple-verifier
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install pinned Node runtime
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - name: Confirm committed npm lockfile and pinned Apple verifier version
+        run: |
+          set -euo pipefail
+          node -e 'const p=require("./package.json"),l=require("./package-lock.json"); if (p.dependencies["@apple/app-store-server-library"]!=="3.1.0" || l.packages["node_modules/@apple/app-store-server-library"].version!=="3.1.0") process.exit(1)'
+      - name: Install Node dependencies from lockfile
+        run: |
+          set -euo pipefail
+          npm ci --ignore-scripts --no-audit --no-fund
+      - name: Verify Apple official package exports on actual Node runtime
+        run: |
+          set -euo pipefail
+          node -e 'import("@apple/app-store-server-library").then(m=>{const x=m.default??m;if(!x.SignedDataVerifier||!x.AppStoreServerAPIClient||!x.Environment)process.exit(1);console.log("PASS Apple official verifier exports")})'
+      - name: Verify JavaScript syntax and security tests
+        run: |
+          set -euo pipefail
+          npm run check
+      - name: Report strict unshipped scope
+        if: always()
+        run: |
+          {
+            echo '## Pipo Apple Purchase Verification Foundation — Node'
+            echo "Commit: ${{ github.event.pull_request.head.sha || github.sha }}"
+            echo '- Tests use injected synthetic verifier doubles, no Apple-signed fixture or real purchase.'
+            echo '- Official Apple library loaded on Node 22, not Supabase Edge Runtime.'
+            echo '- No production Node deployment, Apple root/Server API secrets, DB migration, catalog activation, or StoreKit checkout.'
+            echo '- No Apple/production billing proof until independent Apple sandbox verification with real Apple signatures.'
+          } >> "$GITHUB_STEP_SUMMARY"
