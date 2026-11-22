@@ -1141,6 +1141,34 @@ extension PersonalGoalTests {
 
         WidgetSharedData.activate(userID: nil, in: defaults)
         XCTAssertEqual(WidgetSharedData.load(from: defaults).totalXP, 0)
+        XCTAssertNil(defaults.dictionary(forKey: "pipo.widget.snapshot"),
+                     "Logout must physically purge even legacy ownerless snapshot data")
+
+        // A legacy caller cannot write another user's title, cadence,
+        // progress, or date to App Group storage without a verified owner.
+        let ownerlessTitle = WidgetSnapshot(
+            streakDays: 0, totalXP: 0, currentLevel: 1,
+            goalID: nil, goalTitle: "Private old title",
+            goalProgress: 0, nextDepositDate: nil
+        )
+        XCTAssertThrowsError(try WidgetSharedData.save(ownerlessTitle, in: defaults))
+        let ownerlessSchedule = WidgetSnapshot(
+            streakDays: 0, totalXP: 0, currentLevel: 1,
+            goalID: nil, goalTitle: nil,
+            goalProgress: 0, nextDepositDate: Date(),
+            consistencyUnit: "week", recordedCount: 1
+        )
+        XCTAssertThrowsError(try WidgetSharedData.save(ownerlessSchedule, in: defaults))
+        XCTAssertNil(defaults.dictionary(forKey: "pipo.widget.snapshot"))
+
+        WidgetSharedData.activate(userID: accountA, in: defaults)
+        try WidgetSharedData.save(snapshot, in: defaults)
+        XCTAssertEqual(WidgetSharedData.load(from: defaults).goalTitle, "Private savings")
+        // When no active account marker exists, logout must purge the
+        // persisted owner-tagged snapshot too, never only hide it in memory.
+        defaults.removeObject(forKey: "pipo.widget.active.account")
+        WidgetSharedData.activate(userID: nil, in: defaults)
+        XCTAssertNil(defaults.dictionary(forKey: "pipo.widget.snapshot"))
     }
 
     @MainActor
