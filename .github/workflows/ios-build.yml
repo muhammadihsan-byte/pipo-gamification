@@ -25,6 +25,7 @@ on:
           - issue42-qa
           - manage-plan-qa
           - global-experience-qa
+          - dashboard-a11y-qa
   push:
     tags:
       - "v*-rc*"
@@ -373,6 +374,42 @@ jobs:
           wait "$VIDEO_PID" 2>/dev/null || true
           exit "$TEST_RESULT"
 
+      - name: Dashboard B #18 — accessibility text-size simulator QA and MP4
+        id: dashboard_a11y
+        if: >-
+          (github.event_name == 'workflow_dispatch' && inputs.validation_mode == 'dashboard-a11y-qa') ||
+          (github.event_name == 'pull_request' && github.head_ref == 'fix/pipo-18-dashboard-metrics-a11y-v2')
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p validation
+          xcrun simctl boot "$SIMULATOR_UDID" || true
+          xcrun simctl bootstatus "$SIMULATOR_UDID" -b
+          xcrun simctl io "$SIMULATOR_UDID" recordVideo --codec=h264 \
+            validation/pipo-dashboard-a11y-qa.mp4 > validation/dashboard-a11y-recording.log 2>&1 &
+          VIDEO_PID=$!
+          sleep 2
+          set +e
+          xcodebuild \
+            -project "$XCODE_PROJECT" \
+            -scheme "$XCODE_SCHEME" \
+            -destination "id=$SIMULATOR_UDID" \
+            -derivedDataPath "$RUNNER_TEMP/PipoDerivedData" \
+            -resultBundlePath "$RUNNER_TEMP/PipoDashboardAccessibilityQA.xcresult" \
+            -only-testing:PipoUITests/PipoUIRecordingTests/testDashboardMetricCardsAtAccessibilityTextSize \
+            CODE_SIGNING_ALLOWED=NO \
+            CODE_SIGNING_REQUIRED=NO \
+            test 2>&1 | tee validation/pipo-dashboard-a11y-qa.log
+          QA_STATUS=${PIPESTATUS[0]}
+          set -e
+          kill -INT "$VIDEO_PID" 2>/dev/null || true
+          wait "$VIDEO_PID" 2>/dev/null || true
+          test -s validation/pipo-dashboard-a11y-qa.mp4 || {
+            echo "Dashboard accessibility QA MP4 missing or empty" >&2
+            exit 1
+          }
+          exit "$QA_STATUS"
+
       - name: P0 authentication and deletion simulator safety QA
         if: >-
           github.event_name == 'pull_request' &&
@@ -419,7 +456,7 @@ jobs:
         if: always()
         shell: bash
         run: |
-          for bundle in "$RUNNER_TEMP/PipoTestResults.xcresult" "$RUNNER_TEMP/PipoDashboardResults.xcresult" "$RUNNER_TEMP/PipoAuthQAResults.xcresult" "$RUNNER_TEMP/PipoCardParityResults.xcresult" "$RUNNER_TEMP/PipoAllCardsQAResults.xcresult" "$RUNNER_TEMP/PipoGoalPhotoHeroQA.xcresult" "$RUNNER_TEMP/PipoIssue42ReviewQA.xcresult" "$RUNNER_TEMP/PipoManagePlanV2QA.xcresult" "$RUNNER_TEMP/PipoGlobalExperienceV1QA.xcresult"; do
+          for bundle in "$RUNNER_TEMP/PipoTestResults.xcresult" "$RUNNER_TEMP/PipoDashboardResults.xcresult" "$RUNNER_TEMP/PipoAuthQAResults.xcresult" "$RUNNER_TEMP/PipoCardParityResults.xcresult" "$RUNNER_TEMP/PipoAllCardsQAResults.xcresult" "$RUNNER_TEMP/PipoGoalPhotoHeroQA.xcresult" "$RUNNER_TEMP/PipoIssue42ReviewQA.xcresult" "$RUNNER_TEMP/PipoManagePlanV2QA.xcresult" "$RUNNER_TEMP/PipoGlobalExperienceV1QA.xcresult" "$RUNNER_TEMP/PipoDashboardAccessibilityQA.xcresult"; do
             if test -d "$bundle"; then
               name="$(basename "$bundle" .xcresult)"
               mkdir -p "validation/visual-qa/$name"
@@ -446,6 +483,7 @@ jobs:
             ${{ runner.temp }}/PipoIssue42ReviewQA.xcresult
             ${{ runner.temp }}/PipoManagePlanV2QA.xcresult
             ${{ runner.temp }}/PipoGlobalExperienceV1QA.xcresult
+            ${{ runner.temp }}/PipoDashboardAccessibilityQA.xcresult
           if-no-files-found: warn
           retention-days: 7
 
@@ -460,6 +498,7 @@ jobs:
           ISSUE42: ${{ steps.issue42.outcome }}
           MANAGE_PLAN: ${{ steps.manage_plan.outcome }}
           GLOBAL_V1: ${{ steps.global_v1.outcome }}
+          DASHBOARD_A11Y: ${{ steps.dashboard_a11y.outcome }}
         run: |
           {
             echo '## Pipo iOS QA checkpoint'
@@ -473,6 +512,7 @@ jobs:
             echo "| Issue 42 focused simulator QA | ${ISSUE42:-not-selected} |"
             echo "| Manage Plan V2 focused simulator QA | ${MANAGE_PLAN:-not-selected} |"
             echo "| Global Experience V1 focused simulator QA | ${GLOBAL_V1:-not-selected} |"
+            echo "| Dashboard B accessibility simulator QA | ${DASHBOARD_A11Y:-not-selected} |"
             echo ''
             echo 'A skipped focused suite was not executed, and does not count as QA evidence.'
             echo 'Manual focused QA is supplemental; required PR checks still apply before merge.'
