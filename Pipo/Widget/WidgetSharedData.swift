@@ -40,7 +40,9 @@ enum WidgetSharedData {
     static func activate(userID: UUID?, in defaults: UserDefaults) {
         let previousUserID = defaults.string(forKey: activeAccountKey)
         let nextUserID = userID?.uuidString
-        if previousUserID != nextUserID {
+        // A logout must remove any stale data even when the previous active
+        // account key is missing (e.g. legacy app-group upgrades).
+        if nextUserID == nil || previousUserID != nextUserID {
             defaults.removeObject(forKey: snapshotKey)
         }
         if let nextUserID {
@@ -64,8 +66,23 @@ enum WidgetSharedData {
             guard activeUserID == ownerUserID.uuidString else {
                 throw WidgetSharedDataError.accountMismatch
             }
-        } else if snapshot.goalID != nil || snapshot.totalXP != 0 || snapshot.streakDays != 0 {
-            throw WidgetSharedDataError.accountMismatch
+        } else {
+            // No signed-in owner means no App Group snapshot. Do not leave
+            // titles, schedules, XP, progress or counts on disk, including
+            // through an accidental ownerless caller or a legacy upgrade.
+            guard snapshot.goalID == nil,
+                  snapshot.goalTitle == nil,
+                  snapshot.nextDepositDate == nil,
+                  snapshot.consistencyUnit == nil,
+                  snapshot.streakDays == 0,
+                  snapshot.totalXP == 0,
+                  snapshot.currentLevel == 1,
+                  snapshot.recordedCount == 0,
+                  snapshot.goalProgress == 0 else {
+                throw WidgetSharedDataError.accountMismatch
+            }
+            defaults.removeObject(forKey: snapshotKey)
+            return
         }
 
         var values: [String: Any] = [
