@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import json
 import os
+from decimal import Decimal
 import subprocess
 import time
 import uuid
@@ -178,7 +179,10 @@ def main() -> None:
                 f" WHERE goal_id='{GOAL}') FROM public.saving_goals "
                 f"WHERE id='{GOAL}'"
             )
-            require(actual == "1|400|1",
+            fields = actual.split("|")
+            require(len(fields) == 3 and fields[0] == "1"
+                    and Decimal(fields[1]) == Decimal("400")
+                    and fields[2] == "1",
                     f"Race mutated goal/receipts incorrectly: {actual}")
             print("PASS: two committed PG sessions; true row-lock wait, one CAS "
                   "winner, one revision conflict, exact UUID replay, one receipt")
