@@ -525,8 +525,8 @@ final class PipoUIRecordingTests: XCTestCase {
 
         let targetChoice = app.buttons["pipo.plan.v2.editTarget"].firstMatch
         XCTAssertTrue(targetChoice.exists)
-        XCTAssertTrue(targetChoice.label.contains("Target amount"),
-            "Target editor label must describe its action, not just a chevron")
+        XCTAssertTrue(targetChoice.label.contains("Target & breakdown"),
+            "Target editor must expose its actual visible action, not just a chevron")
         XCTAssertGreaterThanOrEqual(targetChoice.frame.height, 44)
         tapButton("pipo.plan.v2.editTarget")
         let targetField = app.textFields["pipo.plan.v2.targetAmount"].firstMatch
