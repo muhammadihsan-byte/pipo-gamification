@@ -565,9 +565,10 @@ struct PipoManagePlanV2Sheet: View {
                     VStack(alignment: .leading, spacing: 4) {
                         sectionTitle("ALREADY RECORDED")
                         Text(money(original.recorded))
-                            .font(.title3.bold())
+                            .font(.title2.bold())
                             .foregroundStyle(PipoTheme.cardInk)
                             .minimumScaleFactor(0.8)
+                            .fixedSize(horizontal: false, vertical: true)
                     }
                     Spacer(minLength: 8)
                     Text(progressText)
@@ -577,16 +578,26 @@ struct PipoManagePlanV2Sheet: View {
                 }
                 ProgressView(value: progress)
                     .progressViewStyle(.linear)
-                    .tint(PipoTheme.pink)
-                    .scaleEffect(x: 1, y: 2.5, anchor: .center)
-                    .frame(height: 10)
+                    .tint(PipoTheme.cardAccentReadable)
+                    .scaleEffect(x: 1, y: 1.8, anchor: .center)
+                    .frame(height: 14)
                     .accessibilityLabel("Manually recorded progress")
                     .accessibilityValue(progressText)
                 Text("Past savings and earned badges are preserved.")
                     .font(.footnote)
                     .foregroundStyle(PipoTheme.cardMuted)
+                    .fixedSize(horizontal: false, vertical: true)
             }
-    
+            // The progress story is the visual anchor, not another form field.
+            // Keep the only progress rail and the existing manual-record semantics.
+            .padding(17)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .background(PipoTheme.palePink, in: RoundedRectangle(cornerRadius: 20))
+            .overlay {
+                RoundedRectangle(cornerRadius: 20)
+                    .strokeBorder(PipoTheme.cardAccentReadable.opacity(0.15), lineWidth: 1)
+            }
+
             VStack(alignment: .leading, spacing: 0) {
                 sectionTitle("ADJUST YOUR GOAL")
                 choiceRow("Target & breakdown",
@@ -605,6 +616,13 @@ struct PipoManagePlanV2Sheet: View {
                           id: "pipo.plan.v2.editRhythm") {
                     step = .rhythm
                 }
+            }
+            .padding(16)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .background(.white, in: RoundedRectangle(cornerRadius: 20))
+            .overlay {
+                RoundedRectangle(cornerRadius: 20)
+                    .strokeBorder(PipoTheme.cardBorder, lineWidth: 1)
             }
             Text(draft.isDirty ? "You have a draft to review." : "Nothing is changed until you review.")
                 .font(.footnote)
@@ -798,7 +816,7 @@ struct PipoManagePlanV2Sheet: View {
                     }
                 } label: {
                     HStack(spacing: 12) {
-                        Image(systemName: draft.rhythm == rhythm ? "largecircle.fill.circle" : "circle")
+                        Image(systemName: draft.rhythm == rhythm ? "checkmark.circle.fill" : "circle")
                             .foregroundStyle(draft.rhythm == rhythm
                                 ? PipoTheme.cardAccentReadable : PipoTheme.cardBorder)
                             .accessibilityHidden(true)
@@ -941,30 +959,44 @@ struct PipoManagePlanV2Sheet: View {
             PersonalPlanFormatting.rhythmLabel(rhythm, day: day)
     }
 
+    // Current/proposed values must not collide at 320pt, with long currency
+    // formats, or at accessibility text sizes. A horizontal pair is preferred
+    // when it really fits; otherwise the same content stacks naturally.
     private func comparison(_ title: String, current: String, proposed: String) -> some View {
-        VStack(alignment: .leading, spacing: 9) {
+        VStack(alignment: .leading, spacing: 10) {
             sectionTitle(title)
-            HStack(alignment: .top, spacing: 12) {
-                VStack(alignment: .leading, spacing: 5) {
-                    sectionTitle("CURRENT")
-                    Text(current)
-                        .font(.subheadline.bold())
-                        .foregroundStyle(PipoTheme.cardInk)
-                        .fixedSize(horizontal: false, vertical: true)
+            ViewThatFits(in: .horizontal) {
+                HStack(alignment: .top, spacing: 10) {
+                    comparisonValue("Current", value: current, proposed: false)
+                        .fixedSize(horizontal: true, vertical: false)
+                    comparisonValue("Proposed", value: proposed, proposed: true)
+                        .fixedSize(horizontal: true, vertical: false)
                 }
-                .frame(maxWidth: .infinity, alignment: .leading)
-                VStack(alignment: .leading, spacing: 5) {
-                    sectionTitle("PROPOSED")
-                    Text(proposed)
-                        .font(.subheadline.bold())
-                        .foregroundStyle(PipoTheme.cardInk)
-                        .fixedSize(horizontal: false, vertical: true)
+                VStack(alignment: .leading, spacing: 8) {
+                    comparisonValue("Current", value: current, proposed: false)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                    comparisonValue("Proposed", value: proposed, proposed: true)
+                        .frame(maxWidth: .infinity, alignment: .leading)
                 }
-                .frame(maxWidth: .infinity, alignment: .leading)
             }
         }
         .accessibilityElement(children: .combine)
         .accessibilityLabel(title + ". Current " + current + ". Proposed " + proposed)
+    }
+
+    private func comparisonValue(_ title: String, value: String, proposed: Bool) -> some View {
+        VStack(alignment: .leading, spacing: 5) {
+            Text(title.uppercased())
+                .font(.caption2.bold())
+                .foregroundStyle(proposed ? PipoTheme.cardAccentReadable : PipoTheme.cardMuted)
+            Text(value)
+                .font(.subheadline.bold())
+                .foregroundStyle(PipoTheme.cardInk)
+                .fixedSize(horizontal: false, vertical: true)
+        }
+        .padding(12)
+        .background(proposed ? PipoTheme.palePink : PipoTheme.cream,
+                    in: RoundedRectangle(cornerRadius: 12))
     }
 
     private func warning(_ title: String, detail: String) -> some View {
