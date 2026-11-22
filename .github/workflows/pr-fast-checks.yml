@@ -36,6 +36,9 @@ jobs:
       - name: Validate Issue 29 staged ledger ACL proposal (static only)
         run: python3 -m unittest -v scripts/test_issue29_server_acl_proposal.py
 
+      - name: Validate Issue 80 plan-revision CAS proposal (static only, no database writes)
+        run: python3 -m unittest -v scripts/test_issue80_plan_cas_proposal.py
+
       - name: Compile isolated QA scripts (syntax only)
         run: |
           python3 -m py_compile \
