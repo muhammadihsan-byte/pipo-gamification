@@ -616,6 +616,36 @@ struct PersonalGoalDetailView: View {
             }
             .accessibilityIdentifier("pipo.goal.summary")
 
+            if goal.canRecordSaving && !goal.isGroupGoal {
+                TimelineView(.periodic(from: .now, by: 15 * 60)) { context in
+                    if let presentation = PipoSparkGoalStatus.presentation(
+                        for: goal, transactions: ownedHistory(for: goal),
+                        userID: authStateManager.userID, asOf: context.date
+                    ) {
+                        VStack(alignment: .leading, spacing: 10) {
+                            Text("YOUR SAVING RHYTHM")
+                                .font(.caption2.bold())
+                                .tracking(0.5)
+                                .foregroundStyle(PipoTheme.muted)
+                                .accessibilityAddTraits(.isHeader)
+                            PipoSparkChip(presentation: presentation)
+                            Text(goal.rhythm == .flexible
+                                 ? "No streak or deadline pressure. Record your progress when you can."
+                                 : "Only your recorded saving periods count toward this goal.")
+                                .font(.footnote)
+                                .foregroundStyle(PipoTheme.muted)
+                                .fixedSize(horizontal: false, vertical: true)
+                        }
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        // The section itself is a container, not a substitute
+                        // AX label for Spark. Preserve individual VoiceOver
+                        // focus on the streak-status chip and its explanation.
+                        .accessibilityElement(children: .contain)
+                        .accessibilityIdentifier("pipo.goal.sparkSummary")
+                    }
+                }
+            }
+
             PipoGoalProgressBCard(
                 quarterWayEarned: UserProfile.existing(
                     for: authStateManager.userID, in: profiles

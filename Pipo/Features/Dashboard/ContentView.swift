@@ -433,6 +433,25 @@ struct DashboardView: View {
         return ownedTransactions.isEmpty
     }
 
+    private func spark(for goal: PersonalGoal, asOf date: Date = .now) -> PipoSparkPresentation? {
+        PipoSparkGoalStatus.presentation(
+            for: goal, transactions: ownedTransactions,
+            userID: authStateManager.userID, asOf: date
+        )
+    }
+
+    @ViewBuilder
+    private func perGoalSparkChip(_ goal: PersonalGoal) -> some View {
+        if goal.canRecordSaving && !goal.isGroupGoal {
+            // Refresh as a saving period rolls over while the app is open.
+            TimelineView(.periodic(from: .now, by: 15 * 60)) { context in
+                if let presentation = spark(for: goal, asOf: context.date) {
+                    PipoSparkChip(presentation: presentation)
+                }
+            }
+        }
+    }
+
     private func featuredGoalCard(_ goal: PersonalGoal) -> some View {
         VStack(alignment: .leading, spacing: 15) {
             HStack {
@@ -514,6 +533,8 @@ struct DashboardView: View {
             }
             .buttonStyle(PrimaryActionButtonStyle())
             .accessibilityIdentifier("pipo.dashboard.recordSaving")
+
+            perGoalSparkChip(goal)
 
             if isFirstSaveEligible(for: goal) {
                 Text("You can save later, too. Your goal will be here when you're ready.")
@@ -689,7 +710,8 @@ struct DashboardView: View {
         .accessibilityLabel(
             "\(goal.title), \(goal.isGroupGoal ? "group" : "personal") saving goal, " +
             "\(goal.lifecycleState.title), \(money(goal.currentAmount, goal: goal)) recorded, " +
-            "\(Int(goal.progress * 100)) percent complete"
+            "\(Int(goal.progress * 100)) percent complete" +
+            (spark(for: goal).map { ". " + $0.accessibilityLabel } ?? "")
         )
         .accessibilityHint("Opens goal details. More actions are available.")
         // VoiceOver users must not need to discover a long-press context menu.
@@ -724,6 +746,8 @@ struct DashboardView: View {
                     .foregroundStyle(PipoTheme.muted)
                     .multilineTextAlignment(.leading)
                     .lineLimit(2)
+                perGoalSparkChip(goal)
+                    .frame(maxWidth: .infinity, alignment: .leading)
             }
             Spacer(minLength: 8)
             VStack(alignment: .trailing, spacing: 5) {

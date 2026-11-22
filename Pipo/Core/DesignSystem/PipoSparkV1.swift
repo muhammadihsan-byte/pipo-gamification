@@ -78,15 +78,121 @@ struct PipoSparkPresentation: Equatable {
             return Self(state: .active, label: countLabel,
                         accessibilityLabel: "On track. \(countLabel).")
         case .pending:
-            return Self(state: .pending, label: "This period is still open",
+            return Self(state: .pending,
+                        label: "\(countLabel) · Period still open",
                         accessibilityLabel: "\(countLabel). This saving period is still open; no missed period yet.")
         case .ended:
             return Self(state: .ended, label: "Streak ended",
-                        accessibilityLabel: "A prior scheduled period was missed. Your best streak remains saved.")
+                        accessibilityLabel: "A prior scheduled period was missed. Your best streak remains saved. Previous \(countLabel).")
         case .recovery:
-            return Self(state: .recovery, label: "Back on track",
-                        accessibilityLabel: "Back on track after a missed scheduled period.")
+            return Self(state: .recovery, label: "Back on track · \(countLabel)",
+                        accessibilityLabel: "Back on track after a missed scheduled period. New \(countLabel).")
         }
+    }
+}
+
+
+
+/// Issue #69: one projection for Dashboard and Goal Detail. This reads
+/// account-owned, persisted goal entries and delegates *all* scheduled-period
+/// indexing/counts to SavingConsistency (#14). It never stores streaks,
+/// grants XP or interprets account-wide UserProfile.streakDays as a goal value.
+@MainActor
+enum PipoSparkGoalStatus {
+    static func presentation(
+        for goal: PersonalGoal,
+        transactions: [SavingTransaction],
+        userID: UUID?,
+        asOf now: Date = .now,
+        calendar: Calendar = .current
+    ) -> PipoSparkPresentation? {
+        guard let owner = userID,
+              goal.ownerUserID == owner,
+              goal.canRecordSaving, !goal.isGroupGoal else { return nil }
+
+        if goal.rhythm == .flexible {
+            return PipoSparkPresentation.make(
+                rhythm: .flexible, proposedState: .notStarted,
+                recordedSavings: 0, consecutivePeriods: 0
+            )
+        }
+
+        // A duplicate UUID is not a second saving event. Fail closed rather
+        // than displaying a fabricated streak on a corrupt/imported journal.
+        let owned = transactions.filter {
+            $0.userID == owner && $0.goalId == goal.id &&
+            $0.amount > 0 && $0.date <= now
+        }
+        guard Set(owned.map(\.id)).count == owned.count else {
+            return PipoSparkPresentation.make(
+                rhythm: goal.rhythm, proposedState: .notStarted,
+                recordedSavings: 0, consecutivePeriods: 0
+            )
+        }
+
+        let dates = owned.map(\.date).filter {
+            SavingConsistency.periodIndex(
+                for: $0, rhythm: goal.rhythm,
+                startDate: goal.startDate, calendar: calendar
+            ) != nil
+        }
+        guard let currentPeriod = SavingConsistency.periodIndex(
+            for: now, rhythm: goal.rhythm,
+            startDate: goal.startDate, calendar: calendar
+        ), !dates.isEmpty else {
+            return PipoSparkPresentation.make(
+                rhythm: goal.rhythm, proposedState: .notStarted,
+                recordedSavings: 0, consecutivePeriods: 0
+            )
+        }
+
+        let periods = Set(dates.compactMap {
+            SavingConsistency.periodIndex(
+                for: $0, rhythm: goal.rhythm,
+                startDate: goal.startDate, calendar: calendar
+            )
+        })
+        guard let latestPeriod = periods.max(),
+              let mostRecentDate = dates.filter({
+                  SavingConsistency.periodIndex(
+                      for: $0, rhythm: goal.rhythm,
+                      startDate: goal.startDate, calendar: calendar
+                  ) == latestPeriod
+              }).max() else { return nil }
+
+        // For an ended streak, calculate its *historical* length at the last
+        // saved event, not a zero count caused by today's missed periods.
+        let streak = SavingConsistency.consecutivePeriods(
+            dates: dates,
+            rhythm: goal.rhythm,
+            startDate: goal.startDate,
+            asOf: latestPeriod < currentPeriod ? mostRecentDate : now,
+            calendar: calendar
+        )
+        guard streak > 0 else {
+            return PipoSparkPresentation.make(
+                rhythm: goal.rhythm, proposedState: .notStarted,
+                recordedSavings: 0, consecutivePeriods: 0
+            )
+        }
+
+        let state: PipoSparkState
+        if latestPeriod == currentPeriod {
+            let prior = periods.filter { $0 < currentPeriod }
+            state = prior.max().map { $0 < currentPeriod - 1 } == true
+                ? .recovery : .active
+        } else if latestPeriod == currentPeriod - 1 {
+            // The current period has not ended. Never say a user missed it.
+            state = .pending
+        } else {
+            state = .ended
+        }
+        return PipoSparkPresentation.make(
+            rhythm: goal.rhythm,
+            proposedState: state,
+            recordedSavings: dates.count,
+            consecutivePeriods: streak
+        )
     }
 }
 
