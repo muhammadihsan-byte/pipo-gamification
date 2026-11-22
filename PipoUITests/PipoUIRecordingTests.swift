@@ -414,18 +414,25 @@ final class PipoUIRecordingTests: XCTestCase {
         bringIntoView(activeChip)
         attachOnboardingScreen("Issue 69 — Focus goal Spark from three recorded weeks")
 
+        // The chip appears below the CTA. Scroll back toward the goal title
+        // before tapping its navigation link on compact-screen simulators.
+        for _ in 0..<6 {
+            if homeFocus.isHittable { break }
+            app.swipeDown()
+        }
+        XCTAssertTrue(homeFocus.isHittable)
         tapButton("pipo.dashboard.focusGoal")
         let heading = app.staticTexts["YOUR SAVING RHYTHM"].firstMatch
         XCTAssertTrue(heading.waitForExistence(timeout: 15),
                       "Goal Detail must reuse the exact goal's streak projection")
+        XCTAssertTrue(app.progressIndicators["pipo.goal.progress"].exists,
+                      "The original goal progress bar must remain")
         bringIntoView(heading)
         let detailChip = app.descendants(matching: .any)
             .matching(identifier: "pipo.spark.chip.Active").firstMatch
         XCTAssertTrue(detailChip.exists, "Goal Detail should show the same active weekly state")
         XCTAssertEqual(detailChip.label, homeSparkLabel,
                        "Home and Goal Detail must agree for the same goal")
-        XCTAssertTrue(app.progressIndicators["pipo.goal.progress"].exists,
-                      "Streak chip must not replace the one real goal progress rail")
         attachOnboardingScreen("Issue 69 — Goal Detail rhythm below manual progress")
 
         // Restart the synthetic in-memory fixture to navigate back to Home.
