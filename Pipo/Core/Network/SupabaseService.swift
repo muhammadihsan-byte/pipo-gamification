@@ -532,6 +532,255 @@ enum SavingPlanCASReceiptValidator {
     }
 }
 
+// MARK: - #80: Dormant *atomic* target + budget CAS V2 wire contract
+//
+// V1 does not synchronize SwiftData SubItem. This V2 request is a distinct,
+// currently UNWIRED protocol: it replaces target, schedule and complete
+// ordered budget in one authenticated RPC transaction. It never sends user_id,
+// goal currency, ledger history or XP. No production call site uses this.
+
+enum SavingPlanBudgetV2ContractError: Error, Equatable {
+    case invalidPlan
+    case invalidBudget
+    case userReviewRequired
+    case invalidServerResponse
+}
+
+struct SavingPlanBudgetV2Item: Codable, Equatable, Sendable {
+    let id: UUID
+    let title: String
+    let amount: Decimal
+    let isCompleted: Bool
+
+    init(id: UUID, title: String, minorUnits: Int64,
+         currencyCode: String, isCompleted: Bool) throws {
+        let name = title.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !name.isEmpty, name.count <= 80, minorUnits > 0,
+              PipoGoalCurrency.isSupported(currencyCode),
+              PipoGoalCurrency.minorUnits(
+                PipoGoalCurrency.decimal(minorUnits, code: currencyCode),
+                code: currencyCode
+              ) == minorUnits
+        else { throw SavingPlanBudgetV2ContractError.invalidBudget }
+        self.id = id
+        self.title = name
+        amount = PipoGoalCurrency.decimal(minorUnits, code: currencyCode)
+        self.isCompleted = isCompleted
+    }
+
+    enum CodingKeys: String, CodingKey {
+        case id, title, amount
+        case isCompleted = "is_completed"
+    }
+}
+
+struct SavingPlanBudgetV2Request: Encodable, Equatable, Sendable {
+    let requestID: UUID
+    let goalID: UUID
+    let expectedRevision: Int64
+    let expectedOwnerID: UUID // local Auth guard only, NEVER transmitted.
+    let currencyCode: String  // immutable existing goal, NEVER transmitted.
+    let targetAmount: Decimal
+    let targetDate: String
+    let rhythm: String
+    let preferredSavingDay: Int?
+    let plannedContributionOverride: Decimal?
+    let items: [SavingPlanBudgetV2Item]
+    let budgetImportConfirmed: Bool
+
+    init(requestID: UUID, goalID: UUID, expectedRevision: Int64,
+         ownerID: UUID, currencyCode: String, targetMinorUnits: Int64,
+         targetDate: Date, rhythm: String, preferredSavingDay: Int?,
+         plannedContributionMinorUnits: Int64?,
+         items: [SavingPlanBudgetV2Item],
+         cloudBudgetNeedsReview: Bool, userReviewedBudget: Bool) throws {
+        guard expectedRevision >= 0 && expectedRevision < Int64.max,
+              currencyCode == currencyCode.uppercased(),
+              PipoGoalCurrency.isSupported(currencyCode),
+              targetMinorUnits > 0,
+              PipoGoalCurrency.minorUnits(
+                PipoGoalCurrency.decimal(targetMinorUnits, code: currencyCode),
+                code: currencyCode
+              ) == targetMinorUnits,
+              targetDate.timeIntervalSince1970.isFinite,
+              ["daily", "weekly", "biWeekly", "monthly", "flexible"].contains(rhythm),
+              preferredSavingDay == nil || (1...31).contains(preferredSavingDay!),
+              (rhythm != "daily" && rhythm != "flexible"
+                || preferredSavingDay == nil),
+              (rhythm != "weekly" && rhythm != "biWeekly"
+                || preferredSavingDay == nil || preferredSavingDay! <= 7),
+              (rhythm != "flexible" || plannedContributionMinorUnits == nil)
+        else { throw SavingPlanBudgetV2ContractError.invalidPlan }
+
+        if cloudBudgetNeedsReview && !userReviewedBudget {
+            throw SavingPlanBudgetV2ContractError.userReviewRequired
+        }
+        var future: Decimal?
+        if let plannedContributionMinorUnits {
+            guard plannedContributionMinorUnits > 0,
+                  PipoGoalCurrency.minorUnits(
+                    PipoGoalCurrency.decimal(
+                      plannedContributionMinorUnits, code: currencyCode),
+                    code: currencyCode
+                  ) == plannedContributionMinorUnits
+            else { throw SavingPlanBudgetV2ContractError.invalidPlan }
+            future = PipoGoalCurrency.decimal(
+                plannedContributionMinorUnits, code: currencyCode
+            )
+        }
+
+        guard items.count <= 64 else {
+            throw SavingPlanBudgetV2ContractError.invalidBudget
+        }
+        var ids = Set<UUID>()
+        var allocated: Int64 = 0
+        for item in items {
+            guard ids.insert(item.id).inserted,
+                  !item.title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
+                  item.title == item.title.trimmingCharacters(in: .whitespacesAndNewlines),
+                  item.title.count <= 80,
+                  let units = PipoGoalCurrency.minorUnits(
+                    item.amount, code: currencyCode
+                  ) else { throw SavingPlanBudgetV2ContractError.invalidBudget }
+            let (next, overflow) = allocated.addingReportingOverflow(units)
+            guard !overflow else { throw SavingPlanBudgetV2ContractError.invalidBudget }
+            allocated = next
+        }
+        guard items.isEmpty || allocated == targetMinorUnits else {
+            throw SavingPlanBudgetV2ContractError.invalidBudget
+        }
+        self.requestID = requestID
+        self.goalID = goalID
+        self.expectedRevision = expectedRevision
+        expectedOwnerID = ownerID
+        self.currencyCode = currencyCode
+        targetAmount = PipoGoalCurrency.decimal(
+            targetMinorUnits, code: currencyCode
+        )
+        self.targetDate = ISO8601DateFormatter().string(from: targetDate)
+        self.rhythm = rhythm
+        self.preferredSavingDay = preferredSavingDay
+        plannedContributionOverride = future
+        self.items = items
+        budgetImportConfirmed = userReviewedBudget
+    }
+
+    enum CodingKeys: String, CodingKey {
+        case requestID = "p_request_id"
+        case goalID = "p_goal_id"
+        case expectedRevision = "p_expected_revision"
+        case targetAmount = "p_target_amount"
+        case targetDate = "p_target_date"
+        case rhythm = "p_rhythm"
+        case preferredSavingDay = "p_preferred_saving_day"
+        case plannedContributionOverride = "p_planned_contribution_override"
+        case items = "p_items"
+        case budgetImportConfirmed = "p_budget_import_confirmed"
+    }
+
+    func encode(to encoder: Encoder) throws {
+        var c = encoder.container(keyedBy: CodingKeys.self)
+        try c.encode(requestID, forKey: .requestID)
+        try c.encode(goalID, forKey: .goalID)
+        try c.encode(expectedRevision, forKey: .expectedRevision)
+        try c.encode(targetAmount, forKey: .targetAmount)
+        try c.encode(targetDate, forKey: .targetDate)
+        try c.encode(rhythm, forKey: .rhythm)
+        try c.encode(preferredSavingDay, forKey: .preferredSavingDay)
+        try c.encode(plannedContributionOverride, forKey: .plannedContributionOverride)
+        try c.encode(items, forKey: .items)
+        try c.encode(budgetImportConfirmed, forKey: .budgetImportConfirmed)
+    }
+}
+
+struct SavingPlanBudgetV2WireResponse: Decodable, Sendable {
+    let status: String
+    let requestID: UUID?
+    let goalID: UUID?
+    let acceptedRevision: Int64?
+    let currentRevision: Int64?
+    let currencyCode: String?
+    let budgetSnapshotState: String?
+    let targetAmount: Decimal?
+    let targetDate: String?
+    let rhythm: String?
+    let preferredSavingDay: Int?
+    let plannedContributionOverride: Decimal?
+    let items: [SavingPlanBudgetV2Item]?
+
+    enum CodingKeys: String, CodingKey {
+        case status, rhythm, items
+        case requestID = "request_id"
+        case goalID = "goal_id"
+        case acceptedRevision = "accepted_revision"
+        case currentRevision = "current_revision"
+        case currencyCode = "currency_code"
+        case budgetSnapshotState = "budget_snapshot_state"
+        case targetAmount = "target_amount"
+        case targetDate = "target_date"
+        case preferredSavingDay = "preferred_saving_day"
+        case plannedContributionOverride = "planned_contribution_override"
+    }
+}
+
+enum SavingPlanBudgetV2Outcome: Equatable, Sendable {
+    case applied(requestID: UUID, revision: Int64)
+    case conflict(currentRevision: Int64)
+}
+
+enum SavingPlanBudgetV2ReceiptValidator {
+    private static func parseDate(_ raw: String) -> Date? {
+        let standard = ISO8601DateFormatter()
+        if let date = standard.date(from: raw) { return date }
+        let fractional = ISO8601DateFormatter()
+        fractional.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+        return fractional.date(from: raw)
+    }
+
+    /// A receipt alone is NOT proof the goal still matches after later
+    /// writes; a freshly authenticated, owner-filtered V2 readback and local
+    /// reconciliation are also required before marking this edit complete.
+    static func verify(_ response: SavingPlanBudgetV2WireResponse,
+                       for request: SavingPlanBudgetV2Request)
+        throws -> SavingPlanBudgetV2Outcome {
+        guard response.goalID == request.goalID else {
+            throw SavingPlanBudgetV2ContractError.invalidServerResponse
+        }
+        switch response.status {
+        case "conflict":
+            guard let revision = response.currentRevision,
+                  revision >= 0 && revision != request.expectedRevision,
+                  response.acceptedRevision == nil,
+                  response.items == nil else {
+                throw SavingPlanBudgetV2ContractError.invalidServerResponse
+            }
+            return .conflict(currentRevision: revision)
+        case "applied":
+            guard response.requestID == request.requestID,
+                  response.acceptedRevision == request.expectedRevision + 1,
+                  response.currentRevision == nil,
+                  response.currencyCode == request.currencyCode,
+                  response.budgetSnapshotState == "synced",
+                  response.targetAmount == request.targetAmount,
+                  response.rhythm == request.rhythm,
+                  response.preferredSavingDay == request.preferredSavingDay,
+                  response.plannedContributionOverride ==
+                    request.plannedContributionOverride,
+                  let serverDate = response.targetDate.flatMap(parseDate),
+                  let requestedDate = parseDate(request.targetDate),
+                  abs(serverDate.timeIntervalSince1970
+                        - requestedDate.timeIntervalSince1970) < 0.001,
+                  response.items == request.items else {
+                throw SavingPlanBudgetV2ContractError.invalidServerResponse
+            }
+            return .applied(requestID: request.requestID,
+                            revision: request.expectedRevision + 1)
+        default:
+            throw SavingPlanBudgetV2ContractError.invalidServerResponse
+        }
+    }
+}
+
 // MARK: - #80: Dormant insert-only goal and authoritative readback contract
 //
 // This is an unconnected contract, NOT a network operation. The live app
