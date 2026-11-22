@@ -271,12 +271,14 @@ def main() -> None:
     )
     require(code in (200, 204) and payload in ([], None),
             "Bob updated Alice's USD goal")
-    code, payload = api(
-        base, anon, "/rest/v1/saving_transactions?id=eq." + a_txn,
-        method="DELETE", bearer=b_token, prefer="return=representation",
+    # Proposed immutable ledger revokes DELETE for every client, including
+    # the legitimate owner. A foreign account must receive SQLSTATE 42501
+    # instead of the old permissive-policy empty 200/204 response.
+    expect_error(
+        api(base, anon, "/rest/v1/saving_transactions?id=eq." + a_txn,
+            method="DELETE", bearer=b_token, prefer="return=representation"),
+        "42501", "Bob could delete Alice's saving",
     )
-    require(code in (200, 204) and payload in ([], None),
-            "Bob deleted Alice's saving")
     expect_error(
         api(
             base, anon, "/rest/v1/saving_goals", method="POST", bearer=b_token,
