@@ -22,6 +22,9 @@ on:
           - build-and-test
           - visual-qa
           - onboarding-qa
+          - issue42-qa
+          - manage-plan-qa
+          - global-experience-qa
   push:
     tags:
       - "v*-rc*"
@@ -31,7 +34,8 @@ permissions:
 
 concurrency:
   group: ios-validation-${{ github.event.pull_request.number || github.ref }}
-  cancel-in-progress: true
+  # Cancel obsolete PR commits, but do not cancel explicitly requested QA or release-tag runs.
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
   build-and-test:
@@ -166,6 +170,7 @@ jobs:
             build 2>&1 | tee validation/xcodebuild.log
 
       - name: Build and test for iOS Simulator
+        id: ios_unit
         if: >-
           (github.event_name == 'workflow_dispatch' && inputs.validation_mode == 'build-and-test') ||
           (github.event_name == 'push') ||
@@ -226,7 +231,10 @@ jobs:
             test 2>&1 | tee validation/all-approved-cards-qa.log
 
       - name: Issue 42 — focused plan and money-out review-only simulator QA
-        if: github.event_name == 'pull_request' && github.head_ref == 'feat/pipo-42-reconciled-review-only'
+        id: issue42
+        if: >-
+          (github.event_name == 'workflow_dispatch' && inputs.validation_mode == 'issue42-qa') ||
+          (github.event_name == 'pull_request' && github.head_ref == 'feat/pipo-42-reconciled-review-only')
         shell: bash
         run: |
           set -euo pipefail
@@ -242,7 +250,10 @@ jobs:
             test 2>&1 | tee validation/pipo-issue42-review-qa.log
 
       - name: Approved Manage Plan V2 — interactive iPhone QA and MP4
-        if: github.event_name == 'pull_request' && github.head_ref == 'feat/pipo-manage-plan-v2-option-b'
+        id: manage_plan
+        if: >-
+          (github.event_name == 'workflow_dispatch' && inputs.validation_mode == 'manage-plan-qa') ||
+          (github.event_name == 'pull_request' && github.head_ref == 'feat/pipo-manage-plan-v2-option-b')
         shell: bash
         run: |
           set -euo pipefail
@@ -276,7 +287,10 @@ jobs:
           exit "$QA_STATUS"
 
       - name: Global Experience V1 — onboarding and goal-currency integration QA
-        if: github.event_name == 'pull_request' && github.head_ref == 'feat/pipo-global-experience-v1-currency'
+        id: global_v1
+        if: >-
+          (github.event_name == 'workflow_dispatch' && inputs.validation_mode == 'global-experience-qa') ||
+          (github.event_name == 'pull_request' && github.head_ref == 'feat/pipo-global-experience-v1-currency')
         shell: bash
         run: |
           set -euo pipefail
@@ -434,3 +448,32 @@ jobs:
             ${{ runner.temp }}/PipoGlobalExperienceV1QA.xcresult
           if-no-files-found: warn
           retention-days: 7
+
+      - name: Publish QA checkpoint summary
+        if: always()
+        shell: bash
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          TESTED_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+          VALIDATION_MODE: ${{ inputs.validation_mode || 'automatic-pr-or-tag' }}
+          IOS_UNIT: ${{ steps.ios_unit.outcome }}
+          ISSUE42: ${{ steps.issue42.outcome }}
+          MANAGE_PLAN: ${{ steps.manage_plan.outcome }}
+          GLOBAL_V1: ${{ steps.global_v1.outcome }}
+        run: |
+          {
+            echo '## Pipo iOS QA checkpoint'
+            echo "- Event: $EVENT_NAME"
+            echo "- Validation mode: $VALIDATION_MODE"
+            echo "- Commit under test: \`$TESTED_SHA\`"
+            echo ''
+            echo '| Check | Outcome |'
+            echo '| --- | --- |'
+            echo "| Base iOS build and unit tests | ${IOS_UNIT:-not-selected} |"
+            echo "| Issue 42 focused simulator QA | ${ISSUE42:-not-selected} |"
+            echo "| Manage Plan V2 focused simulator QA | ${MANAGE_PLAN:-not-selected} |"
+            echo "| Global Experience V1 focused simulator QA | ${GLOBAL_V1:-not-selected} |"
+            echo ''
+            echo 'A skipped focused suite was not executed, and does not count as QA evidence.'
+            echo 'Manual focused QA is supplemental; required PR checks still apply before merge.'
+          } >> "$GITHUB_STEP_SUMMARY"
