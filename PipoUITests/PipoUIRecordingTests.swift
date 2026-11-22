@@ -425,14 +425,15 @@ final class PipoUIRecordingTests: XCTestCase {
         let heading = app.staticTexts["YOUR SAVING RHYTHM"].firstMatch
         XCTAssertTrue(heading.waitForExistence(timeout: 15),
                       "Goal Detail must reuse the exact goal's streak projection")
-        // The summary groups accessibility descendants on smaller iPhones;
-        // ProgressView is retained in the actual SwiftUI source, but XCUI may
-        // not expose it as a separately queryable element. Screenshot the
-        // summary instead of requiring a specific accessibility-tree shape.
+        // SwiftUI's scroll-view subtree can defer access to the pill until it
+        // is visible. Bring the section onscreen before querying its element.
         bringIntoView(heading)
+        // ProgressView is retained in the SwiftUI source but may be grouped
+        // inside the summary accessibility container on compact iPhones.
         let detailChip = app.descendants(matching: .any)
             .matching(identifier: "pipo.spark.chip.Pending").firstMatch
-        XCTAssertTrue(detailChip.exists, "Goal Detail should show the same pending weekly state")
+        XCTAssertTrue(detailChip.waitForExistence(timeout: 15),
+                      "Goal Detail should show the same pending weekly state: \(app.debugDescription)")
         XCTAssertEqual(detailChip.label, homeSparkLabel,
                        "Home and Goal Detail must agree for the same goal")
         attachOnboardingScreen("Issue 69 — Goal Detail rhythm below manual progress")
