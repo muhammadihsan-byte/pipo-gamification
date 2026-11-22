@@ -2943,15 +2943,14 @@ final class SupabaseService {
         _ goals: [PersonalGoal], authenticatedUserID: UUID
     ) async throws {
         let journal = try LegacyGoalBridgeIntentJournal.inApplicationSupport()
-        for goal in goals {
-            guard client.auth.currentUser?.id == authenticatedUserID else {
-                throw LegacyGoalBridgeError.accountChanged
-            }
+        // Freeze every goal into a canonical immutable request BEFORE any
+        // await. SwiftData models may change while a network request runs.
+        let requests: [SavingGoalCreateOnlyRequest] = try goals.map { goal in
             guard let minor = goal.exactTargetMinor else {
                 throw SupabaseServiceError.invalidSavingGoal
             }
-            let request = try SavingGoalCreateOnlyRequest(
-                goalID: goal.id, ownerID: authenticatedUserID,
+            return try SavingGoalCreateOnlyRequest(
+                goalID: request.goalID, ownerID: authenticatedUserID,
                 title: goal.title, category: goal.category.rawValue,
                 customCategory: goal.customCategory,
                 targetMinorUnits: minor, currencyCode: goal.effectiveCurrencyCode,
@@ -2960,7 +2959,11 @@ final class SupabaseService {
                 preferredSavingDay: goal.preferredSavingDay,
                 plannedContributionMinorUnits: goal.plannedContributionOverride.map(Int64.init)
             )
-
+        }
+        for request in requests {
+            guard client.auth.currentUser?.id == authenticatedUserID else {
+                throw LegacyGoalBridgeError.accountChanged
+            }
             // READ FIRST on every retry, app relaunch and existing goal. This
             // legacy SELECT deliberately does not require plan_revision.
             var rows = try await issue80BridgeFetchOwnedLegacyGoal(
@@ -2977,7 +2980,7 @@ final class SupabaseService {
                     existing, request: request, authenticatedOwnerID: authenticatedUserID
                 )
                 if let local = try journal.intent(
-                    goalID: goal.id, ownerID: authenticatedUserID
+                    goalID: request.goalID, ownerID: authenticatedUserID
                 ) {
                     guard try local.checkedRequest(for: authenticatedUserID)
                             == request else { throw LegacyGoalBridgeError.cloudConflict }
@@ -2985,11 +2988,11 @@ final class SupabaseService {
                         // A second client may have created this UUID. The
                         // exact authenticated row is already equal; no INSERT.
                         try journal.markAttempted(
-                            goalID: goal.id, ownerID: authenticatedUserID
+                            goalID: request.goalID, ownerID: authenticatedUserID
                         )
                     }
                     try journal.recordVerifiedReadback(
-                        existing, goalID: goal.id, ownerID: authenticatedUserID,
+                        existing, goalID: request.goalID, ownerID: authenticatedUserID,
                         authenticatedOwnerID: authenticatedUserID
                     )
                 }
@@ -3005,7 +3008,7 @@ final class SupabaseService {
                 throw LegacyGoalBridgeError.pendingConfirmation
             }
             try journal.markAttempted(
-                goalID: goal.id, ownerID: authenticatedUserID
+                goalID: request.goalID, ownerID: authenticatedUserID
             )
             guard client.auth.currentUser?.id == authenticatedUserID else {
                 throw LegacyGoalBridgeError.accountChanged
@@ -3034,7 +3037,7 @@ final class SupabaseService {
                 row, request: request, authenticatedOwnerID: authenticatedUserID
             )
             try journal.recordVerifiedReadback(
-                row, goalID: goal.id, ownerID: authenticatedUserID,
+                row, goalID: request.goalID, ownerID: authenticatedUserID,
                 authenticatedOwnerID: authenticatedUserID
             )
         }
