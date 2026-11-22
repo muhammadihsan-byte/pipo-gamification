@@ -1046,6 +1046,66 @@ final class SavingGoalCreateIntentJournal {
     }
 }
 
+// MARK: - #80: Pure local reconcile decision (NO SwiftData writes)
+//
+// A verified CREATE does not certify that saving events, XP, budget subitems
+// and device-local edits have been safely reconciled. This checker returns
+// *advice only*, never removes a journal row or rewrites any financial data.
+
+struct SavingGoalCreateLocalSnapshot: Sendable {
+    let ownerID: UUID
+    let request: SavingGoalCreateOnlyRequest
+    let pendingSavingEventCount: Int
+    let hasLocalOnlyBudgetItems: Bool
+    let hasUnresolvedPlanChanges: Bool
+}
+
+enum SavingGoalCreateReconcileDecision: Equatable, Sendable {
+    case holdForAuthenticatedReadback
+    case holdForLocalConflict
+    case goalVerifiedSavingEntriesPending
+    case goalVerifiedBudgetSyncPending
+    case eligibleForExplicitReconciliation
+}
+
+enum SavingGoalCreateLocalReconciler {
+    static func assess(
+        pending: PendingSavingGoalCreateIntent,
+        local: SavingGoalCreateLocalSnapshot,
+        authenticatedOwnerID: UUID
+    ) throws -> SavingGoalCreateReconcileDecision {
+        guard authenticatedOwnerID == pending.ownerID,
+              local.ownerID == authenticatedOwnerID,
+              local.request.expectedOwnerID == authenticatedOwnerID
+        else { throw SavingGoalCreateJournalError.accountChanged }
+        guard local.pendingSavingEventCount >= 0 else {
+            throw SavingGoalCreateJournalError.invalidJournal
+        }
+        // A conflict cannot be safely resolved by comparing only a saved
+        // stale snapshot. Require a fresh server fetch + explicit user input.
+        guard pending.state == .verified, pending.observedRevision == 0 else {
+            return .holdForAuthenticatedReadback
+        }
+        let expected = try pending.checkedRequest(for: authenticatedOwnerID)
+        guard expected == local.request,
+              !local.hasUnresolvedPlanChanges
+        else { return .holdForLocalConflict }
+
+        // The user's new goal can be known on cloud while saving events
+        // remain offline. Do not grant XP or copy balances during recovery.
+        if local.pendingSavingEventCount > 0 {
+            return .goalVerifiedSavingEntriesPending
+        }
+        if local.hasLocalOnlyBudgetItems {
+            return .goalVerifiedBudgetSyncPending
+        }
+        // This is a planning decision, NOT permission to automatically
+        // remove a verified journal. A separately reviewed app integration
+        // must commit local reconciliation and its receipt first.
+        return .eligibleForExplicitReconciliation
+    }
+}
+
 // MARK: - #80: Durable local plan-edit intent (inactive, NO network send)
 //
 // Stored separately per authenticated owner using an atomic write, without a
