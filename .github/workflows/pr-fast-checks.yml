@@ -1,0 +1,51 @@
+name: PR Fast Checks
+
+on:
+  pull_request:
+    branches: [main, preview/pipo-v4-home]
+    types: [opened, reopened, synchronize, ready_for_review]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: pr-fast-checks-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  static-and-harness:
+    name: Static & Harness QA
+    runs-on: ubuntu-24.04
+    timeout-minutes: 8
+    steps:
+      - name: Checkout source
+        uses: actions/checkout@v4
+
+      - name: Verify P0 repository release configuration
+        run: bash scripts/check-p0-release-config.sh
+
+      - name: Verify roadmap transition safety
+        run: node --test scripts/roadmap_status.test.cjs
+
+      - name: Verify disposable authenticated QA harness (offline)
+        env:
+          PYTHONPATH: scripts
+        run: python3 -m unittest -v scripts/test_live_authenticated_qa.py
+
+      - name: Compile isolated QA scripts (syntax only)
+        run: |
+          python3 -m py_compile \
+            scripts/local_authenticated_global_v1_qa.py \
+            scripts/live_authenticated_qa.py \
+            scripts/smoke_supabase_live.py
+
+      - name: Report scope
+        if: always()
+        run: |
+          {
+            echo '## PR Fast Checks'
+            echo 'Repository preflight, roadmap safety, and offline QA-harness tests.'
+            echo 'Does not compile Swift, exercise a simulator, or replace the iOS Build and Test gate.'
+            echo "Commit: \`${{ github.event.pull_request.head.sha || github.sha }}\`"
+          } >> "$GITHUB_STEP_SUMMARY"
