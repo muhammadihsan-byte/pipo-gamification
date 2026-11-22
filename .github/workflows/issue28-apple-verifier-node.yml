@@ -29,13 +29,10 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: "22"
-      - name: Generate deterministic dependency lock for initial review
+      - name: Confirm committed npm lockfile and pinned Apple verifier version
         run: |
           set -euo pipefail
-          npm install --package-lock-only --ignore-scripts --no-audit --no-fund
-          echo 'PIPO_LOCK_BEGIN'
-          cat package-lock.json
-          echo 'PIPO_LOCK_END'
+          node -e 'const p=require("./package.json"),l=require("./package-lock.json"); if (p.dependencies["@apple/app-store-server-library"]!=="3.1.0" || l.packages["node_modules/@apple/app-store-server-library"].version!=="3.1.0") process.exit(1)'
       - name: Install Node dependencies from lockfile
         run: |
           set -euo pipefail
