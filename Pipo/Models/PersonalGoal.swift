@@ -341,3 +341,90 @@ struct MoneyOutCorrectionPreview: Equatable {
         return .init(correctedNetRecorded: net, adjustmentDelta: delta)
     }
 }
+
+
+// MARK: - #80 staging-only SwiftData reconciliation commit + pending cleanup
+//
+// Intentionally not compiled in production: this build flag is not defined.
+// Never INSERT/UPSERT a goal in this path. The goal was ALREADY locally
+// persisted by ReviewPlanView; the only durable write is to the owner-scoped
+// create-intent journal after a fresh authenticated cloud readback.
+
+#if PIPO_ISSUE80_STAGING
+@MainActor
+enum SavingGoalCreateSwiftDataCommit {
+    /// A fresh server SELECT is mandatory before any terminal journal commit.
+    /// If networking, account identity, local persistence or metadata checks
+    /// fail, the verified/attempted journal remains untouched for recovery.
+    static func finalizeAfterFreshCloudReadback(
+        goalID: UUID, authenticatedOwnerID: UUID,
+        cloud: SupabaseService, modelContainer: ModelContainer,
+        journal: SavingGoalCreateIntentJournal
+    ) async throws -> PendingSavingGoalCreateIntent.State {
+        let result = try await cloud.issue80StageOnlyRecoverInitialGoal(
+            goalID: goalID, authenticatedUserID: authenticatedOwnerID,
+            journal: journal
+        )
+        guard result == .verified || result == .reconciled else {
+            throw SavingGoalCreateJournalError.localNotReady
+        }
+
+        // Read through a new context to prove the original local goal was
+        // durably persisted. Do not save, insert, delete, or modify SwiftData
+        // while reconciling cloud creation. A wrong owner or duplicate local
+        // UUID must not be "fixed" by assigning owner or replacing history.
+        let readContext = ModelContext(modelContainer)
+        let matchingGoals = try readContext.fetch(
+            FetchDescriptor<PersonalGoal>()
+        ).filter { $0.id == goalID }
+        guard matchingGoals.count == 1, let goal = matchingGoals.first,
+              goal.ownerUserID == authenticatedOwnerID, !goal.isGroupGoal,
+              goal.groupDetails == nil,
+              let targetMinor = goal.exactTargetMinor, targetMinor > 0,
+              let recordedMinor = goal.exactRecordedMinor, recordedMinor >= 0,
+              let originalRhythm = SavingRhythm(rawValue: goal.rhythm.rawValue)
+        else { throw SavingGoalCreateJournalError.localNotReady }
+
+        // Even malformed or other-owner transactions with the same goal UUID
+        // block completion. Never merge, mutate, replace, or award their XP.
+        let sameGoalSavings = try readContext.fetch(
+            FetchDescriptor<SavingTransaction>()
+        ).filter { $0.goalId == goalID }
+
+        let snapshotRequest: SavingGoalCreateOnlyRequest
+        do {
+            snapshotRequest = try SavingGoalCreateOnlyRequest(
+                goalID: goal.id, ownerID: authenticatedOwnerID,
+                title: goal.title, category: goal.category.rawValue,
+                customCategory: goal.customCategory,
+                targetMinorUnits: targetMinor,
+                currencyCode: goal.effectiveCurrencyCode,
+                startDate: goal.startDate, targetDate: goal.targetDate,
+                rhythm: originalRhythm.rawValue,
+                preferredSavingDay: goal.preferredSavingDay,
+                plannedContributionMinorUnits: goal.plannedContributionOverride.map(Int64.init)
+            )
+        } catch {
+            throw SavingGoalCreateJournalError.localNotReady
+        }
+
+        let local = SavingGoalCreateLocalSnapshot(
+            ownerID: authenticatedOwnerID, request: snapshotRequest,
+            pendingSavingEventCount: sameGoalSavings.count,
+            hasLocalOnlyBudgetItems: !goal.subItems.isEmpty,
+            hasUnresolvedPlanChanges: goal.currentAmount != 0
+                || recordedMinor != 0
+                || (goal.lifecycleRaw != nil
+                    && goal.lifecycleRaw != GoalLifecycleState.active.rawValue)
+        )
+
+        // The atomically persisted .reconciled state is terminal. The record
+        // is excluded from pending() but retained as a durable idempotency
+        // receipt, so a crash after the write cannot lead to a second goal.
+        return try journal.markLocalCommitVerified(
+            goalID: goalID, ownerID: authenticatedOwnerID,
+            authenticatedOwnerID: authenticatedOwnerID, local: local
+        )
+    }
+}
+#endif
