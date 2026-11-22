@@ -234,7 +234,12 @@ struct RootView: View {
                 }
                 guard authStateManager.authState == .authenticated,
                       AccountScope.visibleGoals(localGoals, userID: authStateManager.userID)
-                        .contains(where: { $0.id == goalID && !$0.isGroupGoal && $0.progress < 1 })
+                        .contains(where: {
+                            $0.id == goalID &&
+                            AccountScope.canOpenWidgetSavingRequest(
+                                $0, userID: authStateManager.userID
+                            )
+                        })
                 else {
                     noticeMessage = "This saving goal isn't available for the signed-in account."
                     return

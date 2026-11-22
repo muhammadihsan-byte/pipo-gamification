@@ -536,6 +536,156 @@ final class PersonalGoalTests: XCTestCase {
         XCTAssertEqual(all.count, 4, "Legacy rows remain quarantined")
     }
 
+
+    @MainActor
+    func testIssue21WidgetDeepLinkRequiresLiveOwnedActivePersonalGoal() {
+        let alice = UUID(), bob = UUID()
+        let personal = PersonalGoal(
+            title: "Retirement", category: .house, targetAmount: 1_000,
+            currentAmount: 100, targetDate: .now, ownerUserID: alice
+        )
+        XCTAssertTrue(AccountScope.canOpenWidgetSavingRequest(personal, userID: alice))
+        XCTAssertFalse(AccountScope.canOpenWidgetSavingRequest(personal, userID: bob))
+        XCTAssertFalse(AccountScope.canOpenWidgetSavingRequest(personal, userID: nil))
+        XCTAssertTrue(personal.transition(to: .paused))
+        XCTAssertFalse(AccountScope.canOpenWidgetSavingRequest(personal, userID: alice))
+        XCTAssertTrue(personal.transition(to: .archived))
+        XCTAssertFalse(AccountScope.canOpenWidgetSavingRequest(personal, userID: alice))
+        XCTAssertTrue(personal.transition(to: .active))
+        XCTAssertTrue(AccountScope.canOpenWidgetSavingRequest(personal, userID: alice))
+        personal.currentAmount = 1_100
+        XCTAssertEqual(personal.lifecycleState, .completed)
+        XCTAssertFalse(AccountScope.canOpenWidgetSavingRequest(personal, userID: alice))
+
+        let group = PersonalGoal(
+            title: "Trip with friends", category: .trip,
+            targetAmount: 500, targetDate: .now,
+            isGroupGoal: true, ownerUserID: alice
+        )
+        XCTAssertFalse(AccountScope.canOpenWidgetSavingRequest(group, userID: alice))
+        let orphan = PersonalGoal(
+            title: "Unverified legacy", category: .gift,
+            targetAmount: 500, targetDate: .now
+        )
+        XCTAssertFalse(AccountScope.canOpenWidgetSavingRequest(orphan, userID: alice))
+    }
+
+    @MainActor
+    func testIssue21DiskBackedStatusFocusAndJournalSurviveReopenWithoutCrossAccountLeak() throws {
+        let ownerA = UUID(), ownerB = UUID()
+        let schema = Schema([
+            PersonalGoal.self, SubItem.self, SavingTransaction.self, UserProfile.self
+        ])
+        let url = FileManager.default.temporaryDirectory
+            .appendingPathComponent("pipo-issue21-lifecycle-" + UUID().uuidString + ".store")
+        defer {
+            for suffix in ["", "-wal", "-shm"] {
+                try? FileManager.default.removeItem(atPath: url.path + suffix)
+            }
+        }
+        let config = ModelConfiguration(schema: schema, url: url)
+        let first = try ModelContainer(for: schema, configurations: [config])
+        let writer = ModelContext(first)
+
+        let aActive = PersonalGoal(
+            title: "A focus", category: .trip, targetAmount: 1_000,
+            currentAmount: 200, targetDate: .now, ownerUserID: ownerA,
+            isFocusPreferred: true
+        )
+        let aPaused = PersonalGoal(
+            title: "A paused", category: .gift, targetAmount: 800,
+            currentAmount: 75, targetDate: .now, ownerUserID: ownerA
+        )
+        let aArchived = PersonalGoal(
+            title: "A archived", category: .house, targetAmount: 900,
+            currentAmount: 50, targetDate: .now, ownerUserID: ownerA
+        )
+        let aCompleted = PersonalGoal(
+            title: "A completed", category: .gadget, targetAmount: 100,
+            currentAmount: 120, targetDate: .now, ownerUserID: ownerA
+        )
+        let bActive = PersonalGoal(
+            title: "B focus", category: .trip, targetAmount: 4_000,
+            targetDate: .now, ownerUserID: ownerB, isFocusPreferred: true
+        )
+        let unowned = PersonalGoal(
+            title: "Legacy without verified ownership", category: .other,
+            targetAmount: 2_000, targetDate: .now
+        )
+        XCTAssertTrue(aPaused.transition(to: .paused))
+        XCTAssertTrue(aArchived.transition(to: .archived))
+        let aJournal = SavingTransaction(
+            goalId: aActive.id, amount: 200, xpEarned: 300, userID: ownerA
+        )
+        let profileA = UserProfile(
+            userID: ownerA, totalXP: 300,
+            unlockedBadgeIds: [PipoBadge.firstSave.rawValue]
+        )
+        for goal in [aActive, aPaused, aArchived, aCompleted, bActive, unowned] {
+            writer.insert(goal)
+        }
+        writer.insert(aJournal)
+        writer.insert(profileA)
+        try writer.save()
+
+        // A separate container and context must read the disk-backed database.
+        // Reusing a second ModelContext on the same container would not prove
+        // relaunch persistence.
+        let second = try ModelContainer(for: schema, configurations: [config])
+        let reader = ModelContext(second)
+        let all = try reader.fetch(FetchDescriptor<PersonalGoal>())
+        let allEntries = try reader.fetch(FetchDescriptor<SavingTransaction>())
+        let allProfiles = try reader.fetch(FetchDescriptor<UserProfile>())
+        let alice = AccountScope.visibleGoals(all, userID: ownerA)
+        let bob = AccountScope.visibleGoals(all, userID: ownerB)
+        XCTAssertEqual(Set(alice.map(\.id)),
+                       Set([aActive.id, aPaused.id, aArchived.id, aCompleted.id]))
+        XCTAssertEqual(bob.map(\.id), [bActive.id])
+        XCTAssertTrue(AccountScope.visibleGoals(all, userID: nil).isEmpty)
+        XCTAssertFalse(alice.contains { $0.id == unowned.id })
+
+        let restoredFocus = try XCTUnwrap(alice.first { $0.id == aActive.id })
+        let restoredPause = try XCTUnwrap(alice.first { $0.id == aPaused.id })
+        let restoredArchive = try XCTUnwrap(alice.first { $0.id == aArchived.id })
+        let restoredCompleted = try XCTUnwrap(alice.first { $0.id == aCompleted.id })
+        XCTAssertEqual(restoredFocus.isFocusPreferred, true)
+        XCTAssertEqual(restoredPause.lifecycleState, .paused)
+        XCTAssertEqual(restoredArchive.lifecycleState, .archived)
+        XCTAssertEqual(restoredCompleted.lifecycleState, .completed)
+        XCTAssertEqual(restoredCompleted.currentAmount, 120)
+        XCTAssertEqual(restoredCompleted.progress, 1)
+        XCTAssertFalse(restoredCompleted.transition(to: .active))
+        XCTAssertFalse(AccountScope.canOpenWidgetSavingRequest(restoredPause, userID: ownerA))
+        XCTAssertFalse(AccountScope.canOpenWidgetSavingRequest(restoredArchive, userID: ownerA))
+        XCTAssertFalse(AccountScope.canOpenWidgetSavingRequest(restoredCompleted, userID: ownerA))
+
+        let aliceEntries = AccountScope.visibleTransactions(
+            allEntries, goals: all, userID: ownerA
+        )
+        XCTAssertEqual(aliceEntries.map(\.id), [aJournal.id])
+        XCTAssertTrue(AccountScope.visibleTransactions(
+            allEntries, goals: all, userID: ownerB
+        ).isEmpty)
+        XCTAssertEqual(UserProfile.existing(for: ownerA, in: allProfiles)?.totalXP, 300)
+        XCTAssertEqual(UserProfile.existing(for: ownerA, in: allProfiles)?.unlockedBadgeIds,
+                       [PipoBadge.firstSave.rawValue])
+        XCTAssertNil(UserProfile.existing(for: ownerB, in: allProfiles))
+
+        XCTAssertTrue(restoredPause.transition(to: .active))
+        XCTAssertTrue(restoredArchive.transition(to: .active))
+        try reader.save()
+        let third = try ModelContainer(for: schema, configurations: [config])
+        let reread = ModelContext(third)
+        let again = try reread.fetch(FetchDescriptor<PersonalGoal>())
+        let ownerGoals = AccountScope.visibleGoals(again, userID: ownerA)
+        XCTAssertEqual(ownerGoals.first(where: { $0.id == aPaused.id })?.lifecycleState,
+                       .active)
+        XCTAssertEqual(ownerGoals.first(where: { $0.id == aArchived.id })?.lifecycleState,
+                       .active)
+        XCTAssertEqual(ownerGoals.first(where: { $0.id == aActive.id })?.isFocusPreferred, true)
+        XCTAssertEqual(ownerGoals.first(where: { $0.id == aCompleted.id })?.currentAmount, 120)
+    }
+
     private var calendar: Calendar {
         var calendar = Calendar(identifier: .gregorian)
         calendar.timeZone = TimeZone(secondsFromGMT: 0)!

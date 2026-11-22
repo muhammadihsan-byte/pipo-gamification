@@ -43,6 +43,13 @@ enum AccountScope {
         goals.filter { owns($0, userID: userID) }
     }
 
+    /// External widget links are untrusted navigation requests, not permission
+    /// to record money. A stale link must fail closed for paused, archived or
+    /// completed goals, group-only drafts and another account's goals.
+    static func canOpenWidgetSavingRequest(_ goal: PersonalGoal, userID: UUID?) -> Bool {
+        owns(goal, userID: userID) && !goal.isGroupGoal && goal.canRecordSaving
+    }
+
     static func visibleTransactions(
         _ transactions: [SavingTransaction],
         goals: [PersonalGoal],
