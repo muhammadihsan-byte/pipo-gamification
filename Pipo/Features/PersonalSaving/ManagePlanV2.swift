@@ -523,10 +523,16 @@ struct PipoManagePlanV2Sheet: View {
             Button(action: navigateBack) {
                 Label("Back", systemImage: "chevron.left")
                     .font(.subheadline.weight(.medium))
-                    .frame(minHeight: 44)
+                    .frame(minWidth: 58, minHeight: 48, alignment: .leading)
+                    .contentShape(Rectangle())
             }
             .buttonStyle(.plain)
+            // Apply hit-area geometry to the Button itself, not just its
+            // inner Label. XCTest measured the old plain Button at only 30pt.
+            .frame(minWidth: 58, minHeight: 48, alignment: .leading)
+            .contentShape(Rectangle())
             .foregroundStyle(PipoTheme.cardMuted)
+            .accessibilityLabel("Back")
             .accessibilityIdentifier("pipo.plan.v2.back")
             Spacer()
             Text("Manage plan")
