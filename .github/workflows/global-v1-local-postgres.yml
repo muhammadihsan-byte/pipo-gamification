@@ -13,6 +13,7 @@ on:
       - "supabase/proposals/issue_80_budget_cas_v2_REVIEW_ONLY.sql"
       - "supabase/local_qa/test_issue80_budget_cas_v2_STAGING_ONLY.sql"
       - "scripts/local_authenticated_issue80_cas_qa.py"
+      - "scripts/local_authenticated_issue80_budget_v2_qa.py"
       - "scripts/test_issue80_concurrent_sessions.py"
       - ".github/workflows/global-v1-local-postgres.yml"
   workflow_dispatch:
@@ -188,6 +189,12 @@ jobs:
         run: |
           set -euo pipefail
           python3 scripts/local_authenticated_issue80_cas_qa.py
+
+      - name: Signed Auth A/B atomic Budget CAS V2 and legacy UPSERT denial on LOCAL ONLY
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 scripts/local_authenticated_issue80_budget_v2_qa.py
 
       - name: Explicitly report independent local E2E scope
         if: always()
