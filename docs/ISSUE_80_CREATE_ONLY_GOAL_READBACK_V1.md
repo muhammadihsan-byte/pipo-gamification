@@ -4,7 +4,7 @@ STATUS: REVIEW ONLY. No production backend changes, live CREATE/SELECT calls, Ma
 
 ## First goal creation contract (future, currently UNWIRED)
 
-1. Require current verified Supabase Auth user and a personal-only goal. Persist the stable goal UUID, owner ID and immutable payload before sending; the current dormant plan-edit journal does NOT handle new-goal creation yet.
+1. Require current verified Supabase Auth user and a personal-only goal. Persist the stable goal UUID, owner ID and immutable payload before sending. The separate dormant SavingGoalCreateIntentJournal now implements local staging (not network delivery); plan-edit intents have their own journal.
 2. SavingGoalCreateOnlyRequest validates canonical title (1-120 characters), category, custom category length, positive exact amounts, currency minor-unit precision, date chronology, approved saving rhythm and preferred day. It encodes ONLY existing goal insert fields: id, title, category, custom_category, target_amount, currency_code, start_date, target_date, rhythm, preferred_saving_day, planned_contribution_override.
 3. user_id, plan_revision, created_at and updated_at are NOT client-supplied. Database must derive user_id from auth.uid() with RLS and initialize server-owned revision 0. The request holds expected owner locally for independent verification, not JSON authority.
 4. After separately approved backend migration and signed old-client compatibility rollout, use INSERT-only with original UUID, NEVER goal UPSERT. A duplicate UUID cannot be assumed to represent a matching goal.
@@ -29,7 +29,7 @@ STATUS: REVIEW ONLY. No production backend changes, live CREATE/SELECT calls, Ma
 - Live Supabase does not yet contain plan_revision. Decoder is not compatible until staged backend #81 is approved and deployed behind a signed upgrade/compatibility plan. This branch does NOT call the new reader or WRITE the database.
 - Current production saving_goals.upsert(onConflict: id) is unchanged. Backend #81 would revoke direct UPDATE and therefore break old client sync. Do not enable either half independently.
 - Itemized budget, focus and lifecycle are local-only: this contract does not provide full Manage Plan V2 restore or atomic budget-item updates.
-- This code does not modify historical saving events, XP, badges, transfers, bank balances or Money Out. Initial-create pending journal, verified authenticated network orchestration, UI handling, true concurrent sessions, signed A/B backend tests and iOS simulator QA are NOT implemented.
+- This code does not modify historical saving events, XP, badges, transfers, bank balances or Money Out. Initial-create pending JOURNAL is now implemented but unwired. Authenticated network orchestration, SwiftData reconciliation/cleanup, UI handling, true concurrent sessions, signed A/B backend tests and iOS simulator QA are NOT implemented.
 - Actual local SQL/postgres validation of the separately drafted CAS proposal is tracked in PR #81.
 
 ## QA while Mac runner is paused
@@ -37,3 +37,19 @@ STATUS: REVIEW ONLY. No production backend changes, live CREATE/SELECT calls, Ma
 The Linux-only Swift compiler harness scripts/test_issue80_create_only_readback.py exercises the actual source DTO and readback parser with synthetic data. Cases include allowlisted JSON keys, exact Decimal minor-to-major units, nullable keys, wrong owner, wrong goal, remote revision advance, missing row, altered plan fields and timestamp formats. This is NOT a full iOS build or a production authenticated query.
 
 No merge or deployment may be inferred from passing these checks.
+
+
+## Dormant pending-create state machine
+
+The local queue is SEPARATE from the versioned plan-edit journal. Each owner has one atomic JSON file under Application Support / PipoPendingGoalCreates. iOS writes use complete file protection unless open; the Linux test uses temporary files. This is a local delivery journal, not authenticated server proof or cryptographic account isolation.
+
+- staged: preserve original UUID, canonical goal fields and exact minor-unit amount. Timeout/409/relaunch is NOT permission to regenerate UUID, call a different owner, or overwrite an existing goal.
+- verified: an authenticated, owner-filtered current remote row matched goal UUID, owner, ALL original fields and revision 0. Even this does not prove that local SwiftData reconciliation completed. No automatic finish method exists.
+- conflicted: server-owned goal differs or revision has advanced. Store observed revision; discard only after explicit user confirmation and future UX review.
+- missing/foreign/malformed: nil row and identity changes do not advance state. Invalid JSON, duplicate IDs, changed owner, or inconsistent currency amounts fail the entire owner file closed, never silently reset it.
+
+The journal is not wired to app lifecycle, Supabase, UI buttons or background retry; it cannot mutate SwiftData, historical transactions, XP, badges or Money Out. A future network wrapper MUST check signed Auth before AND after an actual RLS SELECT; passing a UUID into this data object is not proof of authorization.
+
+The Ubuntu Swift harness tests atomic persistence, relaunch, duplicate/reused UUID, A/B account isolation, verified create, explicit conflict, unauthorized readback and malformed files. Native Xcode/device/locked-screen and production Auth E2E remain DEFERRED.
+
+Release hold: verified entries deliberately remain until a separate audited SwiftData/local reconciliation and cleanup gate exists. Never clear them based merely on HTTP 200 or readback without local recovery.
