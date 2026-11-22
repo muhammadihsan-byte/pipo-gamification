@@ -20,7 +20,10 @@ NEW Trusted server Apple JWS verifier + App Store Server API (NOT IMPLEMENTED)
         │ verifies signature chain / app bundle / environment / account token
         │ cross-account binding, product status and refund information
         ▼
-service_role-only private ingest (source proposal only)
+service_role-only PostgREST RPC (source proposal only)
+  public.pipo_internal_ingest_verified_apple_event_v1
+        │ SECURITY INVOKER, GRANT service_role only
+        ▼
   pipo_billing_private.apply_verified_apple_event_v1
         │
         ├── pipo_billing_private.apple_catalog [EMPTY; enabled=false default]
@@ -36,11 +39,11 @@ service_role-only private ingest (source proposal only)
 
 ## Contract and security decisions
 
-**Strict server boundary.** The private ingestion function is `SECURITY INVOKER`, in **unexposed private schema**, and requires `service_role`. Only a trusted Apple-verifying service may call it; neither iOS, an authenticated JWT, nor a publicly writable table is purchase evidence. `p_proof_sha256` is *a lookup/audit fingerprint*, **not** cryptographic proof. SQL intentionally cannot validate JWS certificate chains.
+**Strict server boundary.** The private ingestion function is `SECURITY INVOKER`, in **unexposed private schema**, and requires `service_role`. A thin `public.pipo_internal_ingest_verified_apple_event_v1` wrapper exposes an Edge-function-compatible PostgREST RPC **only for service_role**; function EXECUTE is explicitly revoked from PUBLIC, anon and authenticated. This prevents accidentally exposing the billing schema to the Data API. Only a trusted Apple-verifying service may call it; neither iOS, an authenticated JWT, nor a publicly writable table is purchase evidence. `p_proof_sha256` is *a lookup/audit fingerprint*, **not** cryptographic proof. SQL intentionally cannot validate JWS certificate chains.
 
 **No default sellable catalog.** The product mapping includes logical `personal_slot`, `group_slot`, `personal_lifetime_pro` and explicit Apple environment/product ID/bundle ID. All SKU rows must be inserted by an independently authorized release change after App Store Connect verification; proposed SQL seeds **zero rows**.
 
-**Only immutable Apple identities can mint.** Each transaction is unique by (environment, Apple transaction ID) for all accounts, with owner bound to exact `appAccountToken`; an event ID must match its original full record. One purchased transaction yields one logical benefit; replay cannot increment a count. Refund/revoke is terminal for that transaction, including out-of-order notifications. Lifetime Pro is a boolean from active, verified transactions, not a personal/group count.
+**Only immutable Apple identities can mint.** Each transaction is unique by (environment, Apple transaction ID) for all accounts, with owner bound to exact `appAccountToken`; an event ID must match its original full record. One purchased transaction yields one logical benefit; replay cannot increment a count. Refund/revoke is terminal for that transaction, including out-of-order notifications. Refund/revocation of an earlier **retired/disabled** catalog SKU is still allowed; new purchases from that SKU are denied. Lifetime Pro is a boolean from active, verified transactions, not a personal/group count.
 
 **Atomic recomputation under per-owner row lock.** On each novel state transition, recompute counts from the transaction ledger and increase server revision; concurrent purchases for one Pipo account serialize on its entitlement row. An identical replay or terminal late purchase cannot increase benefits. Verified backend can request a current owner snapshot; the user app can only SELECT own snapshot via RLS or `pipo_read_entitlements_v2`.
 
@@ -64,7 +67,7 @@ Checks:
 3. Client anon/authenticated role cannot read private Apple event ledger or write benefit counters/call service-only RPC.
 4. A/B owner RLS and `pipo_read_entitlements_v2` derives correct **2+1 free** limits and separate purchased-category/lifetime status.
 5. Same Apple event ID, different event ID for same Apple transaction, cross-account replay, forged appAccountToken, wrong bundle, disabled Production SKU.
-6. Refund before purchase (terminal tombstone), refund after purchase, late purchase replay after refund, Lifetime Pro revocation, revision and count recomputation.
+6. Refund before purchase (terminal tombstone), refund after purchase, late purchase replay after refund, Lifetime Pro revocation, **retired SKU refund while new grant denied**, revision and count recomputation. Public wrapper rejects ordinary authenticated callers.
 7. Auth-admin account deletion cascade; transactional test fixture fully rolled back.
 8. Workflow uses **disposable postgres:17 GitHub Actions service** and source snapshot; no live Supabase connections or Apple billing.
 
