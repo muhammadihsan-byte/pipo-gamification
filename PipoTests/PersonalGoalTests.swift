@@ -80,7 +80,7 @@ final class PersonalGoalTests: XCTestCase {
             let wire = String(decoding: try JSONEncoder().encode(request),
                               as: UTF8.self)
             XCTAssertTrue(wire.hasPrefix("{"))
-            let ownedRow = "{\"user_id\":\"\\(owner.uuidString)\",\"plan_revision\":0,"
+            let ownedRow = "{\"user_id\":\"\(owner.uuidString)\",\"plan_revision\":0,"
                 + String(wire.dropFirst())
             let server = try JSONDecoder().decode(
                 SavingGoalAuthoritativeCloudRow.self,
