@@ -122,9 +122,12 @@ BEGIN
  SELECT count(*) INTO n FROM public.saving_transactions WHERE
   id='99999999-3333-4333-8333-999999999981' AND amount=50 AND xp_earned=300;
  IF n<>1 THEN RAISE EXCEPTION 'TEST FAIL: saving history/XP was mutated'; END IF;
- IF (SELECT count(*) FROM private.pipo_plan_budget_items_v2
-     WHERE goal_id='99999999-2222-4222-8222-999999999981')<>2 THEN
-  RAISE EXCEPTION 'TEST FAIL: failed CAS altered budget rows'; END IF;
+ SELECT public.pipo_read_plan_budget_v2(
+    '99999999-2222-4222-8222-999999999981') INTO r;
+ IF jsonb_array_length(r->'items')<>2
+    OR r->'items'->0->>'title'<>'Ticket'
+    OR r->'items'->1->>'title'<>'Hotel' THEN
+  RAISE EXCEPTION 'TEST FAIL: failed CAS altered private budget readback'; END IF;
  IF (SELECT plan_revision FROM public.saving_goals
      WHERE id='99999999-2222-4222-8222-999999999981')<>1 THEN
   RAISE EXCEPTION 'TEST FAIL: failed CAS changed goal revision'; END IF;
