@@ -198,7 +198,7 @@ final class PersonalGoalTests: XCTestCase {
         XCTAssertThrowsError(try request(rhythm: "flexible", day: 2))
         XCTAssertThrowsError(try request(rhythm: "flexible", day: nil, contribution: 20))
         XCTAssertThrowsError(try request(contribution: -1))
-        XCTAssertNoThrow(try request(currency: "USD", minor: 30, contribution: 10))
+        XCTAssertNoThrow(try request(minor: 30, currency: "USD", contribution: 10))
     }
 
     func testIssue80CASReceiptVerifiesExactPayloadAndRejectsSpuriousSuccess() throws {
