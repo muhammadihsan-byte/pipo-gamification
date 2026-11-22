@@ -645,7 +645,7 @@ struct SavingPlanCASGoalReadback: Equatable, Sendable {
     let targetDate: Date
     let rhythm: String
     let preferredSavingDay: Int?
-    let plannedContributionMinorUnits: Int?
+    let plannedContributionMinorUnits: Int64?
 }
 
 /// No caller automatically drains this queue. No app production action is
@@ -772,8 +772,7 @@ final class SavingPlanCASIntentJournal {
               ISO8601DateFormatter().string(from: current.targetDate) == item.targetDate,
               current.rhythm == item.rhythm,
               current.preferredSavingDay == item.preferredSavingDay,
-              (current.plannedContributionMinorUnits.map(Int64.init)
-                    == item.plannedContributionMinorUnits)
+              current.plannedContributionMinorUnits == item.plannedContributionMinorUnits
         else { throw SavingPlanCASJournalError.unverifiedReadback }
         entries.remove(at: index)
         try persist(entries, for: ownerID)
