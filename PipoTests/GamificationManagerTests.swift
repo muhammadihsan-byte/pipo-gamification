@@ -1,4 +1,5 @@
 import XCTest
+import UIKit
 @testable import Pipo
 
 final class GamificationManagerTests: XCTestCase {
@@ -619,6 +620,77 @@ final class GamificationManagerTests: XCTestCase {
         ).isEmpty)
         XCTAssertTrue(profile.unlockedBadgeIds.isEmpty,
                       "Ambiguous imported event IDs must be reconciled, not rewarded")
+    }
+
+
+    @MainActor
+    func testIssue68SparkRegistryHasAllTwentyExactApprovedAssets() {
+        // Each size uses its own optically tuned Figma variant.
+        XCTAssertEqual(PipoSparkSize.allCases.map(\.rawValue), [16, 20, 24, 40])
+        XCTAssertEqual(PipoSparkState.allCases.count, 5)
+        var names = Set<String>()
+        for state in PipoSparkState.allCases {
+            for size in PipoSparkSize.allCases {
+                let name = PipoSparkAssets.imageName(state: state, size: size)
+                XCTAssertTrue(names.insert(name).inserted, name)
+                XCTAssertNotNil(UIImage(named: name), "Missing actual bundled Spark asset: \(name)")
+            }
+        }
+        XCTAssertEqual(names.count, 20)
+    }
+
+    func testIssue68FlexibleCadenceCannotShowPendingEndedOrRecovery() {
+        for state in PipoSparkState.allCases {
+            let model = PipoSparkPresentation.make(
+                rhythm: .flexible, proposedState: state,
+                recordedSavings: 7, consecutivePeriods: 5
+            )
+            XCTAssertEqual(model.state, .notStarted)
+            XCTAssertEqual(model.label, "Saving at your pace")
+            XCTAssertFalse(model.accessibilityLabel.lowercased().contains("missed"))
+        }
+    }
+
+    func testIssue68UnrecordedOrZeroPeriodStatusNeverClaimsStreak() {
+        for state in PipoSparkState.allCases {
+            let empty = PipoSparkPresentation.make(
+                rhythm: .weekly, proposedState: state,
+                recordedSavings: 0, consecutivePeriods: 12
+            )
+            XCTAssertEqual(empty.state, .notStarted)
+            let zero = PipoSparkPresentation.make(
+                rhythm: .daily, proposedState: state,
+                recordedSavings: 2, consecutivePeriods: 0
+            )
+            XCTAssertEqual(zero.state, .notStarted)
+        }
+    }
+
+    func testIssue68ApprovedStatusUsesAccessibleTextNotOnlyColor() {
+        let weekly = PipoSparkPresentation.make(
+            rhythm: .weekly, proposedState: .active,
+            recordedSavings: 4, consecutivePeriods: 4
+        )
+        XCTAssertEqual(weekly.label, "4-week streak")
+        XCTAssertTrue(weekly.accessibilityLabel.contains("On track"))
+        let pending = PipoSparkPresentation.make(
+            rhythm: .weekly, proposedState: .pending,
+            recordedSavings: 4, consecutivePeriods: 4
+        )
+        XCTAssertTrue(pending.label.contains("still open"))
+        XCTAssertTrue(pending.accessibilityLabel.contains("no missed period"))
+        let ended = PipoSparkPresentation.make(
+            rhythm: .weekly, proposedState: .ended,
+            recordedSavings: 3, consecutivePeriods: 2
+        )
+        XCTAssertEqual(ended.state, .ended)
+        XCTAssertTrue(ended.accessibilityLabel.contains("best streak remains saved"))
+        let recovery = PipoSparkPresentation.make(
+            rhythm: .monthly, proposedState: .recovery,
+            recordedSavings: 5, consecutivePeriods: 1
+        )
+        XCTAssertEqual(recovery.state, .recovery)
+        XCTAssertEqual(recovery.label, "Back on track")
     }
 
     @MainActor
