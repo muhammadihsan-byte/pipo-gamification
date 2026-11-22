@@ -291,17 +291,37 @@ struct CreateGoalView: View {
                         }
                         showsCurrencyPicker = false
                     } label: {
-                        HStack {
-                            Text(code).font(.headline)
-                            Text(PipoGoalCurrency.currencyName(code))
-                                .foregroundStyle(PersonalPlanStyle.muted)
-                            Spacer()
-                            if code == currencyCode { Image(systemName: "checkmark") }
+                        HStack(alignment: .center, spacing: 12) {
+                            VStack(alignment: .leading, spacing: 4) {
+                                Text(code)
+                                    .font(.headline)
+                                    .foregroundStyle(PersonalPlanStyle.ink)
+                                Text(PipoGoalCurrency.currencyName(code))
+                                    .font(.subheadline)
+                                    .foregroundStyle(PersonalPlanStyle.muted)
+                                    .fixedSize(horizontal: false, vertical: true)
+                            }
+                            Spacer(minLength: 8)
+                            if code == currencyCode {
+                                Image(systemName: "checkmark.circle.fill")
+                                    .foregroundStyle(PipoTheme.cardAccentReadable)
+                                    .accessibilityHidden(true)
+                            }
                         }
+                        .padding(.horizontal, 12)
+                        .padding(.vertical, 9)
+                        .frame(maxWidth: .infinity, minHeight: 56, alignment: .leading)
+                        .background(code == currencyCode ? PersonalPlanStyle.blush : .clear,
+                                    in: RoundedRectangle(cornerRadius: 14))
                     }
+                    .buttonStyle(.plain)
+                    .accessibilityLabel(code + ", " + PipoGoalCurrency.currencyName(code))
+                    .accessibilityAddTraits(code == currencyCode ? .isSelected : [])
                     .accessibilityIdentifier("pipo.goal.currency." + code)
+                    .listRowSeparator(.hidden)
                 }
             }
+            .listStyle(.plain)
             .searchable(text: $currencySearch, prompt: "Search code or currency")
             .navigationTitle("Choose goal currency")
             .navigationBarTitleDisplayMode(.inline)
@@ -332,7 +352,14 @@ struct CreateGoalView: View {
                         Text("Change").font(.subheadline.bold())
                         Image(systemName: "chevron.right")
                     }
-                    .frame(minHeight: 48)
+                    .padding(.horizontal, 14)
+                    .frame(minHeight: 54)
+                    .background(PersonalPlanStyle.blush,
+                                in: RoundedRectangle(cornerRadius: 14))
+                    .overlay {
+                        RoundedRectangle(cornerRadius: 14)
+                            .strokeBorder(PersonalPlanStyle.border, lineWidth: 1)
+                    }
                     .contentShape(Rectangle())
                 }
                 .buttonStyle(.plain)
