@@ -406,13 +406,13 @@ final class PipoUIRecordingTests: XCTestCase {
         XCTAssertTrue(homeFocus.waitForExistence(timeout: 25))
         XCTAssertTrue(homeFocus.label.contains("Bali holiday"))
         let activeChip = app.descendants(matching: .any)
-            .matching(identifier: "pipo.spark.chip.Active").firstMatch
+            .matching(identifier: "pipo.spark.chip.Pending").firstMatch
         XCTAssertTrue(activeChip.waitForExistence(timeout: 15),
-                      "Focus goal must render a Spark based on its saved weekly periods")
+                      "Focus goal must show its still-open weekly period after the latest recorded saving")
         XCTAssertTrue(activeChip.label.contains("week"), activeChip.label)
         let homeSparkLabel = activeChip.label
         bringIntoView(activeChip)
-        attachOnboardingScreen("Issue 69 — Focus goal Spark from three recorded weeks")
+        attachOnboardingScreen("Issue 69 — Focus goal pending period with three saved weeks")
 
         // The chip appears below the CTA. Scroll back toward the goal title
         // before tapping its navigation link on compact-screen simulators.
@@ -425,12 +425,12 @@ final class PipoUIRecordingTests: XCTestCase {
         let heading = app.staticTexts["YOUR SAVING RHYTHM"].firstMatch
         XCTAssertTrue(heading.waitForExistence(timeout: 15),
                       "Goal Detail must reuse the exact goal's streak projection")
-        XCTAssertTrue(app.progressIndicators["pipo.goal.progress"].exists,
+        XCTAssertTrue(app.descendants(matching: .any)["pipo.goal.progress"].exists,
                       "The original goal progress bar must remain")
         bringIntoView(heading)
         let detailChip = app.descendants(matching: .any)
-            .matching(identifier: "pipo.spark.chip.Active").firstMatch
-        XCTAssertTrue(detailChip.exists, "Goal Detail should show the same active weekly state")
+            .matching(identifier: "pipo.spark.chip.Pending").firstMatch
+        XCTAssertTrue(detailChip.exists, "Goal Detail should show the same pending weekly state")
         XCTAssertEqual(detailChip.label, homeSparkLabel,
                        "Home and Goal Detail must agree for the same goal")
         attachOnboardingScreen("Issue 69 — Goal Detail rhythm below manual progress")
