@@ -67,7 +67,32 @@ struct OnboardingPersonalization: Codable, Equatable {
     var completedAt: Date
 }
 
+struct OnboardingDraft: Codable, Equatable {
+    let stepNumber: Int
+    let nickname: String
+    let motivation: OnboardingMotivation?
+}
+
 enum OnboardingProfileStore {
+    private static func draftKey(for userID: UUID) -> String {
+        "pipo.onboarding.draft.v1.\(userID.uuidString.lowercased())"
+    }
+
+    static func loadDraft(for userID: UUID) -> OnboardingDraft? {
+        guard let data = UserDefaults.standard.data(forKey: draftKey(for: userID))
+        else { return nil }
+        return try? JSONDecoder().decode(OnboardingDraft.self, from: data)
+    }
+
+    static func saveDraft(_ draft: OnboardingDraft, for userID: UUID) {
+        guard let data = try? JSONEncoder().encode(draft) else { return }
+        UserDefaults.standard.set(data, forKey: draftKey(for: userID))
+    }
+
+    static func clearDraft(for userID: UUID) {
+        UserDefaults.standard.removeObject(forKey: draftKey(for: userID))
+    }
+
     private static func key(for userID: UUID) -> String {
         "pipo.onboarding.personalization.v1.\(userID.uuidString.lowercased())"
     }
@@ -79,12 +104,14 @@ enum OnboardingProfileStore {
 
     static func delete(for userID: UUID, in defaults: UserDefaults = .standard) {
         defaults.removeObject(forKey: key(for: userID))
+        defaults.removeObject(forKey: draftKey(for: userID))
     }
 
     @discardableResult
     static func save(_ personalization: OnboardingPersonalization, for userID: UUID) -> Bool {
         guard let data = try? JSONEncoder().encode(personalization) else { return false }
         UserDefaults.standard.set(data, forKey: key(for: userID))
+        clearDraft(for: userID)
         return true
     }
 }

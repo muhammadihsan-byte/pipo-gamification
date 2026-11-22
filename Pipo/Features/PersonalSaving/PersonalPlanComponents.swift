@@ -241,13 +241,15 @@ struct PersonalPlanPrimaryStyle: ButtonStyle {
             .background {
                 let shape = RoundedRectangle(cornerRadius: 12)
                 ZStack {
-                    shape.fill(PersonalPlanStyle.buttonEdge)
+                    // A darker berry edge keeps the playful raised CTA
+                    // without relying on low-contrast bright pink behind text.
+                    shape.fill(PersonalPlanStyle.berry)
                         .offset(y: 4)
                         .opacity(dimmed ? 0 : 1)
                     shape.fill(
                         configuration.isPressed
                             ? PersonalPlanStyle.berry
-                            : PersonalPlanStyle.pink.opacity(dimmed ? 0.45 : 1)
+                            : PersonalPlanStyle.buttonEdge.opacity(dimmed ? 0.45 : 1)
                     )
                 }
             }

@@ -63,6 +63,13 @@ struct ReviewPlanView: View {
         }
     }
 
+    private func money(_ value: Int) -> String {
+        PipoGoalCurrency.formatted(Int64(value), code: plan.currencyCode)
+    }
+    private func money(_ value: Double) -> String {
+        PipoGoalCurrency.display(value, code: plan.currencyCode)
+    }
+
     private var goalCard: some View {
         VStack(alignment: .leading, spacing: 14) {
             HStack(spacing: 12) {
@@ -107,10 +114,13 @@ struct ReviewPlanView: View {
                 PipoBudgetLine(
                     id: item.id,
                     title: item.cleanTitle,
-                    amount: Double(item.rupiah ?? -1)
+                    amount: PipoGoalCurrency.parseMinor(item.amount, code: plan.currencyCode).map {
+                        NSDecimalNumber(decimal: PipoGoalCurrency.decimal($0, code: plan.currencyCode)).doubleValue
+                    } ?? -1
                 )
             },
             targetAmount: plan.targetAmount,
+            currencyCode: plan.currencyCode,
             onEdit: { onEdit(.target) }
         )
     }
@@ -135,7 +145,7 @@ struct ReviewPlanView: View {
             if let schedule = plan.schedule {
                 summaryRow("Planned amount", value: money(plan.contributionOverride ?? schedule.amount))
                 summaryRow("First planned save", value: dateLabel(schedule.firstDate))
-                Text(scheduleDetails(schedule, override: plan.contributionOverride))
+                Text(scheduleDetails(schedule, override: plan.contributionOverride, currencyCode: plan.currencyCode))
                     .font(.caption)
                     .foregroundStyle(PersonalPlanStyle.muted)
             } else {
@@ -249,10 +259,16 @@ struct ReviewPlanView: View {
             rhythm: plan.rhythm, preferredSavingDay: plan.preferredSavingDay,
             ownerUserID: userID
         )
+        goal.currencyCode = plan.currencyCode
+        goal.targetMinorUnits = plan.targetMinorUnits
+        goal.recordedMinorUnits = 0
         goal.plannedContributionOverride = plan.contributionOverride
         goal.subItems = plan.breakdown.compactMap { item in
-            guard let amount = item.rupiah else { return nil }
-            return SubItem(title: item.cleanTitle, amount: Double(amount))
+            guard let minor = PipoGoalCurrency.parseMinor(item.amount, code: plan.currencyCode) else { return nil }
+            let amount = PipoGoalCurrency.decimal(minor, code: plan.currencyCode)
+            return SubItem(title: item.cleanTitle,
+                amount: NSDecimalNumber(decimal: amount).doubleValue,
+                amountMinorUnits: minor)
         }
 
         profile.userID = userID
@@ -318,6 +334,15 @@ struct PersonalGoalDetailView: View {
     @Environment(\.modelContext) private var modelContext
     @State private var lifecycleError: String?
     @State private var showingSavingJournal = false
+    @State private var showingMoneyOutPreview = false
+    @State private var planRevisionPreview: PlanRevisionPreview?
+
+    // Freeze the selected goal at tap time so a SwiftData query refresh while
+    // presenting the sheet cannot accidentally produce an empty modal.
+    private struct PlanRevisionPreview: Identifiable {
+        let id = UUID()
+        let original: PipoPlanV2Original
+    }
 
     init(goalID: UUID, onBack: @escaping () -> Void, recordSaving: @escaping () -> Void) {
         _goals = Query(filter: #Predicate<PersonalGoal> { $0.id == goalID })
@@ -397,7 +422,8 @@ struct PersonalGoalDetailView: View {
                     if let goal = ownedGoal {
                         PipoActivityHistoryDCard(
                             transactions: ownedHistory(for: goal),
-                            titleForGoal: { _ in goal.title }
+                            titleForGoal: { _ in goal.title },
+                            currencyForGoal: { _ in goal.effectiveCurrencyCode }
                         )
                         .padding(20)
                     }
@@ -408,6 +434,26 @@ struct PersonalGoalDetailView: View {
                         Button("Done") { showingSavingJournal = false }
                     }
                 }
+            }
+        }
+        .sheet(item: $planRevisionPreview) { preview in
+            PipoManagePlanV2Sheet(original: preview.original) {
+                planRevisionPreview = nil
+            }
+        }
+        .sheet(isPresented: $showingMoneyOutPreview) {
+            // #42: the only current Money Out preview is review-only IDR.
+            // Non-IDR goals have no entry action; no unsupported sheet can
+            // accidentally show an IDR amount or imply a saved withdrawal.
+            if let goal = ownedGoal, goal.effectiveCurrencyCode == "IDR" {
+                PipoMoneyOutReviewSheet(
+                    availableAmount: goal.currentAmount,
+                    targetAmount: goal.targetAmount,
+                    xpEarned: UserProfile.existing(
+                        for: authStateManager.userID, in: profiles
+                    )?.totalXP ?? 0,
+                    onClose: { showingMoneyOutPreview = false }
+                )
             }
         }
         .alert("Goal not updated", isPresented: Binding(
@@ -502,7 +548,7 @@ struct PersonalGoalDetailView: View {
                         Text("Manually recorded")
                             .font(.caption)
                             .foregroundStyle(PipoTheme.muted)
-                        Text(money(goal.currentAmount))
+                        Text(money(goal.currentAmount, goal: goal))
                             .font(.headline.weight(.bold))
                             .lineLimit(1)
                             .minimumScaleFactor(0.65)
@@ -513,7 +559,7 @@ struct PersonalGoalDetailView: View {
                         Text("Target")
                             .font(.caption)
                             .foregroundStyle(PipoTheme.muted)
-                        Text(money(goal.targetAmount))
+                        Text(money(goal.targetAmount, goal: goal))
                             .font(.subheadline.weight(.semibold))
                             .lineLimit(1)
                             .minimumScaleFactor(0.65)
@@ -553,7 +599,7 @@ struct PersonalGoalDetailView: View {
                 LabeledContent("Status", value: goal.lifecycleState.title)
                 LabeledContent("Target date", value: dateLabel(goal.targetDate))
                 if let override = goal.plannedContributionOverride {
-                    LabeledContent("Planned contribution", value: money(override) + goal.rhythm.unitLabel)
+                    LabeledContent("Planned contribution", value: money(override, goal: goal) + goal.rhythm.unitLabel)
                 }
                 LabeledContent(
                     "Saving rhythm",
@@ -570,17 +616,57 @@ struct PersonalGoalDetailView: View {
                     lines: goal.subItems.map {
                         PipoBudgetLine(id: $0.id, title: $0.title, amount: $0.amount)
                     },
-                    targetAmount: goal.targetAmount
+                    targetAmount: goal.targetAmount,
+                    currencyCode: goal.effectiveCurrencyCode
                 )
             }
 
             PipoActivityHistoryDCard(
                 transactions: ownedHistory(for: goal),
-                titleForGoal: { _ in goal.title }
+                titleForGoal: { _ in goal.title },
+                currencyForGoal: { _ in goal.effectiveCurrencyCode }
             )
             if goal.lifecycleState == .completed {
                 PipoCompletionBCard(goal: goal) {
                     showingSavingJournal = true
+                }
+            }
+
+            if !goal.isGroupGoal {
+                Button("Review plan changes") {
+                    planRevisionPreview = PlanRevisionPreview(
+                        original: PipoPlanV2Original(goal: goal)
+                    )
+                }
+                .font(.subheadline.bold())
+                .foregroundStyle(PipoTheme.deepPink)
+                .frame(maxWidth: .infinity, minHeight: 44)
+                .accessibilityIdentifier("pipo.goal.planRevisionPreview")
+            }
+
+            // Review-only until #42's atomic account-scoped ledger is deployed.
+            // Never imply this moves money from a bank or saves a withdrawal.
+            if goal.currentAmount > 0 && !goal.isGroupGoal {
+                if goal.effectiveCurrencyCode == "IDR" {
+                    Button("Review money used elsewhere") {
+                        showingMoneyOutPreview = true
+                    }
+                    .font(.subheadline.bold())
+                    .foregroundStyle(PipoTheme.deepPink)
+                    .frame(maxWidth: .infinity, minHeight: 44)
+                    .accessibilityIdentifier("pipo.goal.moneyOutPreview")
+                } else {
+                    Label {
+                        Text("Money Out preview isn’t available in " + goal.effectiveCurrencyCode
+                             + ". Your manually recorded savings remain unchanged.")
+                            .fixedSize(horizontal: false, vertical: true)
+                    } icon: {
+                        Image(systemName: "hand.raised")
+                    }
+                    .font(.footnote)
+                    .foregroundStyle(PipoTheme.muted)
+                    .accessibilityElement(children: .combine)
+                    .accessibilityIdentifier("pipo.currency.moneyOut.unavailable")
                 }
             }
 
@@ -825,6 +911,17 @@ enum PipoGoalPhotoProcessing {
 }
 
 
+func money(_ amount: Double, goal: PersonalGoal) -> String {
+    let code = goal.effectiveCurrencyCode
+    let exact = amount == goal.targetAmount ? goal.exactTargetMinor :
+        amount == goal.currentAmount ? goal.exactRecordedMinor : nil
+    return PipoGoalCurrency.display(amount, code: code, exactMinor: exact)
+}
+
+func money(_ amount: Int, goal: PersonalGoal) -> String {
+    PipoGoalCurrency.formatted(Int64(amount), code: goal.effectiveCurrencyCode)
+}
+
 func money(_ amount: Int) -> String {
     PersonalPlanFormatting.rupiah(amount)
 }
@@ -843,13 +940,85 @@ func scheduleTitle(_ schedule: PersonalSavingSchedule, rhythm: SavingRhythm) -> 
     return "\(schedule.count) \(rhythm.periodLabel)"
 }
 
-func scheduleDetails(_ schedule: PersonalSavingSchedule, override: Int? = nil) -> String {
-    if let override {
-        return "\(schedule.count) planned contributions at \(money(override)) each, from \(dateLabel(schedule.firstDate)) to \(dateLabel(schedule.lastDate))."
+func scheduleDetails(_ schedule: PersonalSavingSchedule, override: Int? = nil, currencyCode: String = "IDR") -> String {
+    // Schedule amounts are stored as minor units for goal-level currencies.
+    // Keep the legacy IDR copy identical for existing personal/group journeys.
+    let formattedAmount: (Int) -> String = { value in
+        currencyCode == "IDR" ? money(value) :
+            PipoGoalCurrency.formatted(Int64(value), code: currencyCode)
     }
-    let amount = money(schedule.amount)
+    if let override {
+        return "\(schedule.count) planned contributions at \(formattedAmount(override)) each, from \(dateLabel(schedule.firstDate)) to \(dateLabel(schedule.lastDate))."
+    }
+    let amount = formattedAmount(schedule.amount)
     let timeline = schedule.count == 1
         ? "Make one planned contribution on \(dateLabel(schedule.firstDate))."
         : "\(schedule.count) planned contributions from \(dateLabel(schedule.firstDate)) to \(dateLabel(schedule.lastDate))."
     return "\(timeline) Aim to save \(amount) each time. Your last contribution may be smaller."
+}
+
+/// Issue #42 preview: uses exactly the approved three D-family cards.
+/// This does not write transactions, alter XP or claim to withdraw bank funds.
+/// The final confirmation stays gated until the Supabase atomic ledger exists.
+private struct PipoMoneyOutReviewSheet: View {
+    let availableAmount: Double
+    let targetAmount: Double
+    let xpEarned: Int
+    let onClose: () -> Void
+
+    @State private var amountText = ""
+    @State private var note = ""
+    @State private var reviewed = false
+    @State private var route: PipoSavingRoute = .keepDate
+
+    private var validAmount: Double? {
+        PipoMoneyOutPreview.amount(from: amountText, available: availableAmount)
+    }
+
+    var body: some View {
+        NavigationStack {
+            ScrollView {
+                VStack(alignment: .leading, spacing: 16) {
+                    Text("Pipo only records money you tell it about. Nothing moves from your bank.")
+                        .font(.footnote)
+                        .foregroundStyle(PipoTheme.muted)
+                    PipoInputEditingDCard(
+                        amount: $amountText, note: $note,
+                        available: availableAmount,
+                        onReview: { reviewed = true }
+                    )
+                    if reviewed, let validAmount {
+                        PipoFinancialImpactDCard(
+                            before: availableAmount,
+                            amountUsed: validAmount,
+                            xpEarnedSoFar: xpEarned
+                        )
+                        // No future estimates without an actual revised schedule.
+                        PipoSavingDecisionsDCard(
+                            selection: $route,
+                            suggestedAmount: nil,
+                            laterDate: nil
+                        )
+                        Text("A validated future schedule and server-side ledger are required before confirming either option.")
+                            .font(.footnote)
+                            .foregroundStyle(PipoTheme.muted)
+                        Button("Saving changes isn't available yet") {}
+                            .buttonStyle(PrimaryActionButtonStyle())
+                            .disabled(true)
+                            .accessibilityHint("Requires a secure, account-verified money-out ledger.")
+                    }
+                }
+                .padding(20)
+                .frame(maxWidth: 520)
+                .frame(maxWidth: .infinity)
+            }
+            .navigationTitle("Money used elsewhere")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .confirmationAction) {
+                    Button("Done", action: onClose)
+                }
+            }
+        }
+    }
 }

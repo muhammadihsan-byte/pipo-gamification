@@ -131,7 +131,7 @@ final class SupabaseServiceTests: XCTestCase {
         XCTAssertEqual(Set(json.keys), Set([
             "id", "user_id", "title", "category", "target_amount",
             "start_date", "target_date", "rhythm", "preferred_saving_day",
-            "planned_contribution_override"
+            "planned_contribution_override", "currency_code"
         ]))
         XCTAssertEqual(json["user_id"] as? String, owner.uuidString)
         XCTAssertEqual(json["rhythm"] as? String, "weekly")
@@ -253,5 +253,119 @@ final class SupabaseServiceTests: XCTestCase {
         XCTAssertEqual(json["user_id"] as? String, userID.uuidString)
         XCTAssertEqual(json["purchased_personal_slots"] as? Int, 2)
         XCTAssertEqual(json["purchased_group_slots"] as? Int, 1)
+    }
+}
+
+extension SupabaseServiceTests {
+    @MainActor
+    func testGlobalExperienceExactGoalAndSavingPayloadsKeepCurrencyPerGoal() throws {
+        let owner = UUID()
+        let date = Date(timeIntervalSince1970: 1_700_000_000)
+        let cases: [(String, String, Int64)] = [
+            ("IDR", "6.000.000", 6_000_000),
+            ("JPY", "500.000", 500_000),
+            ("USD", "1,500.50", 150_050),
+            ("EUR", "3,000.75", 300_075)
+        ]
+        for (code, amountInput, expectedMinor) in cases {
+            let locale = code == "IDR" || code == "JPY" ?
+                Locale(identifier: "id_ID") : Locale(identifier: "en_US")
+            let minor = try XCTUnwrap(PipoGoalCurrency.parseMinor(
+                amountInput, code: code, locale: locale
+            ))
+            XCTAssertEqual(minor, expectedMinor)
+            let goal = PersonalGoal(
+                title: "Synthetic " + code, category: .trip,
+                targetAmount: NSDecimalNumber(decimal:
+                    PipoGoalCurrency.decimal(minor, code: code)).doubleValue,
+                currencyCode: code, targetMinorUnits: minor,
+                recordedMinorUnits: 0,
+                startDate: date, targetDate: date.addingTimeInterval(60 * 86_400),
+                ownerUserID: owner
+            )
+            let savedMinor: Int64 = code == "IDR" ? 100_000 :
+                code == "JPY" ? 1000 : 1_001
+            let transaction = SavingTransaction(
+                goalId: goal.id,
+                amount: NSDecimalNumber(decimal:
+                    PipoGoalCurrency.decimal(savedMinor, code: code)).doubleValue,
+                amountMinorUnits: savedMinor,
+                currencyCode: code, userID: owner
+            )
+            let batch = try PersonalSavingSyncBatch.make(
+                goals: [goal], transactions: [transaction], authenticatedUserID: owner
+            )
+            let goalJson = try XCTUnwrap(JSONSerialization.jsonObject(
+                with: JSONEncoder().encode(batch.goals[0])) as? [String: Any])
+            XCTAssertEqual(goalJson["currency_code"] as? String, code)
+            let target = try XCTUnwrap(goalJson["target_amount"] as? NSNumber)
+            XCTAssertEqual(target.decimalValue, PipoGoalCurrency.decimal(minor, code: code))
+            let savingJson = try XCTUnwrap(JSONSerialization.jsonObject(
+                with: JSONEncoder().encode(batch.transactions[0])) as? [String: Any])
+            let amount = try XCTUnwrap(savingJson["amount"] as? NSNumber)
+            XCTAssertEqual(amount.decimalValue, PipoGoalCurrency.decimal(savedMinor, code: code))
+            XCTAssertEqual(goal.effectiveCurrencyCode, code)
+        }
+    }
+
+    @MainActor
+    func testGlobalExperienceScheduledMinorUnitsPersistAsDecimalAndDuplicateIDsFail() throws {
+        let owner = UUID()
+        let goal = PersonalGoal(
+            title: "Laptop", category: .gadget, targetAmount: 1500.50,
+            currencyCode: "USD", targetMinorUnits: 150_050,
+            recordedMinorUnits: 0,
+            targetDate: .now.addingTimeInterval(86_400 * 45),
+            ownerUserID: owner
+        )
+        goal.plannedContributionOverride = 12_550 // USD 125.50, NOT $12,550
+        let batch = try PersonalSavingSyncBatch.make(
+            goals: [goal], transactions: [], authenticatedUserID: owner
+        )
+        let json = try XCTUnwrap(JSONSerialization.jsonObject(
+            with: JSONEncoder().encode(batch.goals[0])) as? [String: Any])
+        let planned = try XCTUnwrap(json["planned_contribution_override"] as? NSNumber)
+        XCTAssertEqual(planned.decimalValue, Decimal(string: "125.50"))
+        XCTAssertThrowsError(try PersonalSavingSyncBatch.make(
+            goals: [goal, goal], transactions: [], authenticatedUserID: owner
+        ))
+        let divergent = SavingTransaction(
+            goalId: goal.id, amount: 2.00,
+            amountMinorUnits: 100, currencyCode: "USD", userID: owner
+        )
+        XCTAssertThrowsError(try PersonalSavingSyncBatch.make(
+            goals: [goal], transactions: [divergent], authenticatedUserID: owner
+        ))
+    }
+
+    @MainActor
+    func testGlobalExperienceRejectsCrossGoalAndLossyCloudCurrency() throws {
+        let user = UUID()
+        let goal = PersonalGoal(
+            title: "Japan", category: .trip, targetAmount: 500_000,
+            currencyCode: "JPY", targetMinorUnits: 500_000,
+            startDate: .now,
+            targetDate: .now.addingTimeInterval(86400 * 30),
+            ownerUserID: user
+        )
+        let bad = SavingTransaction(goalId: goal.id,
+            amount: 0.01, amountMinorUnits: nil, currencyCode: "USD", userID: user)
+        XCTAssertThrowsError(try PersonalSavingSyncBatch.make(
+            goals: [goal], transactions: [bad], authenticatedUserID: user
+        ))
+        let missingMinor = SavingTransaction(goalId: goal.id,
+            amount: 42, userID: user)
+        XCTAssertThrowsError(try PersonalSavingSyncBatch.make(
+            goals: [goal], transactions: [missingMinor], authenticatedUserID: user
+        ))
+        let otherCurrency = PersonalGoal(
+            title: "Bad code", category: .trip, targetAmount: 20,
+            currencyCode: "ZZZ", targetMinorUnits: 2000,
+            targetDate: .now.addingTimeInterval(86400 * 30),
+            ownerUserID: user
+        )
+        XCTAssertThrowsError(try PersonalSavingSyncBatch.make(
+            goals: [otherCurrency], transactions: [], authenticatedUserID: user
+        ))
     }
 }

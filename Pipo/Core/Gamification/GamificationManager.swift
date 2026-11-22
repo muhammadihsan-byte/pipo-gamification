@@ -194,17 +194,21 @@ enum SavingConsistency {
         date: Date, amount: Double, goal: PersonalGoal, calendar: Calendar = .current
     ) -> Bool {
         guard goal.rhythm != .flexible, amount > 0,
-              goal.targetAmount >= 1,
-              goal.targetAmount < Double(Int.max),
+              let targetMinor = goal.exactTargetMinor,
+              targetMinor > 0,
+              let scheduleTarget = Int(exactly: targetMinor),
               let schedule = PersonalSavingSchedule(
-                targetAmount: Int(goal.targetAmount),
+                targetAmount: scheduleTarget,
                 startDate: goal.startDate,
                 targetDate: goal.targetDate,
                 rhythm: goal.rhythm,
                 preferredDay: goal.preferredSavingDay,
                 calendar: calendar
               ) else { return false }
-        let amountDue = Double(goal.plannedContributionOverride ?? schedule.amount)
+        let amountDue = NSDecimalNumber(decimal: PipoGoalCurrency.decimal(
+            Int64(goal.plannedContributionOverride ?? schedule.amount),
+            code: goal.effectiveCurrencyCode
+        )).doubleValue
         guard amount >= amountDue, amountDue > 0 else { return false }
         let target = calendar.startOfDay(for: date)
         guard target >= schedule.firstDate, target <= schedule.lastDate else { return false }

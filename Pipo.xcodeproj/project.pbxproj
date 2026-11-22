@@ -27,6 +27,7 @@
 		00000000000000000000000A /* SavingRhythmView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 000000000000000000000110 /* SavingRhythmView.swift */; };
 		00000000000000000000000B /* PersonalGoal.swift in Sources */ = {isa = PBXBuildFile; fileRef = 000000000000000000000111 /* PersonalGoal.swift */; };
 		00000000000000000000000C /* SavingTransaction.swift in Sources */ = {isa = PBXBuildFile; fileRef = 000000000000000000000112 /* SavingTransaction.swift */; };
+		B42026112200000000000001 /* PipoGoalCurrency.swift in Sources */ = {isa = PBXBuildFile; fileRef = B42026112200000000000002 /* PipoGoalCurrency.swift */; };
 		00000000000000000000000D /* UserProfile.swift in Sources */ = {isa = PBXBuildFile; fileRef = 000000000000000000000113 /* UserProfile.swift */; };
 		00000000000000000000000E /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 000000000000000000000114 /* Assets.xcassets */; };
 		B0AA20261120000000000003 /* App PrivacyInfo.xcprivacy in Resources */ = {isa = PBXBuildFile; fileRef = B0AA20261120000000000001 /* App PrivacyInfo.xcprivacy */; };
@@ -42,6 +43,7 @@
 		000000000000000000000017 /* CreateGoalView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 000000000000000000000125 /* CreateGoalView.swift */; };
 		000000000000000000000018 /* SubscriptionManagerTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 000000000000000000000126 /* SubscriptionManagerTests.swift */; };
 		000000000000000000000019 /* ReviewPlanView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 000000000000000000000127 /* ReviewPlanView.swift */; };
+		B22026112100000000000001 /* ManagePlanV2.swift in Sources */ = {isa = PBXBuildFile; fileRef = B22026112100000000000002 /* ManagePlanV2.swift */; };
 		00000000000000000000001A /* GroupSavingManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = 000000000000000000000128 /* GroupSavingManager.swift */; };
 		00000000000000000000001B /* GroupSavingManagerTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 000000000000000000000129 /* GroupSavingManagerTests.swift */; };
 		5341564500000000000000B3 /* GroupPlanJourneyTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5341564500000000000000D3 /* GroupPlanJourneyTests.swift */; };
@@ -110,6 +112,7 @@
 		000000000000000000000110 /* SavingRhythmView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SavingRhythmView.swift; sourceTree = "<group>"; };
 		000000000000000000000111 /* PersonalGoal.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PersonalGoal.swift; sourceTree = "<group>"; };
 		000000000000000000000112 /* SavingTransaction.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SavingTransaction.swift; sourceTree = "<group>"; };
+		B42026112200000000000002 /* PipoGoalCurrency.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PipoGoalCurrency.swift; sourceTree = "<group>"; };
 		000000000000000000000113 /* UserProfile.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = UserProfile.swift; sourceTree = "<group>"; };
 		000000000000000000000114 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
 		B0AA20261120000000000001 /* App PrivacyInfo.xcprivacy */ = {isa = PBXFileReference; lastKnownFileType = text.xml; path = PrivacyInfo.xcprivacy; sourceTree = "<group>"; };
@@ -127,6 +130,7 @@
 		000000000000000000000125 /* CreateGoalView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CreateGoalView.swift; sourceTree = "<group>"; };
 		000000000000000000000126 /* SubscriptionManagerTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SubscriptionManagerTests.swift; sourceTree = "<group>"; };
 		000000000000000000000127 /* ReviewPlanView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ReviewPlanView.swift; sourceTree = "<group>"; };
+		B22026112100000000000002 /* ManagePlanV2.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ManagePlanV2.swift; sourceTree = "<group>"; };
 		000000000000000000000128 /* GroupSavingManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GroupSavingManager.swift; sourceTree = "<group>"; };
 		000000000000000000000129 /* GroupSavingManagerTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GroupSavingManagerTests.swift; sourceTree = "<group>"; };
 		5341564500000000000000D3 /* GroupPlanJourneyTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GroupPlanJourneyTests.swift; sourceTree = "<group>"; };
@@ -297,6 +301,7 @@
 			children = (
 				000000000000000000000111 /* PersonalGoal.swift */,
 				000000000000000000000112 /* SavingTransaction.swift */,
+				B42026112200000000000002 /* PipoGoalCurrency.swift */,
 				000000000000000000000113 /* UserProfile.swift */,
 			);
 			path = Models;
@@ -379,6 +384,7 @@
 				000000000000000000000110 /* SavingRhythmView.swift */,
 				000000000000000000000125 /* CreateGoalView.swift */,
 				000000000000000000000127 /* ReviewPlanView.swift */,
+				B22026112100000000000002 /* ManagePlanV2.swift */,
 				D20000000000000000000011 /* PersonalSavingSchedule.swift */,
 				D20000000000000000000012 /* PersonalPlanComponents.swift */,
 				9CA1E0000000000000000012 /* SavingInlineCalendar.swift */,
@@ -642,6 +648,7 @@
 				00000000000000000000000A /* SavingRhythmView.swift in Sources */,
 				00000000000000000000000B /* PersonalGoal.swift in Sources */,
 				00000000000000000000000C /* SavingTransaction.swift in Sources */,
+				B42026112200000000000001 /* PipoGoalCurrency.swift in Sources */,
 				00000000000000000000000D /* UserProfile.swift in Sources */,
 				000000000000000000000011 /* AuthStateManager.swift in Sources */,
 				000000000000000000000013 /* GamificationManager.swift in Sources */,
@@ -649,6 +656,7 @@
 				000000000000000000000016 /* PaywallView.swift in Sources */,
 				000000000000000000000017 /* CreateGoalView.swift in Sources */,
 				000000000000000000000019 /* ReviewPlanView.swift in Sources */,
+				B22026112100000000000001 /* ManagePlanV2.swift in Sources */,
 				D20000000000000000000001 /* PersonalSavingSchedule.swift in Sources */,
 				D20000000000000000000002 /* PersonalPlanComponents.swift in Sources */,
 				9CA1E0000000000000000011 /* SavingInlineCalendar.swift in Sources */,

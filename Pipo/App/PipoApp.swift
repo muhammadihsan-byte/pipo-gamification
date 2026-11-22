@@ -21,10 +21,31 @@ struct PipoApp: App {
         #else
         let qaInMemory = false
         #endif
-        let configuration = ModelConfiguration(
-            schema: schema,
-            isStoredInMemoryOnly: qaInMemory
-        )
+        let configuration: ModelConfiguration
+        #if DEBUG
+        if args.contains("-pipo-global-currency-qa") {
+            // A real disk-backed fixture for launch/relaunch tests, isolated
+            // from the application's normal SwiftData store and all accounts.
+            let directory = FileManager.default.urls(
+                for: .cachesDirectory, in: .userDomainMask
+            )[0]
+            let store = directory.appendingPathComponent("PipoGlobalV1SyntheticQA.store")
+            if args.contains("-pipo-global-currency-qa-reset") {
+                for suffix in ["", "-wal", "-shm"] {
+                    try? FileManager.default.removeItem(
+                        atPath: store.path + suffix
+                    )
+                }
+            }
+            configuration = ModelConfiguration(schema: schema, url: store)
+        } else {
+            configuration = ModelConfiguration(schema: schema,
+                isStoredInMemoryOnly: qaInMemory)
+        }
+        #else
+        configuration = ModelConfiguration(schema: schema,
+            isStoredInMemoryOnly: false)
+        #endif
 
         do {
             let container = try ModelContainer(for: schema, configurations: [configuration])
@@ -46,7 +67,8 @@ struct PipoApp: App {
                 || ProcessInfo.processInfo.arguments.contains("-pipo-account-qa")
                 || ProcessInfo.processInfo.arguments.contains("-pipo-onboarding-qa")
                 || ProcessInfo.processInfo.arguments.contains("-pipo-onboarding-qa-returning")
-                || ProcessInfo.processInfo.arguments.contains("-pipo-dashboard-qa") {
+                || ProcessInfo.processInfo.arguments.contains("-pipo-dashboard-qa")
+                || ProcessInfo.processInfo.arguments.contains("-pipo-global-currency-qa") {
                 RootView(initialAuthState: .authenticated)
             } else {
                 RootView()

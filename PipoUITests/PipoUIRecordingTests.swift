@@ -17,7 +17,7 @@ final class PipoUIRecordingTests: XCTestCase {
         tapButton("Continue")
 
         XCTAssertTrue(app.staticTexts["How much do you need?"].waitForExistence(timeout: 15))
-        typeText("Target amount in rupiah", value: "5000000")
+        typeText("pipo.goal.currency.amount", value: "5000000")
         tapButton("Continue")
 
         XCTAssertTrue(app.staticTexts["When do you want to achieve it?"].waitForExistence(timeout: 15))
@@ -31,6 +31,99 @@ final class PipoUIRecordingTests: XCTestCase {
         tapButton("Start saving plan")
         tapButton("Done")
         XCTAssertTrue(app.staticTexts["Pipo QA Personal Trip"].waitForExistence(timeout: 20))
+    }
+
+    /// Global V1 Option B: currency selection belongs to Create Goal and
+    /// clears any amount entered under a different code. No network or live user.
+    func testGlobalExperienceUSDGoalCurrencySelectionAndReopen() {
+        // A synthetic account in a separate on-disk simulator-only store,
+        // not the real user's SwiftData or Supabase environment.
+        app.launchArguments = ["-pipo-global-currency-qa", "-pipo-global-currency-qa-reset"]
+        app.launch()
+        tapButton("Create a saving goal")
+        tapButton("Personal saving")
+        typeText("Goal name", value: "New Laptop USD")
+        tapButton("Continue")
+        XCTAssertTrue(app.staticTexts["How much do you need?"].waitForExistence(timeout: 15))
+        XCTAssertTrue(app.buttons["pipo.goal.currency.choose"].exists)
+        attachOnboardingScreen("Global V1 — Currency confirmed at target step")
+        // Begin with an explicit IDR choice independent of simulator region.
+        tapButton("pipo.goal.currency.choose")
+        let idrSearch = app.searchFields.firstMatch
+        XCTAssertTrue(idrSearch.waitForExistence(timeout: 15))
+        idrSearch.tap()
+        idrSearch.typeText("IDR")
+        tapButton("pipo.goal.currency.IDR")
+        typeText("pipo.goal.currency.amount", value: "6000000")
+        tapButton("pipo.goal.currency.choose")
+        let search = app.searchFields.firstMatch
+        XCTAssertTrue(search.waitForExistence(timeout: 15), "Searchable currency sheet must appear")
+        search.tap()
+        search.typeText("USD")
+        tapButton("pipo.goal.currency.USD")
+        let target = app.textFields["pipo.goal.currency.amount"].firstMatch
+        XCTAssertTrue(target.waitForExistence(timeout: 15))
+        XCTAssertTrue((target.value as? String ?? "").isEmpty,
+                      "Old IDR amount must be cleared on USD selection")
+        XCTAssertFalse(app.buttons["Continue"].isEnabled,
+                       "Cannot continue until a fresh USD amount is entered")
+        attachOnboardingScreen("Global V1 — ISO selection resets ambiguous amount")
+        typeText("pipo.goal.currency.amount", value: "1500.50")
+        tapButton("Continue")
+        interactWithCalendar()
+        tapButton("Continue")
+        tapButton("Continue")
+        XCTAssertTrue(app.staticTexts["Review your saving plan"].waitForExistence(timeout: 15))
+        attachOnboardingScreen("Global V1 — USD review before local creation")
+        tapButton("Start saving plan")
+        tapButton("Done")
+        XCTAssertTrue(app.staticTexts["New Laptop USD"].waitForExistence(timeout: 20))
+        attachOnboardingScreen("Global V1 — Goal Detail USD after local save")
+        XCTAssertTrue(app.buttons["pipo.goal.recordSaving"].exists)
+        tapButton("pipo.goal.recordSaving")
+        XCTAssertTrue(app.textFields["Amount in USD"].waitForExistence(timeout: 15))
+        typeText("Amount in USD", value: "0.01")
+        XCTAssertTrue(app.buttons["Save"].isEnabled)
+        attachOnboardingScreen("Global V1 — Manual USD saving is not a bank transfer")
+        tapButton("Save")
+
+        // Terminate and start an actual new app process against the same
+        // synthetic disk store. We must not call this a relaunch test without
+        // exercising a real restart.
+        app.terminate()
+        app.launchArguments = ["-pipo-global-currency-qa"]
+        app.launch()
+        let persistedGoal = app.staticTexts["New Laptop USD"].firstMatch
+        XCTAssertTrue(persistedGoal.waitForExistence(timeout: 20),
+                      "Stored USD goal must survive app relaunch")
+        XCTAssertFalse(app.staticTexts["Amount unavailable"].exists,
+                       "USD scheduled saving amount must render from exact minor units")
+        persistedGoal.tap()
+        XCTAssertTrue(app.buttons["pipo.goal.recordSaving"].waitForExistence(timeout: 15))
+        attachOnboardingScreen("Global V1 — USD goal survives actual app restart")
+        // Non-IDR Money Out is an inline explanation, never an unsupported
+        // sheet with accidental IDR amount entry.
+        let moneyOutUnavailable = app.descendants(matching: .any)
+            .matching(identifier: "pipo.currency.moneyOut.unavailable").firstMatch
+        XCTAssertTrue(moneyOutUnavailable.waitForExistence(timeout: 15),
+            "Goal Detail must explain that Money Out isn't available for USD")
+        XCTAssertFalse(app.buttons["pipo.goal.moneyOutPreview"].exists,
+            "No unsupported Money Out sheet should be enterable for USD")
+        XCTAssertFalse(app.textFields["pipo.card.moneyOut.amount"].exists)
+        attachOnboardingScreen("Global V1 — Non-IDR Money Out safely unavailable")
+        XCTAssertTrue(app.buttons["pipo.goal.planRevisionPreview"].waitForExistence(timeout: 15))
+        // Never let the pinned Record Saving CTA intercept an offscreen tap.
+        tapButtonAboveSavingFooter("pipo.goal.planRevisionPreview")
+        attachOnboardingScreen("Global V1 — Manage Plan presentation after USD restart")
+        XCTAssertFalse(app.navigationBars["Record a saving"].exists,
+                       "Manage Plan tap must not open Record Saving")
+        XCTAssertTrue(app.staticTexts["pipo.plan.v2.title"].waitForExistence(timeout: 15),
+                      "Manage Plan modal was not presented after USD restart: \(app.debugDescription)")
+        XCTAssertTrue(app.staticTexts["Your plan, your pace."].waitForExistence(timeout: 15))
+        tapButton("pipo.plan.v2.editTarget")
+        XCTAssertTrue(app.staticTexts["TARGET AMOUNT · USD"].waitForExistence(timeout: 15))
+        XCTAssertFalse(app.buttons["pipo.plan.v2.primary"].isEnabled)
+        attachOnboardingScreen("Global V1 — Manage Plan V2 goal-level currency")
     }
 
     func testGroupSavingJourney() {
@@ -314,6 +407,171 @@ final class PipoUIRecordingTests: XCTestCase {
         attachOnboardingScreen("Issue 48 — Goal hero no-cover, one progress rail")
     }
 
+    /// Approved Option B: Goal Detail and Manage Plan use the SAME signed-in
+    /// fixture; screenshots never splice the 25% B00 and 60% B01 mockups.
+    /// No production data, plan fields, XP, or ledger are written by these taps.
+    func testManagePlanV2OverviewFlexibleImpactReviewAndMoneyOutSafety() {
+        continueAfterFailure = false
+        app.launchArguments = ["-pipo-dashboard-qa"]
+        app.launch()
+        tapButton("pipo.dashboard.focusGoal")
+        XCTAssertTrue(app.buttons["pipo.goal.recordSaving"].waitForExistence(timeout: 15))
+        attachOnboardingScreen("Manage Plan V2 BEFORE — Goal Detail same fixture")
+        tapButton("pipo.goal.planRevisionPreview")
+        XCTAssertTrue(app.staticTexts["Your plan, your pace."].waitForExistence(timeout: 15))
+        XCTAssertTrue(app.staticTexts["Past savings and earned badges are preserved."].exists)
+        XCTAssertTrue(app.progressIndicators.firstMatch.exists)
+        XCTAssertFalse(app.buttons["pipo.plan.v2.primary"].isEnabled)
+        attachOnboardingScreen("Manage Plan V2 B01 — Approved overview")
+        tapButton("pipo.plan.v2.editRhythm")
+        XCTAssertTrue(app.staticTexts["Find your pace."].waitForExistence(timeout: 10))
+        attachOnboardingScreen("Manage Plan V2 B03 — Rhythm options")
+        tapButton("pipo.plan.v2.rhythm.flexible")
+        XCTAssertTrue(app.staticTexts["Save when it feels right."].waitForExistence(timeout: 10))
+        XCTAssertTrue(app.staticTexts["Previous XP and saving history stay earned."].exists)
+        XCTAssertTrue(app.buttons["pipo.plan.v2.primary"].isEnabled)
+        attachOnboardingScreen("Manage Plan V2 B08 — Flexible no pressure")
+        tapButton("pipo.plan.v2.primary")
+        XCTAssertTrue(app.staticTexts["Here's what changes."].waitForExistence(timeout: 10))
+        XCTAssertTrue(app.descendants(matching: .any).matching(
+            NSPredicate(format: "label CONTAINS %@", "No fixed schedule")
+        ).firstMatch.exists)
+        attachOnboardingScreen("Manage Plan V2 B04 — Flexible impact")
+        tapButton("pipo.plan.v2.primary")
+        XCTAssertTrue(app.staticTexts["Review your new plan."].waitForExistence(timeout: 10))
+        let finalSave = app.buttons["pipo.plan.v2.primary"]
+        XCTAssertTrue(finalSave.exists)
+        XCTAssertFalse(finalSave.isEnabled, "Server-owned plan revision is not approved")
+        XCTAssertTrue(app.staticTexts["The original plan remains active. This is a draft only."].exists)
+        attachOnboardingScreen("Manage Plan V2 B05 — Unsaved review")
+        tapButton("pipo.plan.v2.back")
+        XCTAssertTrue(app.staticTexts["Here's what changes."].exists)
+        tapButton("pipo.plan.v2.back")
+        XCTAssertTrue(app.staticTexts["Save when it feels right."].exists)
+        tapButton("pipo.plan.v2.back")
+        XCTAssertTrue(app.staticTexts["Your plan, your pace."].exists)
+
+        // Dirty draft cannot silently close; keep editing retains its inputs.
+        tapButton("pipo.plan.v2.back")
+        XCTAssertTrue(app.buttons["Discard draft"].waitForExistence(timeout: 10))
+        tapButton("Keep editing")
+        XCTAssertTrue(app.staticTexts["Your plan, your pace."].exists)
+        tapButton("pipo.plan.v2.back")
+        tapButton("Discard draft")
+        XCTAssertTrue(app.buttons["pipo.goal.moneyOutPreview"].waitForExistence(timeout: 15))
+        tapButton("pipo.goal.moneyOutPreview")
+        XCTAssertTrue(app.navigationBars["Money used elsewhere"].waitForExistence(timeout: 10))
+        XCTAssertTrue(app.textFields["pipo.card.moneyOut.amount"].exists)
+        attachOnboardingScreen("Manage Plan V2 REGRESSION — Money Out preserved")
+    }
+
+    func testManagePlanV2TargetAndDateEditorsAreFocusedAndNonMutating() {
+        continueAfterFailure = false
+        app.launchArguments = ["-pipo-dashboard-qa"]
+        app.launch()
+        tapButton("pipo.dashboard.focusGoal")
+        tapButton("pipo.goal.planRevisionPreview")
+        tapButton("pipo.plan.v2.editTarget")
+        XCTAssertTrue(app.staticTexts["Change the target."].waitForExistence(timeout: 10))
+        XCTAssertTrue(app.textFields["pipo.plan.v2.targetAmount"].exists)
+        attachOnboardingScreen("Manage Plan V2 B02 — Focused target")
+        // Keyboard can be shown without hiding target context or forcing a save.
+        let field = app.textFields["pipo.plan.v2.targetAmount"]
+        bringIntoView(field)
+        field.tap()
+        attachOnboardingScreen("Manage Plan V2 B10 — Keyboard safe target")
+        tapButton("pipo.plan.v2.back")
+        XCTAssertTrue(app.staticTexts["Your plan, your pace."].waitForExistence(timeout: 10))
+        tapButton("pipo.plan.v2.editDate")
+        XCTAssertTrue(app.staticTexts["Change the finish date."].waitForExistence(timeout: 10))
+        XCTAssertTrue(app.datePickers["pipo.plan.v2.finishDate"].exists ||
+                      app.buttons["pipo.plan.v2.finishDate"].exists,
+                      "The native date picker must remain VoiceOver discoverable")
+        attachOnboardingScreen("Manage Plan V2 B13 — Finish date")
+        XCTAssertFalse(app.buttons["pipo.plan.v2.primary"].isEnabled)
+    }
+
+    /// Automated accessibility-tree proxy at a large system text category.
+    /// This proves discoverable labels, tappable targets and reachable native
+    /// controls; actual VoiceOver speech/focus order and Switch Control still
+    /// require a signed-device/manual accessibility session.
+    func testGlobalV1AccessibilityLabelsAndTargetsAtLargeText() {
+        continueAfterFailure = false
+        // This DEBUG-only fixture does not authenticate or send cloud writes.
+        // UICTContentSizeCategoryAccessibilityM is a supported large category.
+        app.launchArguments = [
+            "-pipo-dashboard-qa",
+            "-UIPreferredContentSizeCategoryName",
+            "UICTContentSizeCategoryAccessibilityM"
+        ]
+        app.launch()
+        tapButton("pipo.dashboard.focusGoal")
+        tapButtonAboveSavingFooter("pipo.goal.planRevisionPreview")
+        XCTAssertTrue(app.staticTexts["Your plan, your pace."].waitForExistence(timeout: 15))
+
+        let back = app.buttons["pipo.plan.v2.back"].firstMatch
+        XCTAssertTrue(back.waitForExistence(timeout: 10))
+        XCTAssertFalse(back.label.trimmingCharacters(in: .whitespaces).isEmpty,
+                       "Back must have a spoken accessibility label")
+        XCTAssertGreaterThanOrEqual(back.frame.height, 44,
+            "Back control is below Pipo's 44pt accessibility target")
+        let primary = app.buttons["pipo.plan.v2.primary"].firstMatch
+        XCTAssertTrue(primary.exists)
+        XCTAssertGreaterThanOrEqual(primary.frame.height, 44,
+            "Primary action must remain a 44pt minimum target under large text")
+        XCTAssertFalse(primary.label.trimmingCharacters(in: .whitespaces).isEmpty)
+        XCTAssertFalse(primary.isEnabled,
+            "Manage Plan remains preview-only, including accessibility sizes")
+
+        let targetChoice = app.buttons["pipo.plan.v2.editTarget"].firstMatch
+        XCTAssertTrue(targetChoice.exists)
+        XCTAssertTrue(targetChoice.label.contains("Target & breakdown"),
+            "Target editor must expose its actual visible action, not just a chevron")
+        XCTAssertGreaterThanOrEqual(targetChoice.frame.height, 44)
+        tapButton("pipo.plan.v2.editTarget")
+        let targetField = app.textFields["pipo.plan.v2.targetAmount"].firstMatch
+        XCTAssertTrue(targetField.waitForExistence(timeout: 10))
+        XCTAssertTrue(targetField.label.contains("Target amount in"),
+            "Amount entry must announce its currency to assistive technology")
+        attachOnboardingScreen("Global V1 AX — large text target editor")
+        tapButton("pipo.plan.v2.back")
+
+        tapButton("pipo.plan.v2.editDate")
+        let dateField = app.datePickers["pipo.plan.v2.finishDate"].firstMatch
+        let dateButton = app.buttons["pipo.plan.v2.finishDate"].firstMatch
+        XCTAssertTrue(dateField.exists || dateButton.exists,
+            "Finish-date control must remain accessible at large text sizes")
+        let nativeDate = dateField.exists ? dateField : dateButton
+        XCTAssertFalse(nativeDate.label.trimmingCharacters(in: .whitespaces).isEmpty)
+        attachOnboardingScreen("Global V1 AX — native date editor")
+    }
+
+    /// Legacy #42 regressions: both sheets still open, but neither can mutate
+    /// account history or complete a financial write.
+    func testIssue42PlanAndMoneyOutRemainReviewOnly() {
+        continueAfterFailure = false
+        app.launchArguments = ["-pipo-dashboard-qa"]
+        app.launch()
+        tapButton("pipo.dashboard.focusGoal")
+        tapButton("pipo.goal.planRevisionPreview")
+        XCTAssertTrue(app.staticTexts["Your plan, your pace."].waitForExistence(timeout: 15))
+        XCTAssertFalse(app.buttons["pipo.plan.v2.primary"].isEnabled)
+        attachOnboardingScreen("Issue 42 — Approved V2 overview, no writes")
+        tapButton("pipo.plan.v2.back")
+        tapButton("pipo.goal.moneyOutPreview")
+        XCTAssertTrue(app.navigationBars["Money used elsewhere"].waitForExistence(timeout: 12))
+        attachOnboardingScreen("Issue 42 — Money Out input is visible")
+        let input = app.textFields["pipo.card.moneyOut.amount"].firstMatch
+        XCTAssertTrue(input.waitForExistence(timeout: 12))
+        typeText("pipo.card.moneyOut.amount", value: "500000")
+        tapButton("pipo.card.moneyOut.review")
+        XCTAssertTrue(app.staticTexts["A CHANGE, NOT A RESET"]
+                      .waitForExistence(timeout: 12))
+        XCTAssertTrue(app.buttons["Saving changes isn't available yet"].exists)
+        XCTAssertFalse(app.buttons["Saving changes isn't available yet"].isEnabled)
+        attachOnboardingScreen("Issue 42 — Approved money-out review, no writes")
+    }
+
     /// Non-destructive P0 simulator acceptance: sign-in availability and
     /// account deletion confirmation. The fixture is DEBUG-only and has no
     /// backend Auth session. NEVER tap the destructive submit action.
@@ -425,6 +683,27 @@ final class PipoUIRecordingTests: XCTestCase {
         XCTAssertTrue(button.waitForExistence(timeout: 20), "Missing button: \(label)")
         bringIntoView(button)
         XCTAssertTrue(button.isEnabled, "Disabled button: \(label)")
+        button.tap()
+    }
+
+    /// XCUIElement.isHittable can be true even when a button's tap center
+    /// overlaps the pinned Record Saving footer on a compact device.
+    private func tapButtonAboveSavingFooter(_ identifier: String) {
+        let button = app.buttons[identifier].firstMatch
+        XCTAssertTrue(button.waitForExistence(timeout: 20), "Missing button: \(identifier)")
+        let scroll = app.scrollViews.containing(.button, identifier: identifier).firstMatch
+        XCTAssertTrue(scroll.exists, "Goal Detail scroll view is missing")
+        let footer = app.buttons["pipo.goal.recordSaving"].firstMatch
+        XCTAssertTrue(footer.exists, "Goal Detail sticky footer is missing")
+        for _ in 0..<8 {
+            let entirelyAboveFooter = button.frame.minY >= scroll.frame.minY + 8
+                && button.frame.maxY <= footer.frame.minY - 12
+            if button.isHittable && entirelyAboveFooter { break }
+            scroll.swipeUp()
+        }
+        XCTAssertTrue(button.isHittable && button.frame.minY >= scroll.frame.minY + 8
+                      && button.frame.maxY <= footer.frame.minY - 12,
+                      "Manage Plan action is obscured by the saving footer: \(app.debugDescription)")
         button.tap()
     }
 

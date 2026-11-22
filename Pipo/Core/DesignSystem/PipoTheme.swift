@@ -101,6 +101,7 @@ enum PipoBudgetPresentation {
 struct PipoBudgetBreakdownCard: View {
     let lines: [PipoBudgetLine]
     let targetAmount: Double
+    var currencyCode: String = "IDR"
     var onEdit: (() -> Void)? = nil
 
     var body: some View {
@@ -135,7 +136,8 @@ struct PipoBudgetBreakdownCard: View {
                                 return "Amount needs review"
                             }
                             let share = PipoBudgetPresentation.percent(of: line.amount, target: targetAmount)
-                            return money(line.amount) + (share.map { " · \($0)% of goal" } ?? " · Check target")
+                            return PipoGoalCurrency.display(line.amount, code: currencyCode) +
+                                (share.map { " · \($0)% of goal" } ?? " · Check target")
                         }()
                         Text(detail)
                             .font(.system(size: 12))
@@ -146,14 +148,14 @@ struct PipoBudgetBreakdownCard: View {
                 }
 
                 if let total = PipoBudgetPresentation.validTotal(for: lines) {
-                    Text("TOTAL " + money(total))
+                    Text("TOTAL " + PipoGoalCurrency.display(total, code: currencyCode))
                         .font(.system(size: 15, weight: .bold))
                         .foregroundStyle(PipoTheme.cardAccentReadable)
                         .fixedSize(horizontal: false, vertical: true)
                         .accessibilityIdentifier("pipo.budget.total")
 
                     if !PipoBudgetPresentation.matchesTarget(total: total, target: targetAmount) {
-                        Text("The breakdown total differs from this goal’s target of " + money(targetAmount) + ".")
+                        Text("The breakdown total differs from this goal’s target of " + PipoGoalCurrency.display(targetAmount, code: currencyCode) + ".")
                             .font(.footnote)
                             .foregroundStyle(PipoTheme.cardMuted)
                             .fixedSize(horizontal: false, vertical: true)
