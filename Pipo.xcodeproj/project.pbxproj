@@ -17,6 +17,7 @@
 		000000000000000000000003 /* NavigationManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = 000000000000000000000103 /* NavigationManager.swift */; };
 		000000000000000000000004 /* PipoTheme.swift in Sources */ = {isa = PBXBuildFile; fileRef = 000000000000000000000104 /* PipoTheme.swift */; };
 		A44D20261121000000000002 /* PipoApprovedCards.swift in Sources */ = {isa = PBXBuildFile; fileRef = A44D20261121000000000001 /* PipoApprovedCards.swift */; };
+		B68000000000000000000001 /* PipoSparkV1.swift in Sources */ = {isa = PBXBuildFile; fileRef = B68000000000000000000002 /* PipoSparkV1.swift */; };
 		000000000000000000000005 /* AuthView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 000000000000000000000105 /* AuthView.swift */; };
 		000000000000000000000006 /* ContentView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 000000000000000000000106 /* ContentView.swift */; };
 		000000000000000000000007 /* ConsistencyMilestoneView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 000000000000000000000107 /* ConsistencyMilestoneView.swift */; };
@@ -102,6 +103,7 @@
 		000000000000000000000103 /* NavigationManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NavigationManager.swift; sourceTree = "<group>"; };
 		000000000000000000000104 /* PipoTheme.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PipoTheme.swift; sourceTree = "<group>"; };
 		A44D20261121000000000001 /* PipoApprovedCards.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PipoApprovedCards.swift; sourceTree = "<group>"; };
+		B68000000000000000000002 /* PipoSparkV1.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PipoSparkV1.swift; sourceTree = "<group>"; };
 		000000000000000000000105 /* AuthView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AuthView.swift; sourceTree = "<group>"; };
 		000000000000000000000106 /* ContentView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ContentView.swift; sourceTree = "<group>"; };
 		000000000000000000000107 /* ConsistencyMilestoneView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ConsistencyMilestoneView.swift; sourceTree = "<group>"; };
@@ -268,6 +270,7 @@
 			children = (
 				000000000000000000000104 /* PipoTheme.swift */,
 				A44D20261121000000000001 /* PipoApprovedCards.swift */,
+				B68000000000000000000002 /* PipoSparkV1.swift */,
 				DFCE5267008E3FA2ABC62F71 /* PipoMascotView.swift */,
 			);
 			path = DesignSystem;
@@ -638,6 +641,7 @@
 				000000000000000000000003 /* NavigationManager.swift in Sources */,
 				000000000000000000000004 /* PipoTheme.swift in Sources */,
 				A44D20261121000000000002 /* PipoApprovedCards.swift in Sources */,
+				B68000000000000000000001 /* PipoSparkV1.swift in Sources */,
 				000000000000000000000005 /* AuthView.swift in Sources */,
 				000000000000000000000006 /* ContentView.swift in Sources */,
 				000000000000000000000007 /* ConsistencyMilestoneView.swift in Sources */,
