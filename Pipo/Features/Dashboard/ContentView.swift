@@ -552,8 +552,8 @@ struct DashboardView: View {
             Text(value)
                 .font(.title3.bold())
                 .foregroundStyle(PipoTheme.ink)
-                .minimumScaleFactor(0.75)
-                .lineLimit(1)
+                // Preserve the complete count at larger Dynamic Type sizes.
+                .fixedSize(horizontal: false, vertical: true)
             Text(hint)
                 .font(.caption2)
                 .foregroundStyle(PipoTheme.muted)
