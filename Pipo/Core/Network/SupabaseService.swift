@@ -756,6 +756,7 @@ enum SavingGoalCreateJournalError: Error, Equatable {
     case untrustedReadback
     case invalidTransition
     case userDecisionRequired
+    case localNotReady
 }
 
 struct PendingSavingGoalCreateIntent: Codable, Equatable, Sendable {
@@ -764,6 +765,7 @@ struct PendingSavingGoalCreateIntent: Codable, Equatable, Sendable {
         case attempted    // INSERT may have committed; MUST read before retry.
         case verified     // Exact owner/goal/revision-zero readback; local merge pending.
         case conflicted   // Owned goal exists but differs; user decision required.
+        case reconciled   // Persisted local goal verified; durable terminal receipt.
     }
 
     let ownerID: UUID
@@ -841,7 +843,7 @@ struct PendingSavingGoalCreateIntent: Codable, Equatable, Sendable {
             guard observedRevision == nil else {
                 throw SavingGoalCreateJournalError.invalidJournal
             }
-        case .verified:
+        case .verified, .reconciled:
             guard observedRevision == 0 else {
                 throw SavingGoalCreateJournalError.invalidJournal
             }
@@ -903,6 +905,12 @@ final class SavingGoalCreateIntentJournal {
             _ = try entry.checkedRequest(for: ownerID)
         }
         return entries
+    }
+
+    /// Only unresolved entries are shown as pending; reconciled entries
+    /// remain as durable receipts so an app relaunch cannot re-create a goal.
+    func pending(for ownerID: UUID) throws -> [PendingSavingGoalCreateIntent] {
+        try all(for: ownerID).filter { $0.state != .reconciled }
     }
 
     /// Persist BEFORE attempting a future authenticated INSERT. Never
@@ -987,6 +995,12 @@ final class SavingGoalCreateIntentJournal {
             next = .conflicted
         }
         let observed = row.planRevision
+        if entries[i].state == .reconciled {
+            guard next == .verified, observed == 0 else {
+                throw SavingGoalCreateJournalError.invalidTransition
+            }
+            return .reconciled
+        }
         if entries[i].state != .staged && entries[i].state != .attempted {
             guard entries[i].state == next,
                   entries[i].observedRevision == observed else {
@@ -1000,9 +1014,51 @@ final class SavingGoalCreateIntentJournal {
         return next
     }
 
-    /// Deliberately NO automatic "finish verified" method: cloud readback
-    /// alone cannot guarantee the local SwiftData/create ledger reconciliation
-    /// has completed. Release integration must add an explicit audited gate.
+    /// This method is not automatically called from app lifecycle. A future
+    /// staging-only SwiftData adapter must first read a FRESH persisted goal
+    /// from a separate ModelContext and prove that local records/budget/XP
+    /// have not been modified. This writes ONLY a durable terminal receipt
+    /// into the create journal: it never edits SwiftData, history, or XP.
+    @discardableResult
+    func markLocalCommitVerified(
+        goalID: UUID, ownerID: UUID, authenticatedOwnerID: UUID,
+        local: SavingGoalCreateLocalSnapshot
+    ) throws -> PendingSavingGoalCreateIntent.State {
+        guard ownerID == authenticatedOwnerID else {
+            throw SavingGoalCreateJournalError.accountChanged
+        }
+        var entries = try all(for: ownerID)
+        guard let index = entries.firstIndex(where: { $0.goalID == goalID }) else {
+            throw SavingGoalCreateJournalError.unknownGoal
+        }
+        let pending = entries[index]
+        let expected = try pending.checkedRequest(for: ownerID)
+        guard expected == local.request else {
+            throw SavingGoalCreateJournalError.localNotReady
+        }
+        // Repeat after an interrupted app cleanup is idempotent and never
+        // creates a second goal or changes the already recorded history.
+        if pending.state == .reconciled {
+            guard pending.observedRevision == 0,
+                  local.ownerID == ownerID, local.pendingSavingEventCount == 0,
+                  !local.hasLocalOnlyBudgetItems,
+                  !local.hasUnresolvedPlanChanges else {
+                throw SavingGoalCreateJournalError.localNotReady
+            }
+            return .reconciled
+        }
+        guard try SavingGoalCreateLocalReconciler.assess(
+            pending: pending, local: local,
+            authenticatedOwnerID: authenticatedOwnerID
+        ) == .eligibleForExplicitReconciliation else {
+            throw SavingGoalCreateJournalError.localNotReady
+        }
+        entries[index].state = .reconciled
+        // Atomic write is the commit. Crash before => verified can retry;
+        // crash after => reconciled survives and is hidden from pending().
+        try persist(entries, for: ownerID)
+        return .reconciled
+    }
 
     func discardConflictedAfterUserDecision(
         goalID: UUID, ownerID: UUID, userConfirmedDiscard: Bool
