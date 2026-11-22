@@ -34,7 +34,7 @@ $initial_acl$;
 
 -- Simulated server call via service_role; SQL itself never validates JWS.
 SET LOCAL ROLE service_role;
-SELECT * FROM pipo_billing_private.apply_verified_apple_event_v1(
+SELECT * FROM public.pipo_internal_ingest_verified_apple_event_v1(
  'Sandbox','qa.event.a1','1001','1001','qa.pipo.personal.slot','com.pipo.app',
  'a1000000-0000-4000-8000-000000000001',
  'a1000000-0000-4000-8000-000000000001',
@@ -192,6 +192,34 @@ BEGIN
  THEN RAISE EXCEPTION 'FAIL: refund-before-purchase was overwritten'; END IF;
 END
 $refund_assert$;
+
+-- Refund of a historic transaction must keep working after its SKU is
+-- retired. A completely new purchase on the retired SKU must remain blocked.
+UPDATE pipo_billing_private.apple_catalog SET enabled=false
+ WHERE environment='Sandbox' AND product_id='qa.pipo.group.slot';
+SELECT * FROM public.pipo_internal_ingest_verified_apple_event_v1(
+ 'Sandbox','qa.event.refund-retired-group','2001','2001','qa.pipo.group.slot','com.pipo.app',
+ 'a1000000-0000-4000-8000-000000000001',
+ 'a1000000-0000-4000-8000-000000000001',
+ 'refunded',repeat('7',64),now());
+DO $retired_sku$
+DECLARE a public.pipo_entitlements_v2%ROWTYPE;
+        denied boolean:=false;
+BEGIN
+ SELECT * INTO a FROM public.pipo_entitlements_v2
+ WHERE user_id='a1000000-0000-4000-8000-000000000001';
+ IF a.permanent_group_slots<>0 OR a.revision<>6 THEN
+   RAISE EXCEPTION 'FAIL: retired SKU refund did not revoke credit'; END IF;
+ BEGIN
+   PERFORM * FROM public.pipo_internal_ingest_verified_apple_event_v1(
+     'Sandbox','qa.event.retired-new','8001','8001','qa.pipo.group.slot','com.pipo.app',
+     'a1000000-0000-4000-8000-000000000001',
+     'a1000000-0000-4000-8000-000000000001',
+     'purchased',repeat('8',64),now());
+ EXCEPTION WHEN invalid_parameter_value THEN denied:=true; END;
+ IF NOT denied THEN RAISE EXCEPTION 'FAIL: retired SKU minted new purchase'; END IF;
+END
+$retired_sku$;
 RESET ROLE;
 
 -- Sign-in A/B read: auth.uid comes from session, not an arbitrary ID arg.
@@ -206,8 +234,8 @@ BEGIN
  SELECT * INTO snap FROM public.pipo_read_entitlements_v2();
  IF snap.user_id <> 'a1000000-0000-4000-8000-000000000001'::uuid
     OR snap.free_personal_slots <> 2 OR snap.free_group_creator_slots <> 1
-    OR snap.permanent_personal_slots <> 0 OR snap.permanent_group_slots <> 1
-    OR snap.personal_lifetime_pro OR snap.revision <> 5
+    OR snap.permanent_personal_slots <> 0 OR snap.permanent_group_slots <> 0
+    OR snap.personal_lifetime_pro OR snap.revision <> 6
  THEN RAISE EXCEPTION 'FAIL: invalid A authenticated DTO'; END IF;
  BEGIN
   UPDATE public.pipo_entitlements_v2 SET permanent_personal_slots=999;
@@ -222,6 +250,15 @@ BEGIN
    'purchased',repeat('9',64),now());
  EXCEPTION WHEN insufficient_privilege THEN denied:=true; END;
  IF NOT denied THEN RAISE EXCEPTION 'FAIL: client can grant via private SQL function'; END IF;
+ denied:=false;
+ BEGIN
+  PERFORM * FROM public.pipo_internal_ingest_verified_apple_event_v1(
+   'Sandbox','qa.unauth-public','1235','1235','qa.pipo.personal.slot','com.pipo.app',
+   'a1000000-0000-4000-8000-000000000001',
+   'a1000000-0000-4000-8000-000000000001',
+   'purchased',repeat('a',64),now());
+ EXCEPTION WHEN insufficient_privilege THEN denied:=true; END;
+ IF NOT denied THEN RAISE EXCEPTION 'FAIL: client can call service-only public RPC'; END IF;
 END
 $account_a$;
 
