@@ -341,6 +341,7 @@ struct PersonalGoalDetailView: View {
     private let recordSaving: () -> Void
 
     @Query private var goals: [PersonalGoal]
+    @Query private var allGoals: [PersonalGoal]
     @Query private var transactions: [SavingTransaction]
     @Query private var profiles: [UserProfile]
     @Environment(AuthStateManager.self) private var authStateManager
@@ -384,6 +385,19 @@ struct PersonalGoalDetailView: View {
               UserProfile.existing(for: userID, in: profiles)?
                 .unlockedBadgeIds.contains(PipoBadge.firstSave.rawValue) != true
         else { return false }
+        // Only the dashboard's actual focus goal can advertise the first
+        // account saving. Another empty goal must use the generic CTA.
+        let active = AccountScope.visibleGoals(allGoals, userID: userID)
+            .filter(\.canRecordSaving)
+        let personal = active.filter { !$0.isGroupGoal }
+        let candidates = personal.isEmpty ? active : personal
+        let focused = active.first(where: { $0.isFocusPreferred == true }) ??
+            candidates.max { lhs, rhs in
+                lhs.progress == rhs.progress
+                    ? lhs.createdAt < rhs.createdAt
+                    : lhs.progress < rhs.progress
+            }
+        guard focused?.id == goal.id else { return false }
         return !transactions.contains { $0.userID == userID }
     }
 
