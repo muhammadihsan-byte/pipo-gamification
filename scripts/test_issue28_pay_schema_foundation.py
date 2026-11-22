@@ -53,16 +53,13 @@ class PaySchemaFoundationReview(unittest.TestCase):
             "Apple event ID conflict",
             "Apple transaction bound to another account or SKU",
             "p_action IN ('refunded','revoked')",
-            "refund/revocation is terminal",
+            "revocation/refund is terminal",
             "personal_lifetime_pro",
             "benefit='personal_slot'",
             "benefit='group_slot'",
             "revision = e.revision + 1",
-            "p_catalog",
-        ):
-            if phrase == "p_catalog":
-                continue
-            self.assertIn(phrase.lower(), self.s.lower())
+          ):
+             self.assertIn(phrase.lower(), self.s.lower())
         self.assertIn("personal_lifetime_pro boolean NOT NULL DEFAULT false", self.s)
         self.assertIn("2::integer, 1::integer", self.s)
 
