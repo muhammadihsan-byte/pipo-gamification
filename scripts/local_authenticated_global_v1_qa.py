@@ -292,7 +292,7 @@ def main() -> None:
             base, anon, "/rest/v1/saving_transactions", method="POST", bearer=b_token,
             body={"id": "b6666666-6666-4666-8666-666666666666",
                   "goal_id": a_goal, "amount": "4.50"},
-        ), "23503", "Bob could attach a transaction to Alice's goal",
+        ), "42501", "Cross-owner goal was not rejected by immutable-contribution guard",
     )
     expect_error(
         api(base, anon, "/rest/v1/saving_goals?id=eq." + b_goal, method="PATCH",
