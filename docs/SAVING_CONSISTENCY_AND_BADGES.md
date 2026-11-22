@@ -34,3 +34,11 @@ Visual reference: https://www.figma.com/design/tce3nRBcRwyObJMwQzA2rK/Gamificati
 | Multi-Goal Planner | multi-goal | Verified multi-goal consistency | Deferred |
 
 All 17 approved illustrated badges are imported as native iOS assets. Earned, locked, and coming-later states are explicit. Badge IDs are stable per account; unlocks occur only from persisted saving events, idempotently in the same SwiftData save as the transaction, with rollback on failure. Pipo does not move, hold, or verify money, nor issue real invitations.
+
+## Issue #15 — replay, migration, and account-isolation hardening
+
+- **First Step belongs to the first recorded event on the account**, regardless of the event's `date` value. When Goal B has an earlier recorded entry with a later calendar date, a subsequently recorded backdated entry for Goal A is **not** eligible for another First Step. Incomplete migrated badge IDs are not proof that the account has never saved.
+- The event ID for a candidate contribution must be absent from persisted history before *any* badges may be evaluated. Duplicate historical event IDs for the same owner are fail-closed for reward evaluation, not used to inflate planned counts, XP, or streak rewards. This does not rewrite or delete legacy data.
+- Goal-specific plan match, consistency, and recovery still consider only that goal's history through the new event date; other-account histories never count. All grants remain inside the existing local SwiftData transaction/rollback boundary.
+- These safeguards do not claim to solve multi-device concurrent XP writes, missing cloud-backed badge restore, or retrospective badge reconciliation for legacy accounts. Those require a separately approved server-backed identity/versioning and migration plan; no server migration is included here.
+
