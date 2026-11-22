@@ -53,3 +53,26 @@ The journal is not wired to app lifecycle, Supabase, UI buttons or background re
 The Ubuntu Swift harness tests atomic persistence, relaunch, duplicate/reused UUID, A/B account isolation, verified create, explicit conflict, unauthorized readback and malformed files. Native Xcode/device/locked-screen and production Auth E2E remain DEFERRED.
 
 Release hold: verified entries deliberately remain until a separate audited SwiftData/local reconciliation and cleanup gate exists. Never clear them based merely on HTTP 200 or readback without local recovery.
+
+## Staging-flagged authenticated API adapter and local-only reconciliation (new)
+
+The current iOS application still has **NO build flag** called PIPO_ISSUE80_STAGING. The adapter methods below are wrapped in compile-time conditional code and therefore **do not exist in regular production binaries**:
+
+- SupabaseService.issue80StageOnlySubmitInitialGoal: verify the locally current authenticated owner, atomically mark the matching pending create as attempted BEFORE any INSERT, recheck account, submit a single INSERT-only payload using the shared Supabase client (JWT + existing RLS), and always follow with owner-scoped SELECT readback even when the network reports a failed/ambiguous insert.
+- SupabaseService.issue80StageOnlyRecoverInitialGoal: verify the same authenticated owner and existing pending intent, SELECT the canonical goal by both id and user_id (limit 2), recheck account after awaits, and pass only that result to the journal's strict readback validator. It **never sends another INSERT**; a timeout, missing row, 409, ownership error or malformed server response cannot be treated as a completed create.
+- The scoped PostgREST query includes the proposed plan_revision column. It is not available in live Supabase yet, so these methods **must not be compiled/activated** until the reviewed #81 cutover and signed-app compatibility gates have passed.
+- No service-role key is used. Auth credentials are provided by the existing Supabase SDK; the server's RLS performs actual authorization. The local currentUser UUID checks are additional account-switch guards, not an alternative to server JWT validation.
+- The adapter is designed against the installed Supabase Swift API; full Xcode compilation is **still deferred**. Ubuntu compiles the Foundation-only models and exercises the journal; it statically audits the staging switch and INSERT/SELECT shape, but it does NOT compile the Supabase SDK behind that inactive flag.
+
+The create journal now has four states: staged (never attempted), attempted (INSERT may have committed; read back before another network request), verified (exact current revision-zero server row), conflicted (known owned row differs). The attempted state is persisted first. An ambiguous timeout always leaves the original UUID. A second attempt to mark it for INSERT is rejected by the journal.
+
+**Pure local reconciliation:** SavingGoalCreateLocalReconciler.assess uses a verified create intent and a caller-provided local snapshot. Cross-account data throws, while mismatched local goal metadata or unresolved edits return local conflict. Unsent saving events and local-only budget items remain explicitly pending. Even an exact match with no unsettled events yields only "eligible for explicit reconciliation", never an automatic SwiftData mutation, XP award, deletion of the journal, or cloud-save status.
+
+### Remaining safety gates
+
+1. Independent security review of #81's definer RPC, #29 append-only ledger, and the old installed client UPsert compatibility problem.
+2. Actual authenticated A/B staging POST and RLS SELECT tests, simultaneous-device races, missing session after account switch, and backend version validation.
+3. A reviewed and crash-safe **local SwiftData commit + journal cleanup protocol**, including event/XP/budget preservation across relaunch and retry. This is intentionally not implemented.
+4. The final UI/offline status flow, native Swift compiler against the installed Supabase SDK, iOS simulator + locked-file test, and owner approval. Mac runner stays deferred.
+
+**No production data was written during this preparation.**
