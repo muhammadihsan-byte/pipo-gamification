@@ -76,3 +76,22 @@ The create journal now has four states: staged (never attempted), attempted (INS
 4. The final UI/offline status flow, native Swift compiler against the installed Supabase SDK, iOS simulator + locked-file test, and owner approval. Mac runner stays deferred.
 
 **No production data was written during this preparation.**
+
+
+## Staging-only SwiftData Reconciliation Commit & Cleanup V1
+
+After authenticated remote INSERT/SELECT confirms the original create at server revision zero, the goal must ALREADY exist in persistent SwiftData. Reconciliation intentionally does NOT insert, update, delete or save a SwiftData goal, contribution, budget item, badge, or XP.
+
+New dormant components:
+
+- SavingGoalCreateSwiftDataCommit.finalizeAfterFreshCloudReadback, in Pipo/Models/PersonalGoal.swift under the undefined PIPO_ISSUE80_STAGING compile flag, first requires a fresh owner-authenticated server readback. Then it opens a separate new ModelContext(modelContainer) and checks the goal that was already persisted.
+- Rejects missing/duplicate local goal UUID, incorrect owner, group goal, invalid monetary precision, changed goal fields/lifecycle, nonzero progress and any attached saving transaction (including another owner's malformed event).
+- Reconstructs the canonical request from the locally persisted PersonalGoal. Unsent saving events, SubItem budget rows, and unresolved local edits prevent completion. No hidden overwrite, XP award or history mutation.
+- SavingGoalCreateIntentJournal.markLocalCommitVerified only changes a verified entry to a durable terminal reconciled receipt via atomic file write. pending(for:) hides reconciled receipts while all(for:) retains them. Repeating the same UUID after relaunch never stages another INSERT.
+- A crash before the atomic receipt transition leaves verified, safe to retry; a crash after leaves reconciled. Repeating the exact confirmed transition is idempotent. Account changes, missing proof or unsynced events must fail closed.
+
+This is deliberately a narrow first-goal NO-WRITE local reconciliation, not general cross-device download/merge, old-app migration or plan-edit CAS. Keeping the terminal receipt prevents duplicate creation but currently counts toward a bounded 100-entry per-owner history. Retention/pruning and deletion cleanup require a separate security review before broad rollout.
+
+The staging SwiftData adapter itself has NOT been compiled with Xcode, because Mac runner use is deferred. Linux compiles/runs the actual Foundation-only contract/journal and statically checks that native staging code does not save/insert/delete models. Real iOS SwiftData, file protection, signed A/B Supabase staging and old-client compatibility remain release gates.
+
+Production: the PIPO_ISSUE80_STAGING flag remains unset; no live app call sites, no database migration, no merge, no enabled Save or Money Out.
