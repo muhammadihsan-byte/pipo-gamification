@@ -45,6 +45,9 @@ jobs:
       - name: Validate Issue 80 create-only goal and cloud readback (Swift on Linux, no Xcode)
         run: python3 -m unittest -v scripts/test_issue80_create_only_readback.py
 
+      - name: Verify Issue 80 atomic budget CAS V2 review contract (Swift Linux + SQL static)
+        run: python3 -m unittest -v scripts/test_issue80_budget_cas_v2_client.py
+
       - name: Compile isolated QA scripts (syntax only)
         run: |
           python3 -m py_compile \
