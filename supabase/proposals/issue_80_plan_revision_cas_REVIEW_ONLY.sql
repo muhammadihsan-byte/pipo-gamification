@@ -249,6 +249,64 @@ GRANT EXECUTE ON FUNCTION public.pipo_apply_plan_revision_v1(
   uuid,uuid,bigint,numeric,timestamptz,text,smallint,numeric
 ) TO authenticated;
 
+-- CRITICAL COMPATIBILITY: the #42 contribution trigger used SECURITY
+-- INVOKER + SELECT FOR UPDATE on saving_goals. PostgreSQL requires UPDATE
+-- privilege for FOR UPDATE, so removing goal UPDATE would otherwise break
+-- legitimate saving INSERTs. Keep one server-owned goal row mutex shared by
+-- deposits, money-out and plan CAS. Constrain this trigger definer to the
+-- authenticated owner and the existing immutable row contents.
+DO $guard_presence$
+BEGIN
+  IF to_regprocedure('public.guard_saving_contribution_immutable()') IS NULL
+     OR NOT EXISTS (
+       SELECT 1 FROM pg_trigger WHERE
+         tgrelid='public.saving_transactions'::regclass
+         AND tgname='pipo_immutable_contribution_guard' AND tgenabled <> 'D'
+     ) THEN
+    RAISE EXCEPTION 'Missing #42 immutable contribution guard; cannot safely cut over CAS';
+  END IF;
+END
+$guard_presence$;
+
+CREATE OR REPLACE FUNCTION public.guard_saving_contribution_immutable()
+RETURNS trigger
+LANGUAGE plpgsql SECURITY DEFINER SET search_path = ''
+AS $contribution_guard$
+DECLARE
+  v_owner uuid;
+BEGIN
+  v_owner := auth.uid();
+  IF v_owner IS NULL OR NEW.user_id IS DISTINCT FROM v_owner
+     OR (TG_OP = 'UPDATE' AND OLD.user_id IS DISTINCT FROM v_owner) THEN
+    RAISE EXCEPTION 'Authenticated contribution owner required'
+      USING ERRCODE='42501';
+  END IF;
+
+  -- A definer may take this lock after goal UPDATE is revoked from clients.
+  -- Explicit owner binding is mandatory: never lock an unrelated goal.
+  PERFORM 1 FROM public.saving_goals
+  WHERE id=NEW.goal_id AND user_id=v_owner FOR UPDATE;
+  IF NOT FOUND THEN
+    RAISE EXCEPTION 'Owned goal unavailable for contribution'
+      USING ERRCODE='42501';
+  END IF;
+
+  IF TG_OP = 'UPDATE' THEN
+    IF row(OLD.id, OLD.goal_id, OLD.user_id, OLD.amount, OLD.xp_earned,
+           OLD.date, OLD.created_at)
+       IS DISTINCT FROM
+       row(NEW.id, NEW.goal_id, NEW.user_id, NEW.amount, NEW.xp_earned,
+           NEW.date, NEW.created_at) THEN
+      RAISE EXCEPTION 'Saving contributions are immutable'
+        USING ERRCODE='23514';
+    END IF;
+  END IF;
+  RETURN NEW;
+END
+$contribution_guard$;
+REVOKE ALL ON FUNCTION public.guard_saving_contribution_immutable()
+  FROM PUBLIC, anon, authenticated;
+
 -- ATOMIC CUTOVER: direct UPDATE must be removed in this same migration,
 -- otherwise a modified iOS client could bypass revision checks entirely.
 -- This breaks existing goal-first UPSERT. Do not apply until new clients use
