@@ -73,16 +73,21 @@ final class PersonalGoalTests: XCTestCase {
         }
         func verified(_ request: SavingGoalCreateOnlyRequest) throws {
             try journal.stage(request, ownerID: owner)
-            let json = try JSONSerialization.jsonObject(
-                with: JSONEncoder().encode(request)
-            ) as! [String: Any]
-            var row = json
-            row["user_id"] = owner.uuidString
-            row["plan_revision"] = 0
+            // JSONSerialization bridges JSON decimals through NSNumber,
+            // potentially changing USD cents (0.30) into floating-point
+            // approximations on Apple Foundation. Inject only the simulated
+            // server-owned keys into the original exact JSONEncoder bytes.
+            let wire = String(decoding: try JSONEncoder().encode(request),
+                              as: UTF8.self)
+            XCTAssertTrue(wire.hasPrefix("{"))
+            let ownedRow = "{\"user_id\":\"\\(owner.uuidString)\",\"plan_revision\":0,"
+                + String(wire.dropFirst())
             let server = try JSONDecoder().decode(
                 SavingGoalAuthoritativeCloudRow.self,
-                from: JSONSerialization.data(withJSONObject: row)
+                from: Data(ownedRow.utf8)
             )
+            XCTAssertEqual(server.targetAmount, request.targetAmount,
+                           "Exact currency Decimal should survive a wire round trip")
             XCTAssertEqual(
                 try journal.recordReadback(
                     server, goalID: request.goalID, ownerID: owner,
