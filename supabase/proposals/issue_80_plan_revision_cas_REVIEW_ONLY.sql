@@ -179,7 +179,7 @@ BEGIN
 
   v_request := jsonb_build_object(
     'target_amount', p_target_amount,
-    'target_date', p_target_date,
+    'target_date_epoch_seconds', extract(epoch from p_target_date),
     'rhythm', p_rhythm,
     'preferred_saving_day', p_preferred_saving_day,
     'planned_contribution_override', p_planned_contribution_override
