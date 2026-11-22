@@ -637,6 +637,10 @@ struct PersonalGoalDetailView: View {
                                 .fixedSize(horizontal: false, vertical: true)
                         }
                         .frame(maxWidth: .infinity, alignment: .leading)
+                        // The section itself is a container, not a substitute
+                        // AX label for Spark. Preserve individual VoiceOver
+                        // focus on the streak-status chip and its explanation.
+                        .accessibilityElement(children: .contain)
                         .accessibilityIdentifier("pipo.goal.sparkSummary")
                     }
                 }
