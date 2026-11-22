@@ -371,6 +371,13 @@ struct CreateGoalView: View {
                     Text(currencyCode == "IDR" ? "Rp" : currencyCode)
                     TextField("0", text: $targetAmount)
                         .keyboardType(PipoPlanV2Money.fractionDigits(for: currencyCode) == 0 ? .numberPad : .decimalPad)
+                        // The surrounding field capsule is 48pt, but its inner
+                        // TextField used to expose a 14.7pt hit rectangle to
+                        // XCTest/VoiceOver. Give the actual editable control a
+                        // reachable target after dismissing currency search.
+                        .font(.subheadline.weight(.medium))
+                        .frame(maxWidth: .infinity, minHeight: 44, alignment: .leading)
+                        .contentShape(Rectangle())
                         .accessibilityLabel("Target amount in " + currencyCode)
                         .accessibilityIdentifier("pipo.goal.currency.amount")
                 }
