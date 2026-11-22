@@ -276,9 +276,12 @@ DECLARE
   v_owner uuid;
 BEGIN
   v_owner := auth.uid();
-  IF v_owner IS NULL OR NEW.user_id IS DISTINCT FROM v_owner
-     OR (TG_OP = 'UPDATE' AND OLD.user_id IS DISTINCT FROM v_owner) THEN
+  IF v_owner IS NULL OR NEW.user_id IS DISTINCT FROM v_owner THEN
     RAISE EXCEPTION 'Authenticated contribution owner required'
+      USING ERRCODE='42501';
+  END IF;
+  IF TG_OP = 'UPDATE' AND OLD.user_id IS DISTINCT FROM v_owner THEN
+    RAISE EXCEPTION 'Historical contribution owner cannot change'
       USING ERRCODE='42501';
   END IF;
 
