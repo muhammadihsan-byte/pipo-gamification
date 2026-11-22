@@ -410,6 +410,7 @@ final class PipoUIRecordingTests: XCTestCase {
         XCTAssertTrue(activeChip.waitForExistence(timeout: 15),
                       "Focus goal must render a Spark based on its saved weekly periods")
         XCTAssertTrue(activeChip.label.contains("week"), activeChip.label)
+        let homeSparkLabel = activeChip.label
         bringIntoView(activeChip)
         attachOnboardingScreen("Issue 69 — Focus goal Spark from three recorded weeks")
 
@@ -421,7 +422,7 @@ final class PipoUIRecordingTests: XCTestCase {
         let detailChip = app.descendants(matching: .any)
             .matching(identifier: "pipo.spark.chip.Active").firstMatch
         XCTAssertTrue(detailChip.exists, "Goal Detail should show the same active weekly state")
-        XCTAssertEqual(detailChip.label, activeChip.label,
+        XCTAssertEqual(detailChip.label, homeSparkLabel,
                        "Home and Goal Detail must agree for the same goal")
         XCTAssertTrue(app.progressIndicators["pipo.goal.progress"].exists,
                       "Streak chip must not replace the one real goal progress rail")
