@@ -9,6 +9,7 @@ struct ReviewPlanView: View {
     let onBack: () -> Void
     let onEdit: (PersonalPlanStep) -> Void
     let onCreated: (UUID) -> Void
+    let onLater: (UUID) -> Void
 
     @Environment(\.modelContext) private var modelContext
     @Environment(SubscriptionManager.self) private var subscriptionManager
@@ -168,7 +169,7 @@ struct ReviewPlanView: View {
             Text("Your plan is ready!")
                 .font(.title3.bold())
                 .accessibilityAddTraits(.isHeader)
-            Text("Pipo is cheering you on. Take it one save at a time.")
+            Text("You've made a plan, not a deposit. Take it one save at a time.")
                 .font(.footnote)
                 .foregroundStyle(PersonalPlanStyle.muted)
 
@@ -192,9 +193,22 @@ struct ReviewPlanView: View {
             .background(PersonalPlanStyle.blush, in: RoundedRectangle(cornerRadius: 16))
             .overlay { RoundedRectangle(cornerRadius: 16).strokeBorder(PersonalPlanStyle.pink.opacity(0.35)) }
 
-            Button("Done") { onCreated(goalID) }
+            Text("No saving has been recorded yet. Pipo doesn't move or verify money.")
+                .font(.footnote)
+                .foregroundStyle(PersonalPlanStyle.muted)
+                .accessibilityIdentifier("pipo.firstSave.planDisclosure")
+
+            Button("View my goal") { onCreated(goalID) }
                 .buttonStyle(PersonalPlanPrimaryStyle())
-                .accessibilityHint("Opens your new saving goal")
+                .accessibilityIdentifier("pipo.firstSave.viewGoal")
+                .accessibilityHint("Opens your new goal without recording a saving")
+
+            Button("I'll do it later") { onLater(goalID) }
+                .font(.subheadline.weight(.semibold))
+                .foregroundStyle(PersonalPlanStyle.berry)
+                .frame(maxWidth: .infinity, minHeight: 44)
+                .accessibilityIdentifier("pipo.firstSave.later")
+                .accessibilityHint("Returns home without recording a saving")
         }
     }
 
@@ -363,6 +377,16 @@ struct PersonalGoalDetailView: View {
         return goal
     }
 
+    private func isFirstSaveEligible(for goal: PersonalGoal) -> Bool {
+        guard let userID = authStateManager.userID,
+              AccountScope.owns(goal, userID: userID), !goal.isGroupGoal,
+              goal.currentAmount == 0,
+              UserProfile.existing(for: userID, in: profiles)?
+                .unlockedBadgeIds.contains(PipoBadge.firstSave.rawValue) != true
+        else { return false }
+        return !transactions.contains { $0.userID == userID }
+    }
+
     var body: some View {
         GeometryReader { geometry in
             ScrollView {
@@ -397,7 +421,8 @@ struct PersonalGoalDetailView: View {
             }
             .safeAreaInset(edge: .bottom, spacing: 0) {
                 if let goal = ownedGoal, goal.canRecordSaving {
-                    Button("Record a saving", action: recordSaving)
+                    Button(isFirstSaveEligible(for: goal) ? "Record my first save" : "Record a saving",
+                           action: recordSaving)
                         .buttonStyle(PrimaryActionButtonStyle())
                         .accessibilityIdentifier("pipo.goal.recordSaving")
                         .padding(.horizontal, 24)

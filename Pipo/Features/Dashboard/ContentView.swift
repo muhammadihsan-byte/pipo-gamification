@@ -45,6 +45,9 @@ struct DashboardView: View {
     @State private var savingAmount = ""
     @State private var isShowingSaveConfirmation = false
     @State private var saveErrorMessage: String?
+    @State private var savingInlineError: String?
+    @State private var isSubmittingSaving = false
+    @AccessibilityFocusState private var savingInlineErrorFocused: Bool
     @State private var completedSavingReward: (
         transaction: SavingTransaction,
         goal: PersonalGoal,
@@ -192,7 +195,7 @@ struct DashboardView: View {
                AccountScope.owns(goalToRecord, userID: authStateManager.userID),
                goalToRecord.canRecordSaving {
                 saveConfirmation
-                    .presentationDetents([.medium])
+                    .presentationDetents([.medium, .large])
             } else {
                 ContentUnavailableView("Goal unavailable", systemImage: "lock.shield")
             }
@@ -319,6 +322,10 @@ struct DashboardView: View {
                 firstGoalStep("2", title: "Set a target and date")
                 firstGoalStep("3", title: "Record progress as you save")
             }
+            Text("Pipo tracks savings you record manually. It doesn't move money or verify bank balances.")
+                .font(.footnote)
+                .foregroundStyle(PipoTheme.muted)
+                .accessibilityIdentifier("pipo.firstSave.homeDisclosure")
             Text("No rush. You can explore Pipo before creating a goal.")
                 .font(.footnote)
                 .foregroundStyle(PipoTheme.muted)
@@ -417,6 +424,15 @@ struct DashboardView: View {
         }
     }
 
+    private func isFirstSaveEligible(for goal: PersonalGoal) -> Bool {
+        guard !goal.isGroupGoal, goal.canRecordSaving,
+              goal.currentAmount == 0,
+              currentProfile?.unlockedBadgeIds.contains(PipoBadge.firstSave.rawValue) != true
+        else { return false }
+        // A second empty goal is not a second account-wide first save.
+        return ownedTransactions.isEmpty
+    }
+
     private func featuredGoalCard(_ goal: PersonalGoal) -> some View {
         VStack(alignment: .leading, spacing: 15) {
             HStack {
@@ -493,11 +509,18 @@ struct DashboardView: View {
             .padding(12)
             .background(.white, in: RoundedRectangle(cornerRadius: 14))
 
-            Button("Record a saving") {
+            Button(isFirstSaveEligible(for: goal) ? "Record my first save" : "Record a saving") {
                 beginRecording(goal)
             }
             .buttonStyle(PrimaryActionButtonStyle())
             .accessibilityIdentifier("pipo.dashboard.recordSaving")
+
+            if isFirstSaveEligible(for: goal) {
+                Text("You can save later, too. Your goal will be here when you're ready.")
+                    .font(.footnote)
+                    .foregroundStyle(PipoTheme.muted)
+                    .accessibilityIdentifier("pipo.firstSave.noPressure")
+            }
 
             Text(goal.isGroupGoal
                  ? "Shared progress is recorded manually, not bank-verified."
@@ -1062,6 +1085,7 @@ struct DashboardView: View {
               goal.canRecordSaving else { return }
         goalToRecord = goal
         savingAmount = ""
+        savingInlineError = nil
         isShowingSaveConfirmation = true
     }
 
@@ -1151,30 +1175,53 @@ struct DashboardView: View {
         NavigationStack {
             Form {
                 if let goalToRecord {
+                    Section {
+                        Text(isFirstSaveEligible(for: goalToRecord)
+                             ? "Your first step starts with what you've saved."
+                             : "Keep your goal up to date with a saving you've made.")
+                            .font(.subheadline.weight(.semibold))
+                        Text("Enter money you've already saved elsewhere. Pipo doesn't transfer money or verify bank balances.")
+                            .font(.footnote)
+                            .foregroundStyle(PipoTheme.muted)
+                            .accessibilityIdentifier("pipo.firstSave.manualDisclosure")
+                    }
                     Section("Goal") {
                         Text(goalToRecord.title)
                     }
                 }
-
-                Section("Deposit") {
+                Section("Amount") {
                     TextField("Amount in " + (goalToRecord?.effectiveCurrencyCode ?? "IDR"), text: $savingAmount)
                         .accessibilityIdentifier("pipo.currency.recordSavingAmount")
                         .keyboardType(.decimalPad)
+                        .onChange(of: savingAmount) { _, _ in savingInlineError = nil }
+                }
+                if let savingInlineError {
+                    Section {
+                        Text(savingInlineError)
+                            .foregroundStyle(.red)
+                            .font(.footnote.weight(.semibold))
+                            .fixedSize(horizontal: false, vertical: true)
+                            .accessibilityFocused($savingInlineErrorFocused)
+                            .accessibilityIdentifier("pipo.firstSave.saveError")
+                        Text("Your amount is still here. You can retry or cancel.")
+                            .font(.footnote)
+                            .foregroundStyle(PipoTheme.muted)
+                    }
                 }
             }
             .navigationTitle("Record a saving")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
-                    Button("Cancel") {
-                        isShowingSaveConfirmation = false
-                    }
+                    Button("Cancel") { isShowingSaveConfirmation = false }
+                        .frame(minHeight: 44)
                 }
                 ToolbarItem(placement: .confirmationAction) {
-                    Button("Save") {
-                        confirmSaving()
-                    }
-                    .disabled(parsedSavingAmount == nil || goalToRecord?.canRecordSaving != true)
+                    Button("Save") { confirmSaving() }
+                        .disabled(parsedSavingAmount == nil
+                                  || goalToRecord?.canRecordSaving != true
+                                  || isSubmittingSaving || completedSavingReward != nil)
+                        .frame(minHeight: 44)
                 }
             }
         }
@@ -1195,6 +1242,10 @@ struct DashboardView: View {
     }
 
     private func confirmSaving() {
+        guard !isSubmittingSaving, completedSavingReward == nil else { return }
+        isSubmittingSaving = true
+        defer { isSubmittingSaving = false }
+        savingInlineError = nil
         guard let goal = goalToRecord,
               let userID = authStateManager.userID,
               authStateManager.authState == .authenticated,
@@ -1204,7 +1255,8 @@ struct DashboardView: View {
               let exactMinor = parsedSavingMinor,
               let oldExactMinor = goal.exactRecordedMinor,
               exactMinor > 0 else {
-            isShowingSaveConfirmation = false
+            savingInlineError = "This saving couldn't be verified. Check the amount and goal."
+            savingInlineErrorFocused = true
             return
         }
 
@@ -1218,8 +1270,8 @@ struct DashboardView: View {
               PipoGoalCurrency.decimal(nextMinorUnits, code: goal.effectiveCurrencyCode)
                 <= PipoGoalCurrency.serverMaximum
         else {
-            saveErrorMessage = "This amount would exceed the supported goal limit."
-            isShowingSaveConfirmation = false
+            savingInlineError = "This amount would exceed the supported goal limit."
+            savingInlineErrorFocused = true
             return
         }
         let previousTotalXP = profile.totalXP
@@ -1260,8 +1312,8 @@ struct DashboardView: View {
             profile.streakDays = previousStreakDays
             profile.lastSavingDate = previousLastSavingDate
             profile.unlockedBadgeIds = previousBadges
-            saveErrorMessage = error.localizedDescription
-            isShowingSaveConfirmation = false
+            savingInlineError = "Couldn't record this saving. Your amount is still here. Try again."
+            savingInlineErrorFocused = true
             return
         }
 
@@ -1270,6 +1322,13 @@ struct DashboardView: View {
         }
         modelContext.insert(transaction)
         do {
+            #if DEBUG
+            // Only the isolated synthetic QA account can force a failed write.
+            if ProcessInfo.processInfo.arguments.contains("-pipo-global-currency-qa")
+                && ProcessInfo.processInfo.arguments.contains("-pipo-first-save-force-persist-error") {
+                throw NSError(domain: "PipoFirstSaveSyntheticQA", code: 40)
+            }
+            #endif
             try modelContext.save()
         } catch {
             modelContext.delete(transaction)
@@ -1284,8 +1343,8 @@ struct DashboardView: View {
             if existingProfile == nil {
                 modelContext.delete(profile)
             }
-            saveErrorMessage = error.localizedDescription
-            isShowingSaveConfirmation = false
+            savingInlineError = "Couldn't record this saving. Your amount is still here. Try again."
+            savingInlineErrorFocused = true
             return
         }
 
@@ -1311,6 +1370,7 @@ struct DashboardView: View {
 
         goalToRecord = goal
         savingAmount = ""
+        savingInlineError = nil
         isShowingSaveConfirmation = true
     }
 
@@ -1395,6 +1455,8 @@ struct DashboardView: View {
         }
         goalToRecord = nil
         savingAmount = ""
+        savingInlineError = nil
+        savingInlineErrorFocused = false
     }
 }
 
