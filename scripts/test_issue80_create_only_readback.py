@@ -233,6 +233,20 @@ try MainActor.assumeIsolated {
     }
     require(try afterRelaunch.all(for: ownerID)[0].state == .staged,
             "Foreign response must not mutate staged request")
+    let firstAttempt = try afterRelaunch.markInsertAttempted(
+        goalID: goalID, ownerID: ownerID
+    )
+    require(firstAttempt == request, "Durable attempt keeps the original payload")
+    require(try afterRelaunch.all(for: ownerID)[0].state == .attempted,
+            "Must persist attempted before network")
+    expectJournal(.invalidTransition) {
+        _ = try afterRelaunch.markInsertAttempted(
+            goalID: goalID, ownerID: ownerID
+        )
+    }
+    let restartedAfterTimeout = SavingGoalCreateIntentJournal(directory: dir)
+    require(try restartedAfterTimeout.all(for: ownerID)[0].state == .attempted,
+            "After timeout/relaunch, recovery must read before another INSERT")
 
     let verified = try afterRelaunch.recordReadback(
         canonical, goalID: goalID, ownerID: ownerID,
@@ -260,6 +274,45 @@ try MainActor.assumeIsolated {
     }
     require(try afterRelaunch.all(for: ownerID).count == 1,
             "Verified entry is NOT erased until future local merge gate")
+
+    let verifiedIntent = try afterRelaunch.all(for: ownerID)[0]
+    func reconcile(
+        _ localRequest: SavingGoalCreateOnlyRequest = request,
+        pendingEvents: Int = 0, budgetItems: Bool = false,
+        unsavedEdit: Bool = false
+    ) throws -> SavingGoalCreateReconcileDecision {
+        try SavingGoalCreateLocalReconciler.assess(
+            pending: verifiedIntent,
+            local: SavingGoalCreateLocalSnapshot(
+                ownerID: ownerID, request: localRequest,
+                pendingSavingEventCount: pendingEvents,
+                hasLocalOnlyBudgetItems: budgetItems,
+                hasUnresolvedPlanChanges: unsavedEdit
+            ), authenticatedOwnerID: ownerID
+        )
+    }
+    require(try reconcile(pendingEvents: 1)
+        == .goalVerifiedSavingEntriesPending, "Do not drop unsent savings")
+    require(try reconcile(budgetItems: true)
+        == .goalVerifiedBudgetSyncPending, "Local budget stays unresolved")
+    require(try reconcile(unsavedEdit: true)
+        == .holdForLocalConflict, "Do not silently replace local plan edits")
+    require(try reconcile(sameIDButChangedPayload)
+        == .holdForLocalConflict, "Goal content divergence must be explicit")
+    require(try reconcile() == .eligibleForExplicitReconciliation,
+            "Only identical empty-ledger case is eligible for manual finalize")
+    do {
+        _ = try SavingGoalCreateLocalReconciler.assess(
+            pending: verifiedIntent,
+            local: SavingGoalCreateLocalSnapshot(
+                ownerID: foreignOwner, request: request,
+                pendingSavingEventCount: 0,
+                hasLocalOnlyBudgetItems: false,
+                hasUnresolvedPlanChanges: false
+            ), authenticatedOwnerID: ownerID
+        )
+        fatalError("Cross-account reconciliation was allowed")
+    } catch SavingGoalCreateJournalError.accountChanged {}
 
     let conflictGoal = UUID()
     let conflictRequest = try SavingGoalCreateOnlyRequest(
@@ -352,6 +405,12 @@ class GoalCreateReadbackContractChecks(unittest.TestCase):
         self.assertIn("Dormant insert-only goal", self.contract)
         self.assertNotIn('.insert(request', self.source)
         self.assertNotIn('client.rpc("pipo_apply_plan_revision_v1"', self.source)
+        self.assertIn("#if PIPO_ISSUE80_STAGING", self.source)
+        self.assertIn("issue80StageOnlySubmitInitialGoal", self.source)
+        self.assertIn("issue80StageOnlyRecoverInitialGoal", self.source)
+        self.assertIn(".insert(request)", self.source)
+        self.assertIn('.eq("user_id", value: ownerID.uuidString)', self.source)
+        self.assertIn("markInsertAttempted", self.source)
         # Existing goal-first UPSERT has intentionally NOT been replaced.
         self.assertIn('.upsert(payloads, onConflict: "id")', self.source)
 
