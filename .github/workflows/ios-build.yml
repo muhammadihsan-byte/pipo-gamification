@@ -674,6 +674,22 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
+          # Do NOT pass SWIFT_ACTIVE_COMPILATION_CONDITIONS on the xcodebuild
+          # command line: that pollutes swift-crypto's SPM targets and caused
+          # a CCryptoBoringSSL module-not-found failure in the first run.
+          # Scope the QA define only to THIS Xcode project's Debug config in
+          # this ephemeral runner. Both the repository and Release remain
+          # unchanged; undo the patch before normal Debug UI tests.
+          python3 - <<'PY'
+          from pathlib import Path
+          path = Path("Pipo.xcodeproj/project.pbxproj")
+          body = path.read_text()
+          original = 'SWIFT_ACTIVE_COMPILATION_CONDITIONS = "DEBUG $(inherited)";'
+          assert body.count(original) == 1, "Expected exactly one Debug project config"
+          scoped = 'SWIFT_ACTIVE_COMPILATION_CONDITIONS = "DEBUG PIPO_ISSUE80_STAGING $(inherited)";'
+          path.write_text(body.replace(original, scoped, 1))
+          PY
+          trap 'git checkout -- Pipo.xcodeproj/project.pbxproj' EXIT
           xcodebuild \
             -project Pipo.xcodeproj \
             -scheme Pipo \
@@ -683,7 +699,6 @@ jobs:
             -resultBundlePath "$RUNNER_TEMP/PipoIssue80Native.xcresult" \
             -parallel-testing-enabled NO \
             -only-testing:PipoTests \
-            'SWIFT_ACTIVE_COMPILATION_CONDITIONS=DEBUG PIPO_ISSUE80_STAGING' \
             CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO \
             test 2>&1 | tee validation/issue80-native-unit.log
           # Native test must be present; a green no-tests run is invalid.
