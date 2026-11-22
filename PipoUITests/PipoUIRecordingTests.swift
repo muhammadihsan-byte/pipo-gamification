@@ -49,20 +49,31 @@ final class PipoUIRecordingTests: XCTestCase {
         attachOnboardingScreen("Global V1 — Currency confirmed at target step")
         // Begin with an explicit IDR choice independent of simulator region.
         tapButton("pipo.goal.currency.choose")
-        let idrSearch = app.searchFields.firstMatch
+        let idrSearch = app.textFields["pipo.goal.currency.search"].firstMatch
         XCTAssertTrue(idrSearch.waitForExistence(timeout: 15))
         idrSearch.tap()
         idrSearch.typeText("IDR")
         tapButton("pipo.goal.currency.IDR")
+        XCTAssertFalse(app.textFields["pipo.goal.currency.search"].exists,
+                       "Currency picker must close after selecting IDR")
+        let idrAmount = app.textFields["pipo.goal.currency.amount"].firstMatch
+        XCTAssertTrue(idrAmount.waitForExistence(timeout: 15))
+        XCTAssertEqual(idrAmount.label, "Target amount in IDR",
+                       "Choosing IDR must update the goal's input currency")
+        attachOnboardingScreen("Global V1 — IDR selection returns to editable amount")
         typeText("pipo.goal.currency.amount", value: "6000000")
         tapButton("pipo.goal.currency.choose")
-        let search = app.searchFields.firstMatch
+        let search = app.textFields["pipo.goal.currency.search"].firstMatch
         XCTAssertTrue(search.waitForExistence(timeout: 15), "Searchable currency sheet must appear")
         search.tap()
         search.typeText("USD")
         tapButton("pipo.goal.currency.USD")
+        XCTAssertFalse(app.textFields["pipo.goal.currency.search"].exists,
+                       "Currency picker must close after selecting USD")
         let target = app.textFields["pipo.goal.currency.amount"].firstMatch
         XCTAssertTrue(target.waitForExistence(timeout: 15))
+        XCTAssertEqual(target.label, "Target amount in USD",
+                       "Changing currency must update the actual target entry field")
         XCTAssertTrue((target.value as? String ?? "").isEmpty,
                       "Old IDR amount must be cleared on USD selection")
         XCTAssertFalse(app.buttons["Continue"].isEnabled,
@@ -150,7 +161,7 @@ final class PipoUIRecordingTests: XCTestCase {
         // The real existing five-step creation flow is preserved.
         XCTAssertTrue(app.staticTexts["How much do you need?"].waitForExistence(timeout: 15))
         tapButton("pipo.goal.currency.choose")
-        let currencySearch = app.searchFields.firstMatch
+        let currencySearch = app.textFields["pipo.goal.currency.search"].firstMatch
         XCTAssertTrue(currencySearch.waitForExistence(timeout: 15))
         currencySearch.tap()
         currencySearch.typeText("IDR")
@@ -654,7 +665,12 @@ final class PipoUIRecordingTests: XCTestCase {
         tapButton("pipo.plan.v2.back")
         tapButton("Discard draft")
         XCTAssertTrue(app.buttons["pipo.goal.moneyOutPreview"].waitForExistence(timeout: 15))
-        tapButton("pipo.goal.moneyOutPreview")
+        // The Goal Detail Record Saving footer is pinned above the scroll
+        // content. A button can report isHittable even when its tap centre
+        // intersects that footer. Validate a fully unobscured Money Out tap.
+        tapButtonAboveSavingFooter("pipo.goal.moneyOutPreview")
+        XCTAssertFalse(app.navigationBars["Record a saving"].exists,
+                       "Money Out tap must not activate the pinned saving CTA")
         XCTAssertTrue(app.navigationBars["Money used elsewhere"].waitForExistence(timeout: 10))
         XCTAssertTrue(app.textFields["pipo.card.moneyOut.amount"].exists)
         attachOnboardingScreen("Manage Plan V2 REGRESSION — Money Out preserved")
@@ -898,7 +914,7 @@ final class PipoUIRecordingTests: XCTestCase {
         }
         XCTAssertTrue(button.isHittable && button.frame.minY >= scroll.frame.minY + 8
                       && button.frame.maxY <= footer.frame.minY - 12,
-                      "Manage Plan action is obscured by the saving footer: \(app.debugDescription)")
+                      "Goal Detail action is obscured by the saving footer: \(app.debugDescription)")
         button.tap()
     }
 
