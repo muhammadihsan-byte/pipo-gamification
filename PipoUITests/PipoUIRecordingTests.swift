@@ -654,7 +654,12 @@ final class PipoUIRecordingTests: XCTestCase {
         tapButton("pipo.plan.v2.back")
         tapButton("Discard draft")
         XCTAssertTrue(app.buttons["pipo.goal.moneyOutPreview"].waitForExistence(timeout: 15))
-        tapButton("pipo.goal.moneyOutPreview")
+        // The Goal Detail Record Saving footer is pinned above the scroll
+        // content. A button can report isHittable even when its tap centre
+        // intersects that footer. Validate a fully unobscured Money Out tap.
+        tapButtonAboveSavingFooter("pipo.goal.moneyOutPreview")
+        XCTAssertFalse(app.navigationBars["Record a saving"].exists,
+                       "Money Out tap must not activate the pinned saving CTA")
         XCTAssertTrue(app.navigationBars["Money used elsewhere"].waitForExistence(timeout: 10))
         XCTAssertTrue(app.textFields["pipo.card.moneyOut.amount"].exists)
         attachOnboardingScreen("Manage Plan V2 REGRESSION — Money Out preserved")
@@ -898,7 +903,7 @@ final class PipoUIRecordingTests: XCTestCase {
         }
         XCTAssertTrue(button.isHittable && button.frame.minY >= scroll.frame.minY + 8
                       && button.frame.maxY <= footer.frame.minY - 12,
-                      "Manage Plan action is obscured by the saving footer: \(app.debugDescription)")
+                      "Goal Detail action is obscured by the saving footer: \(app.debugDescription)")
         button.tap()
     }
 
