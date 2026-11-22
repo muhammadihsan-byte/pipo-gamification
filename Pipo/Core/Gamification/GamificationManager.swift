@@ -36,7 +36,16 @@ struct GamificationManager {
         guard amount.isFinite, amount > 0 else {
             throw GamificationError.invalidDepositAmount
         }
-        if let lastSavingDate = profile.lastSavingDate, date < lastSavingDate {
+        // A different goal's later saving must never block an earlier
+        // contribution to this goal. Check ordering only against this goal's
+        // own account-scoped journal (not the legacy profile-wide timestamp).
+        let ownerID = profile.userID ?? goal.ownerUserID
+        let ownedGoalHistory = priorTransactions.filter { entry in
+            entry.goalId == goal.id &&
+            (ownerID == nil || entry.userID == ownerID)
+        }
+        if let latestGoalSaving = ownedGoalHistory.map(\.date).max(),
+           date < latestGoalSaving {
             throw GamificationError.depositBeforeLastSaving
         }
 
@@ -48,7 +57,7 @@ struct GamificationManager {
         // Always derive consistency from the current goal's history.
         // Never carry a streak across goals or rhythms through UserProfile.
         let nextStreak = SavingConsistency.consecutivePeriods(
-            dates: priorTransactions.filter { $0.goalId == goal.id }.map(\.date) + [date],
+            dates: ownedGoalHistory.map(\.date) + [date],
             rhythm: goal.rhythm,
             startDate: goal.startDate,
             asOf: date,
@@ -58,7 +67,9 @@ struct GamificationManager {
         profile.totalXP = nextTotalXP
         profile.currentLevel = level(for: nextTotalXP)
         profile.streakDays = nextStreak
-        profile.lastSavingDate = date
+        // Preserve the latest account-level timestamp for legacy consumers.
+        // Backdated activity on another goal must not move it backwards.
+        profile.lastSavingDate = max(profile.lastSavingDate ?? date, date)
         goal.currentAmount = nextCurrentAmount
 
         return SavingTransaction(

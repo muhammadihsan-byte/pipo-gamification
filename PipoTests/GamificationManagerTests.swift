@@ -393,6 +393,115 @@ final class GamificationManagerTests: XCTestCase {
         XCTAssertTrue(earned.contains(.extraSave))
     }
 
+
+    @MainActor
+    func testOtherGoalLaterSavingCannotRejectValidGoalHistory() throws {
+        let owner = UUID()
+        let goal = PersonalGoal(
+            title: "Trip", category: .trip, targetAmount: 900,
+            startDate: makeDate(day: 1), targetDate: makeDate(day: 31),
+            rhythm: .weekly, ownerUserID: owner
+        )
+        let accountLatest = makeDate(day: 25)
+        let profile = UserProfile(
+            userID: owner, totalXP: 300, streakDays: 8,
+            lastSavingDate: accountLatest
+        )
+        let otherGoalSaving = SavingTransaction(
+            goalId: UUID(), amount: 200, date: accountLatest, userID: owner
+        )
+        let saved = try GamificationManager().recordSaving(
+            amount: 100, goal: goal, profile: profile,
+            date: makeDate(day: 9),
+            priorTransactions: [otherGoalSaving]
+        )
+        XCTAssertEqual(saved.amount, 100)
+        XCTAssertEqual(profile.totalXP, 600)
+        XCTAssertEqual(profile.streakDays, 1, "Other goal must not inflate this goal's periods")
+        XCTAssertEqual(profile.lastSavingDate, accountLatest,
+                       "Account-level timestamp cannot move backwards")
+        XCTAssertEqual(goal.currentAmount, 100)
+    }
+
+    @MainActor
+    func testSameGoalOutOfOrderHistoryStillFailsWithoutMutatingAnything() {
+        let owner = UUID()
+        let goal = PersonalGoal(
+            title: "Laptop", category: .gadget, targetAmount: 900,
+            startDate: makeDate(day: 1), targetDate: makeDate(day: 31),
+            rhythm: .weekly, ownerUserID: owner
+        )
+        let profile = UserProfile(
+            userID: owner, totalXP: 300, streakDays: 2,
+            lastSavingDate: makeDate(day: 25)
+        )
+        let alreadySaved = SavingTransaction(
+            goalId: goal.id, amount: 100, date: makeDate(day: 16), userID: owner
+        )
+        XCTAssertThrowsError(
+            try GamificationManager().recordSaving(
+                amount: 50, goal: goal, profile: profile,
+                date: makeDate(day: 9), priorTransactions: [alreadySaved]
+            )
+        ) { error in
+            guard case GamificationError.depositBeforeLastSaving = error else {
+                return XCTFail("Expected goal-scoped chronological rejection")
+            }
+        }
+        XCTAssertEqual(profile.totalXP, 300)
+        XCTAssertEqual(profile.streakDays, 2)
+        XCTAssertEqual(profile.lastSavingDate, makeDate(day: 25))
+        XCTAssertEqual(goal.currentAmount, 0)
+    }
+
+    @MainActor
+    func testForeignAccountHistoryCannotInflateSameGoalConsistency() throws {
+        let owner = UUID()
+        let goal = PersonalGoal(
+            title: "Trip", category: .trip, targetAmount: 900,
+            startDate: makeDate(day: 1), targetDate: makeDate(day: 31),
+            rhythm: .weekly, ownerUserID: owner
+        )
+        let profile = UserProfile(userID: owner)
+        let ownEarlier = SavingTransaction(
+            goalId: goal.id, amount: 50, date: makeDate(day: 2), userID: owner
+        )
+        let foreign = SavingTransaction(
+            goalId: goal.id, amount: 75,
+            date: makeDate(day: 9), userID: UUID()
+        )
+        _ = try GamificationManager().recordSaving(
+            amount: 100, goal: goal, profile: profile,
+            date: makeDate(day: 16),
+            priorTransactions: [ownEarlier, foreign]
+        )
+        XCTAssertEqual(profile.streakDays, 1,
+                       "Foreign account must not fill a missed owner period")
+        XCTAssertEqual(profile.lastSavingDate, makeDate(day: 16))
+    }
+
+    @MainActor
+    func testFlexibleGoalKeepsNoStreakAndPreservesOtherGoalLatestDate() throws {
+        let owner = UUID()
+        let accountLatest = makeDate(day: 25)
+        let goal = PersonalGoal(
+            title: "Flexible", category: .other, targetAmount: 900,
+            startDate: makeDate(day: 1), targetDate: makeDate(day: 31),
+            rhythm: .flexible, ownerUserID: owner
+        )
+        let profile = UserProfile(userID: owner, lastSavingDate: accountLatest)
+        _ = try GamificationManager().recordSaving(
+            amount: 100, goal: goal, profile: profile,
+            date: makeDate(day: 9),
+            priorTransactions: [
+                SavingTransaction(goalId: UUID(), amount: 200,
+                                  date: accountLatest, userID: owner)
+            ]
+        )
+        XCTAssertEqual(profile.streakDays, 0)
+        XCTAssertEqual(profile.lastSavingDate, accountLatest)
+    }
+
     @MainActor
     private func makeGoal() -> PersonalGoal {
         PersonalGoal(
