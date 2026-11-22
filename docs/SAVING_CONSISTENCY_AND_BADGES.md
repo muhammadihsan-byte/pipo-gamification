@@ -9,6 +9,8 @@ Visual reference: https://www.figma.com/design/tce3nRBcRwyObJMwQzA2rK/Gamificati
 - No invented pause / forgiveness policy until a user-controlled paused state exists. Saving again after a missed period starts a new chain and can earn Recovery.
 - Only transactions owned by the active account and its goal may contribute. Widget, dashboard and saving milestone all use the same goal-specific calculation.
 - Use Calendar date calculations to accommodate DST and month-end. The profile's old global streakDays is only the last recorded goal's value for backwards compatibility, never an authority to combine goals.
+- Recording chronology is **per goal and per owning account**. A newer saving for Goal B never blocks an earlier valid saving for Goal A; out-of-order events for the same goal still fail without XP or balance mutations. Account-level lastSavingDate is a legacy maximum, so it never moves backwards on a different goal's historical entry. Foreign-account rows cannot fill a saving period.
+- This correction does not introduce an automatic transfer, a grace-period extension, a pause-forgiveness rule, or a change to historical badge unlocks.
 
 ## Badge triggers from the 17-item Figma catalog
 | Figma name | Stable ID | Real event | State |
