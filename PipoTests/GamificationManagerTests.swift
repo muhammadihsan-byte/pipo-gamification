@@ -690,7 +690,153 @@ final class GamificationManagerTests: XCTestCase {
             recordedSavings: 5, consecutivePeriods: 1
         )
         XCTAssertEqual(recovery.state, .recovery)
-        XCTAssertEqual(recovery.label, "Back on track")
+        XCTAssertEqual(recovery.label, "Back on track · 1-month streak")
+    }
+
+
+    @MainActor
+    func testIssue69WeeklyFourPeriodsStayPerGoalAndIgnoreExtraSameWeek() {
+        let userID = UUID()
+        let start = makeDate(day: 1)
+        let goalA = PersonalGoal(
+            title: "Bali", category: .trip, targetAmount: 100_000,
+            startDate: start, targetDate: makeDate(day: 31),
+            rhythm: .weekly, ownerUserID: userID
+        )
+        let goalB = PersonalGoal(
+            title: "Laptop", category: .gadget, targetAmount: 1_000_000,
+            startDate: start, targetDate: makeDate(day: 31),
+            rhythm: .weekly, ownerUserID: userID
+        )
+        let otherAccount = SavingTransaction(
+            goalId: goalB.id, amount: 20, date: makeDate(day: 8), userID: UUID()
+        )
+        let fourWeeks = [1, 8, 15, 22].map {
+            SavingTransaction(goalId: goalA.id, amount: 50,
+                              date: makeDate(day: $0), userID: userID)
+        }
+        let sameWeekExtra = SavingTransaction(
+            goalId: goalA.id, amount: 40, date: makeDate(day: 22).addingTimeInterval(45),
+            userID: userID
+        )
+        let bOnly = SavingTransaction(
+            goalId: goalB.id, amount: 50, date: makeDate(day: 1), userID: userID
+        )
+        var cal = Calendar(identifier: .gregorian)
+        cal.timeZone = TimeZone(secondsFromGMT: 0)!
+        let all = fourWeeks + [sameWeekExtra, bOnly, otherAccount]
+        let a = PipoSparkGoalStatus.presentation(for: goalA, transactions: all,
+                           userID: userID, asOf: makeDate(day: 22).addingTimeInterval(600),
+                           calendar: cal)
+        let b = PipoSparkGoalStatus.presentation(for: goalB, transactions: all,
+                           userID: userID, asOf: makeDate(day: 22).addingTimeInterval(600),
+                           calendar: cal)
+        XCTAssertEqual(a?.state, .active)
+        XCTAssertEqual(a?.label, "4-week streak")
+        XCTAssertEqual(b?.state, .ended)
+        XCTAssertNotEqual(a?.label, b?.label)
+        XCTAssertNil(PipoSparkGoalStatus.presentation(
+            for: goalA, transactions: all, userID: UUID(),
+            asOf: makeDate(day: 22), calendar: cal
+        ))
+    }
+
+    @MainActor
+    func testIssue69PendingIsOpenNotMissedAndExpiredPeriodEndsNeutrally() {
+        let userID = UUID()
+        let goal = PersonalGoal(
+            title: "Emergency fund", category: .house, targetAmount: 1000,
+            startDate: makeDate(day: 1), targetDate: makeDate(day: 31),
+            rhythm: .weekly, ownerUserID: userID
+        )
+        let history = [1, 8, 15].map {
+            SavingTransaction(goalId: goal.id, amount: 10,
+                              date: makeDate(day: $0), userID: userID)
+        }
+        var cal = Calendar(identifier: .gregorian)
+        cal.timeZone = TimeZone(secondsFromGMT: 0)!
+        let pending = PipoSparkGoalStatus.presentation(
+            for: goal, transactions: history, userID: userID,
+            asOf: makeDate(day: 22), calendar: cal
+        )
+        XCTAssertEqual(pending?.state, .pending)
+        XCTAssertTrue(pending?.label.contains("3-week streak") == true)
+        XCTAssertTrue(pending?.accessibilityLabel.contains("no missed period") == true)
+        let ended = PipoSparkGoalStatus.presentation(
+            for: goal, transactions: history, userID: userID,
+            asOf: makeDate(day: 29), calendar: cal
+        )
+        XCTAssertEqual(ended?.state, .ended)
+        XCTAssertTrue(ended?.accessibilityLabel.contains("Previous 3-week streak") == true)
+    }
+
+    @MainActor
+    func testIssue69RecoveryStartsAtOneOnlyOnAnActualNewSavingEvent() {
+        let userID = UUID()
+        let goal = PersonalGoal(
+            title: "Holiday", category: .trip, targetAmount: 2000,
+            startDate: makeDate(day: 1), targetDate: makeDate(day: 31),
+            rhythm: .weekly, ownerUserID: userID
+        )
+        let first = SavingTransaction(
+            goalId: goal.id, amount: 100, date: makeDate(day: 1), userID: userID
+        )
+        let recovery = SavingTransaction(
+            goalId: goal.id, amount: 100, date: makeDate(day: 22), userID: userID
+        )
+        var cal = Calendar(identifier: .gregorian)
+        cal.timeZone = TimeZone(secondsFromGMT: 0)!
+        XCTAssertEqual(PipoSparkGoalStatus.presentation(
+            for: goal, transactions: [first], userID: userID,
+            asOf: makeDate(day: 22), calendar: cal
+        )?.state, .ended)
+        let after = PipoSparkGoalStatus.presentation(
+            for: goal, transactions: [first, recovery], userID: userID,
+            asOf: makeDate(day: 22).addingTimeInterval(100), calendar: cal
+        )
+        XCTAssertEqual(after?.state, .recovery)
+        XCTAssertEqual(after?.label, "Back on track · 1-week streak")
+    }
+
+    @MainActor
+    func testIssue69FlexibleFuturePausedAndDuplicateJournalFailClosed() {
+        let userID = UUID()
+        let goal = PersonalGoal(
+            title: "Open ended", category: .house, targetAmount: 1_000,
+            startDate: makeDate(day: 1), targetDate: makeDate(day: 31),
+            rhythm: .flexible, ownerUserID: userID
+        )
+        let logged = SavingTransaction(
+            goalId: goal.id, amount: 100, date: makeDate(day: 8), userID: userID
+        )
+        let flexible = PipoSparkGoalStatus.presentation(
+            for: goal, transactions: [logged], userID: userID,
+            asOf: makeDate(day: 15)
+        )
+        XCTAssertEqual(flexible?.state, .notStarted)
+        XCTAssertEqual(flexible?.label, "Saving at your pace")
+        XCTAssertTrue(goal.transition(to: .paused))
+        XCTAssertNil(PipoSparkGoalStatus.presentation(
+            for: goal, transactions: [logged], userID: userID,
+            asOf: makeDate(day: 15)
+        ))
+        XCTAssertTrue(goal.transition(to: .active))
+        goal.rhythm = .weekly
+        let duplicate = SavingTransaction(
+            id: logged.id, goalId: goal.id, amount: 100,
+            date: makeDate(day: 15), userID: userID
+        )
+        let unsafe = PipoSparkGoalStatus.presentation(
+            for: goal, transactions: [logged, duplicate], userID: userID,
+            asOf: makeDate(day: 15)
+        )
+        XCTAssertEqual(unsafe?.state, .notStarted)
+        let futureOnly = PipoSparkGoalStatus.presentation(
+            for: goal, transactions: [SavingTransaction(
+                goalId: goal.id, amount: 10, date: makeDate(day: 31), userID: userID
+            )], userID: userID, asOf: makeDate(day: 15)
+        )
+        XCTAssertEqual(futureOnly?.state, .notStarted)
     }
 
     @MainActor
