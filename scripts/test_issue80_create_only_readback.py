@@ -403,8 +403,10 @@ class GoalCreateReadbackContractChecks(unittest.TestCase):
 
     def test_unwired_and_not_upsert_or_live_create(self):
         self.assertIn("Dormant insert-only goal", self.contract)
-        self.assertNotIn('.insert(request', self.source)
         self.assertNotIn('client.rpc("pipo_apply_plan_revision_v1"', self.source)
+        staging = self.source.split("#if PIPO_ISSUE80_STAGING", 1)[1].split("#endif", 1)[0]
+        self.assertIn(".insert(request)", staging)
+        self.assertNotIn(".upsert(", staging)
         self.assertIn("#if PIPO_ISSUE80_STAGING", self.source)
         self.assertIn("issue80StageOnlySubmitInitialGoal", self.source)
         self.assertIn("issue80StageOnlyRecoverInitialGoal", self.source)
