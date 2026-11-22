@@ -44,7 +44,7 @@ enum PipoGoalCurrency {
 }
 """
 
-HARNESS = r"""
+HARNESS = r'''
 import Foundation
 
 func check(_ valid: Bool, _ message: String) {
@@ -133,7 +133,7 @@ for corrupted in [
     } catch SavingPlanCASContractError.invalidServerResponse {}
 }
 print("PASS: #80 Swift exact-decimal CAS request, explicit null, conflict and receipt guards")
-"""
+'''
 
 
 class ClientContractChecks(unittest.TestCase):
