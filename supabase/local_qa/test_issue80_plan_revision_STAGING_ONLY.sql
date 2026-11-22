@@ -71,7 +71,7 @@ BEGIN
   SELECT public.pipo_apply_plan_revision_v1(
     '44444444-4444-4444-8444-444444444481',
     '22222222-2222-4222-8222-222222222281',
-    0, 400, now()+interval '35 days', 'weekly', 2, 25)
+    0, 400, now()+interval '35 days', 'weekly', 2::smallint, 25)
   INTO r;
   IF r->>'status' <> 'applied'
      OR (r->>'accepted_revision')::bigint <> 1 THEN
@@ -82,7 +82,7 @@ BEGIN
   SELECT public.pipo_apply_plan_revision_v1(
     '44444444-4444-4444-8444-444444444481',
     '22222222-2222-4222-8222-222222222281',
-    0, 400, now()+interval '35 days', 'weekly', 2, 25)
+    0, 400, now()+interval '35 days', 'weekly', 2::smallint, 25)
   INTO r;
   IF r->>'status' <> 'applied'
      OR (r->>'accepted_revision')::bigint <> 1 THEN
@@ -92,7 +92,7 @@ BEGIN
   SELECT public.pipo_apply_plan_revision_v1(
     '44444444-4444-4444-8444-444444444482',
     '22222222-2222-4222-8222-222222222281',
-    0, 600, now()+interval '35 days', 'weekly', 2, 25)
+    0, 600, now()+interval '35 days', 'weekly', 2::smallint, 25)
   INTO r;
   IF r->>'status' <> 'conflict'
      OR (r->>'current_revision')::bigint <> 1 THEN
@@ -104,7 +104,7 @@ BEGIN
     PERFORM public.pipo_apply_plan_revision_v1(
       '44444444-4444-4444-8444-444444444481',
       '22222222-2222-4222-8222-222222222281',
-      0, 999, now()+interval '35 days', 'weekly', 2, 25);
+      0, 999, now()+interval '35 days', 'weekly', 2::smallint, 25);
   EXCEPTION WHEN unique_violation THEN denied:=true;
   END;
   IF NOT denied THEN
@@ -116,7 +116,7 @@ BEGIN
     PERFORM public.pipo_apply_plan_revision_v1(
       '44444444-4444-4444-8444-444444444483',
       '22222222-2222-4222-8222-222222222281',
-      1, 399.50, now()+interval '35 days', 'weekly', 2, 25);
+      1, 399.50, now()+interval '35 days', 'weekly', 2::smallint, 25);
   EXCEPTION WHEN invalid_parameter_value THEN denied:=true;
   END;
   IF NOT denied THEN
@@ -161,7 +161,7 @@ BEGIN
     PERFORM public.pipo_apply_plan_revision_v1(
       '44444444-4444-4444-8444-444444444484',
       '22222222-2222-4222-8222-222222222281',
-      1, 900, now()+interval '35 days', 'monthly', 10, 100);
+      1, 900, now()+interval '35 days', 'monthly', 10::smallint, 100);
   EXCEPTION WHEN insufficient_privilege THEN denied:=true;
   END;
   IF NOT denied THEN
