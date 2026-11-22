@@ -54,6 +54,11 @@ final class PipoUIRecordingTests: XCTestCase {
         idrSearch.tap()
         idrSearch.typeText("IDR")
         tapButton("pipo.goal.currency.IDR")
+        let idrAmount = app.textFields["pipo.goal.currency.amount"].firstMatch
+        XCTAssertTrue(idrAmount.waitForExistence(timeout: 15))
+        XCTAssertEqual(idrAmount.label, "Target amount in IDR",
+                       "Choosing IDR must update the goal's input currency")
+        attachOnboardingScreen("Global V1 — IDR selection returns to editable amount")
         typeText("pipo.goal.currency.amount", value: "6000000")
         tapButton("pipo.goal.currency.choose")
         let search = app.searchFields.firstMatch
@@ -63,6 +68,8 @@ final class PipoUIRecordingTests: XCTestCase {
         tapButton("pipo.goal.currency.USD")
         let target = app.textFields["pipo.goal.currency.amount"].firstMatch
         XCTAssertTrue(target.waitForExistence(timeout: 15))
+        XCTAssertEqual(target.label, "Target amount in USD",
+                       "Changing currency must update the actual target entry field")
         XCTAssertTrue((target.value as? String ?? "").isEmpty,
                       "Old IDR amount must be cleared on USD selection")
         XCTAssertFalse(app.buttons["Continue"].isEnabled,
