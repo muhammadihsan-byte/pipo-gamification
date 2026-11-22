@@ -40,6 +40,9 @@ class PaySchemaFoundationReview(unittest.TestCase):
         self.assertIn("GRANT EXECUTE ON FUNCTION public.pipo_read_entitlements_v2()", self.s)
         self.assertIn("GRANT EXECUTE ON FUNCTION pipo_billing_private.apply_verified_apple_event_v1(", self.s)
         self.assertIn("TO service_role", self.s)
+        self.assertIn("public.pipo_internal_ingest_verified_apple_event_v1", self.s)
+        self.assertIn("REVOKE ALL ON FUNCTION public.pipo_internal_ingest_verified_apple_event_v1(", self.s)
+        self.assertIn("AND (enabled=true OR p_action IN ('refunded','revoked'))", self.s)
         self.assertNotRegex(self.s, r"(?i)GRANT\s+(?:INSERT|UPDATE|ALL).*?pipo_entitlements_v2\s+TO\s+authenticated")
         self.assertIn("SECURITY INVOKER SET search_path = ''", self.s)
         self.assertNotIn("SECURITY DEFINER", self.s)
@@ -85,6 +88,9 @@ class PaySchemaFoundationReview(unittest.TestCase):
             "client can forge credits",
             "client can grant via private SQL function",
             "account deletion did not cascade",
+            "retired SKU refund did not revoke credit",
+            "retired SKU minted new purchase",
+            "client can call service-only public RPC",
         ):
             self.assertIn(token, self.qa)
 
