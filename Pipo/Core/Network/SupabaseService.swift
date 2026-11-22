@@ -2921,13 +2921,145 @@ final class SupabaseService {
         )
         guard !batch.goals.isEmpty else { return }
         // The composite FK requires goals before their saving entries.
+        // The reviewed signed bridge has no direct UPDATE/UPSERT path.
+        // Normal Release remains unchanged until rollout is approved.
+        #if PIPO_ISSUE80_BRIDGE
+        try await issue80BridgeLegacyGoals(goals, authenticatedUserID: authenticatedUserID)
+        #else
         try await upsertGoalPayloads(batch.goals)
+        #endif
         guard client.auth.currentUser?.id == authenticatedUserID else {
             throw SupabaseServiceError.notAuthenticated
         }
         guard !batch.transactions.isEmpty else { return }
         try await upsertTransactionPayloads(batch.transactions)
     }
+
+    #if PIPO_ISSUE80_BRIDGE
+    // REVIEW-ONLY candidate for the old installed-version migration window.
+    // Compiled only when the signed bridge target explicitly opts in. No
+    // production pbxproj sets this flag and it never enables Manage Plan Save.
+    private func issue80BridgeLegacyGoals(
+        _ goals: [PersonalGoal], authenticatedUserID: UUID
+    ) async throws {
+        let journal = try LegacyGoalBridgeIntentJournal.inApplicationSupport()
+        for goal in goals {
+            guard client.auth.currentUser?.id == authenticatedUserID else {
+                throw LegacyGoalBridgeError.accountChanged
+            }
+            guard let minor = goal.exactTargetMinor else {
+                throw SupabaseServiceError.invalidSavingGoal
+            }
+            let request = try SavingGoalCreateOnlyRequest(
+                goalID: goal.id, ownerID: authenticatedUserID,
+                title: goal.title, category: goal.category.rawValue,
+                customCategory: goal.customCategory,
+                targetMinorUnits: minor, currencyCode: goal.effectiveCurrencyCode,
+                startDate: goal.startDate, targetDate: goal.targetDate,
+                rhythm: goal.rhythm.rawValue,
+                preferredSavingDay: goal.preferredSavingDay,
+                plannedContributionMinorUnits: goal.plannedContributionOverride.map(Int64.init)
+            )
+
+            // READ FIRST on every retry, app relaunch and existing goal. This
+            // legacy SELECT deliberately does not require plan_revision.
+            var rows = try await issue80BridgeFetchOwnedLegacyGoal(
+                goalID: request.goalID, ownerID: authenticatedUserID
+            )
+            guard client.auth.currentUser?.id == authenticatedUserID else {
+                throw LegacyGoalBridgeError.accountChanged
+            }
+            guard rows.count <= 1 else {
+                throw LegacyGoalBridgeError.untrustedReadback
+            }
+            if let existing = rows.first {
+                try LegacyGoalBridgeReadbackVerifier.verify(
+                    existing, request: request, authenticatedOwnerID: authenticatedUserID
+                )
+                if let local = try journal.intent(
+                    goalID: goal.id, ownerID: authenticatedUserID
+                ) {
+                    guard try local.checkedRequest(for: authenticatedUserID)
+                            == request else { throw LegacyGoalBridgeError.cloudConflict }
+                    if local.state == .staged {
+                        // A second client may have created this UUID. The
+                        // exact authenticated row is already equal; no INSERT.
+                        try journal.markAttempted(
+                            goalID: goal.id, ownerID: authenticatedUserID
+                        )
+                    }
+                    try journal.recordVerifiedReadback(
+                        existing, goalID: goal.id, ownerID: authenticatedUserID,
+                        authenticatedOwnerID: authenticatedUserID
+                    )
+                }
+                continue
+            }
+
+            // Unknown/missing row: persist the stable create payload before
+            // the FIRST INSERT. Never blindly UPDATE an existing plan.
+            let intent = try journal.stage(request, ownerID: authenticatedUserID)
+            guard intent.state == .staged else {
+                // An earlier insert may still be in flight or hidden by RLS:
+                // never claim success and never regenerate a new goal UUID.
+                throw LegacyGoalBridgeError.pendingConfirmation
+            }
+            try journal.markAttempted(
+                goalID: goal.id, ownerID: authenticatedUserID
+            )
+            guard client.auth.currentUser?.id == authenticatedUserID else {
+                throw LegacyGoalBridgeError.accountChanged
+            }
+            do {
+                try await issue80BridgeInsertGoalOnly(request)
+            } catch is CancellationError {
+                throw CancellationError()
+            } catch {
+                guard client.auth.currentUser?.id == authenticatedUserID else {
+                    throw LegacyGoalBridgeError.accountChanged
+                }
+                // HTTP failure can arrive AFTER INSERT committed. A fresh
+                // RLS-filtered SELECT must confirm the unchanged goal.
+            }
+            rows = try await issue80BridgeFetchOwnedLegacyGoal(
+                goalID: request.goalID, ownerID: authenticatedUserID
+            )
+            guard client.auth.currentUser?.id == authenticatedUserID else {
+                throw LegacyGoalBridgeError.accountChanged
+            }
+            guard rows.count == 1, let row = rows.first else {
+                throw LegacyGoalBridgeError.pendingConfirmation
+            }
+            try LegacyGoalBridgeReadbackVerifier.verify(
+                row, request: request, authenticatedOwnerID: authenticatedUserID
+            )
+            try journal.recordVerifiedReadback(
+                row, goalID: goal.id, ownerID: authenticatedUserID,
+                authenticatedOwnerID: authenticatedUserID
+            )
+        }
+    }
+
+    private nonisolated func issue80BridgeInsertGoalOnly(
+        _ request: SavingGoalCreateOnlyRequest
+    ) async throws {
+        try await client.from("saving_goals")
+            .insert(request)
+            .execute()
+    }
+
+    private nonisolated func issue80BridgeFetchOwnedLegacyGoal(
+        goalID: UUID, ownerID: UUID
+    ) async throws -> [LegacyGoalBridgeCloudRow] {
+        try await client.from("saving_goals")
+            .select("id,user_id,title,category,custom_category,target_amount,currency_code,start_date,target_date,rhythm,preferred_saving_day,planned_contribution_override")
+            .eq("id", value: goalID.uuidString)
+            .eq("user_id", value: ownerID.uuidString)
+            .limit(2)
+            .execute()
+            .value
+    }
+    #endif
 
     // The Supabase SDK's PostgrestResponse<Void> is not Sendable in Swift 6.
     // Keep that response fully inside nonisolated async helpers returning Void,
