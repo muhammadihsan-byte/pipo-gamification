@@ -1,5 +1,4 @@
 import SwiftUI
-import UIKit
 
 struct PersonalGoalPlan {
     let title: String
@@ -68,7 +67,7 @@ struct CreateGoalView: View {
     @State private var currencyCode = PipoGoalCurrency.suggested()
     @State private var showsCurrencyPicker = false
     @State private var currencySearch = ""
-    @State private var focusAmountAfterCurrencySelection = false
+    @FocusState private var currencySearchFocused: Bool
     @FocusState private var targetAmountFocused: Bool
     @State private var breakdown: [GoalBreakdownDraft] = []
     @State private var startDate: Date
@@ -134,16 +133,11 @@ struct CreateGoalView: View {
         }
         .overlay { breakdownDialog }
         .sheet(isPresented: $showsCurrencyPicker, onDismiss: {
-            // Dismissing a searchable sheet while its query owns the keyboard
-            // can leave the previous search responder above the target step.
-            // Fully release search focus before directing attention to the
-            // amount entry the user is about to edit.
-            dismissCurrencySearchKeyboard()
+            // Keep the target editor unblocked after the search sheet closes.
+            // Users explicitly tap the amount to open its numeric keyboard.
+            currencySearchFocused = false
             currencySearch = ""
-            if focusAmountAfterCurrencySelection {
-                focusAmountAfterCurrencySelection = false
-                targetAmountFocused = true
-            }
+            targetAmountFocused = false
         }) { currencyPicker }
     }
 
@@ -288,78 +282,110 @@ struct CreateGoalView: View {
         }
     }
 
-    // iOS 17-compatible dismissal of UIKit search responders. SwiftUI's
-    // searchFocused(_:) is iOS 18+ and cannot be used with Pipo's deployment
-    // target. We still transfer focus to amount only after sheet onDismiss.
-    private func dismissCurrencySearchKeyboard() {
-        UIApplication.shared.sendAction(
-            #selector(UIResponder.resignFirstResponder),
-            to: nil, from: nil, for: nil
-        )
+    // A dedicated search field avoids the native .searchable overlay retaining
+    // the tap while the search keyboard is visible. Currency rows remain actual
+    // 56pt buttons, visible immediately below search even with the keyboard.
+    private var filteredCurrencyChoices: [String] {
+        PipoGoalCurrency.choices.filter {
+            currencySearch.isEmpty || $0.localizedCaseInsensitiveContains(currencySearch)
+                || PipoGoalCurrency.currencyName($0).localizedCaseInsensitiveContains(currencySearch)
+        }
     }
 
     private var currencyPicker: some View {
         NavigationStack {
-            List {
-                ForEach(PipoGoalCurrency.choices.filter {
-                    currencySearch.isEmpty || $0.localizedCaseInsensitiveContains(currencySearch)
-                    || PipoGoalCurrency.currencyName($0).localizedCaseInsensitiveContains(currencySearch)
-                }, id: \.self) { code in
-                    Button {
-                        // Native .searchable can retain keyboard ownership while
-                        // its sheet is closing. Resign it before dismissal on
-                        // all supported iOS deployment versions.
-                        dismissCurrencySearchKeyboard()
-                        if currencyCode != code {
-                            currencyCode = code
-                            targetAmount = ""
-                            contributionOverride = ""
-                            breakdown = []
-                            showValidation = false
+            VStack(spacing: 0) {
+                HStack(spacing: 10) {
+                    Image(systemName: "magnifyingglass")
+                        .foregroundStyle(PersonalPlanStyle.muted)
+                        .accessibilityHidden(true)
+                    TextField("Search code or currency", text: $currencySearch)
+                        .textInputAutocapitalization(.characters)
+                        .autocorrectionDisabled()
+                        .focused($currencySearchFocused)
+                        .accessibilityIdentifier("pipo.goal.currency.search")
+                        .submitLabel(.search)
+                    if !currencySearch.isEmpty {
+                        Button("Clear search", systemImage: "xmark.circle.fill") {
+                            currencySearch = ""
                         }
-                        focusAmountAfterCurrencySelection = true
-                        showsCurrencyPicker = false
-                    } label: {
-                        HStack(alignment: .center, spacing: 12) {
-                            VStack(alignment: .leading, spacing: 4) {
-                                Text(code)
-                                    .font(.headline)
-                                    .foregroundStyle(PersonalPlanStyle.ink)
-                                Text(PipoGoalCurrency.currencyName(code))
-                                    .font(.subheadline)
-                                    .foregroundStyle(PersonalPlanStyle.muted)
-                                    .fixedSize(horizontal: false, vertical: true)
-                            }
-                            Spacer(minLength: 8)
-                            if code == currencyCode {
-                                Image(systemName: "checkmark.circle.fill")
-                                    .foregroundStyle(PipoTheme.cardAccentReadable)
-                                    .accessibilityHidden(true)
-                            }
-                        }
-                        .padding(.horizontal, 12)
-                        .padding(.vertical, 9)
-                        .frame(maxWidth: .infinity, minHeight: 56, alignment: .leading)
-                        .background(code == currencyCode ? PersonalPlanStyle.blush : .clear,
-                                    in: RoundedRectangle(cornerRadius: 14))
+                        .labelStyle(.iconOnly)
+                        .foregroundStyle(PersonalPlanStyle.muted)
                     }
-                    .buttonStyle(.plain)
-                    .accessibilityLabel(code + ", " + PipoGoalCurrency.currencyName(code))
-                    .accessibilityAddTraits(code == currencyCode ? .isSelected : [])
-                    .accessibilityIdentifier("pipo.goal.currency." + code)
-                    .listRowSeparator(.hidden)
                 }
+                .font(.subheadline)
+                .padding(.horizontal, 14)
+                .frame(minHeight: 48)
+                .background(PersonalPlanStyle.surface, in: RoundedRectangle(cornerRadius: 14))
+                .padding(.horizontal, 20)
+                .padding(.top, 14)
+                .padding(.bottom, 12)
+
+                ScrollView {
+                    LazyVStack(spacing: 8) {
+                        ForEach(filteredCurrencyChoices, id: \.self) { code in
+                            Button {
+                                // Resign the owned search field first. Never
+                                // update a picker while a native search overlay
+                                // can intercept the currency row's action.
+                                currencySearchFocused = false
+                                if currencyCode != code {
+                                    currencyCode = code
+                                    targetAmount = ""
+                                    contributionOverride = ""
+                                    breakdown = []
+                                    showValidation = false
+                                }
+                                showsCurrencyPicker = false
+                            } label: {
+                                HStack(alignment: .center, spacing: 12) {
+                                    VStack(alignment: .leading, spacing: 4) {
+                                        Text(code)
+                                            .font(.headline)
+                                            .foregroundStyle(PersonalPlanStyle.ink)
+                                        Text(PipoGoalCurrency.currencyName(code))
+                                            .font(.subheadline)
+                                            .foregroundStyle(PersonalPlanStyle.muted)
+                                            .fixedSize(horizontal: false, vertical: true)
+                                    }
+                                    Spacer(minLength: 8)
+                                    if code == currencyCode {
+                                        Image(systemName: "checkmark.circle.fill")
+                                            .foregroundStyle(PipoTheme.cardAccentReadable)
+                                            .accessibilityHidden(true)
+                                    }
+                                }
+                                .padding(.horizontal, 14)
+                                .frame(maxWidth: .infinity, minHeight: 56, alignment: .leading)
+                                .background(code == currencyCode ? PersonalPlanStyle.blush : PersonalPlanStyle.surface,
+                                            in: RoundedRectangle(cornerRadius: 14))
+                                .contentShape(RoundedRectangle(cornerRadius: 14))
+                            }
+                            .buttonStyle(.plain)
+                            .accessibilityLabel(code + ", " + PipoGoalCurrency.currencyName(code))
+                            .accessibilityAddTraits(code == currencyCode ? .isSelected : [])
+                            .accessibilityIdentifier("pipo.goal.currency." + code)
+                        }
+                        if filteredCurrencyChoices.isEmpty {
+                            ContentUnavailableView.search(text: currencySearch)
+                        }
+                    }
+                    .padding(.horizontal, 20)
+                    .padding(.bottom, 24)
+                }
+                .scrollDismissesKeyboard(.interactively)
             }
-            .listStyle(.plain)
-            .searchable(text: $currencySearch, prompt: "Search code or currency")
+            .background(.white)
             .navigationTitle("Choose goal currency")
             .navigationBarTitleDisplayMode(.inline)
-            .toolbar { ToolbarItem(placement: .cancellationAction) {
-                Button("Done") {
-                    dismissCurrencySearchKeyboard()
-                    showsCurrencyPicker = false
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) {
+                    Button("Done") {
+                        currencySearchFocused = false
+                        showsCurrencyPicker = false
+                    }
                 }
-            }}
+            }
         }
         .presentationDetents([.large])
     }
@@ -372,6 +398,7 @@ struct CreateGoalView: View {
                     // Reopening the sheet must not reuse an old search term,
                     // otherwise choosing IDR then USD can yield zero matches.
                     currencySearch = ""
+                    currencySearchFocused = false
                     targetAmountFocused = false
                     showsCurrencyPicker = true
                 } label: {
