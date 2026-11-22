@@ -7,6 +7,96 @@ import XCTest
 
 final class PersonalGoalTests: XCTestCase {
 
+    #if PIPO_ISSUE80_BRIDGE
+    /// Native signed-bridge candidate recovery: this verifies iOS journal
+    /// persistence without issuing a Supabase request or rewriting SwiftData.
+    @MainActor
+    func testIssue80LegacyBridgeKeepsLocalSavingAndXPOnReopen() throws {
+        let schema = Schema([
+            PersonalGoal.self, SubItem.self, SavingTransaction.self, UserProfile.self
+        ])
+        let folder = FileManager.default.temporaryDirectory.appendingPathComponent(
+            "pipo-bridge-native-" + UUID().uuidString, isDirectory: true
+        )
+        try FileManager.default.createDirectory(
+            at: folder, withIntermediateDirectories: true
+        )
+        defer { try? FileManager.default.removeItem(at: folder) }
+        let config = ModelConfiguration(
+            schema: schema, url: folder.appendingPathComponent("goal.store")
+        )
+        let container = try ModelContainer(for: schema, configurations: [config])
+        let writer = ModelContext(container)
+        let owner = UUID(), otherAccount = UUID()
+        let start = Date(timeIntervalSince1970: 1_800_000_000)
+        let due = Date(timeIntervalSince1970: 1_810_000_000)
+        let goal = PersonalGoal(
+            title: "Camera", category: .gadget, targetAmount: 1,
+            currencyCode: "USD", targetMinorUnits: 100, recordedMinorUnits: 25,
+            startDate: start, targetDate: due, rhythm: .weekly,
+            preferredSavingDay: 3, ownerUserID: owner
+        )
+        let contribution = SavingTransaction(
+            goalId: goal.id, amount: 0.25, amountMinorUnits: 25,
+            currencyCode: "USD", xpEarned: 7, userID: owner
+        )
+        let profile = UserProfile(userID: owner, totalXP: 41)
+        writer.insert(goal)
+        writer.insert(contribution)
+        writer.insert(profile)
+        try writer.save()
+
+        let request = try SavingGoalCreateOnlyRequest(
+            goalID: goal.id, ownerID: owner, title: "Camera",
+            category: "gadget", customCategory: nil,
+            targetMinorUnits: 100, currencyCode: "USD",
+            startDate: start, targetDate: due, rhythm: "weekly",
+            preferredSavingDay: 3, plannedContributionMinorUnits: nil
+        )
+        let directory = folder.appendingPathComponent("legacy-journal")
+        let journal = LegacyGoalBridgeIntentJournal(directory: directory)
+        XCTAssertEqual(try journal.stage(request, ownerID: owner).state, .staged)
+        try journal.markAttempted(goalID: goal.id, ownerID: owner)
+        XCTAssertEqual(
+            try LegacyGoalBridgeIntentJournal(directory: directory)
+                .intent(goalID: goal.id, ownerID: owner)?.state, .attempted
+        )
+
+        // Keep original exact Decimal wire values; merely prepend server owner.
+        let wire = String(decoding: try JSONEncoder().encode(request), as: UTF8.self)
+        XCTAssertTrue(wire.hasPrefix("{"))
+        let serverBody = "{\"user_id\":\"\(owner.uuidString)\","
+            + String(wire.dropFirst())
+        let row = try JSONDecoder().decode(
+            LegacyGoalBridgeCloudRow.self, from: Data(serverBody.utf8)
+        )
+        try journal.recordVerifiedReadback(
+            row, goalID: goal.id, ownerID: owner, authenticatedOwnerID: owner
+        )
+        let reopened = LegacyGoalBridgeIntentJournal(directory: directory)
+        XCTAssertEqual(try reopened.intent(goalID: goal.id, ownerID: owner)?.state,
+                       .verified)
+        XCTAssertTrue(try reopened.all(for: otherAccount).isEmpty)
+        XCTAssertThrowsError(
+            try reopened.recordVerifiedReadback(
+                row, goalID: goal.id, ownerID: owner,
+                authenticatedOwnerID: otherAccount
+            )
+        )
+        // Journal readbacks never modify existing SwiftData goal, saving or XP.
+        let read = ModelContext(container)
+        let records = try read.fetch(FetchDescriptor<SavingTransaction>())
+        let profiles = try read.fetch(FetchDescriptor<UserProfile>())
+        let goals = try read.fetch(FetchDescriptor<PersonalGoal>())
+        XCTAssertEqual(records.count, 1)
+        XCTAssertEqual(records.first?.xpEarned, 7)
+        XCTAssertEqual(records.first?.amountMinorUnits, 25)
+        XCTAssertEqual(profiles.first?.totalXP, 41)
+        XCTAssertEqual(goals.first?.exactRecordedMinor, 25)
+    }
+    #endif
+
+
     #if PIPO_ISSUE80_STAGING
     /// Deferred native QA. Linux does not have SwiftData; run when the owner
     /// re-enables Mac runner and the staging flag is intentionally activated.

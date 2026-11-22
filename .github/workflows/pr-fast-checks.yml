@@ -51,6 +51,9 @@ jobs:
       - name: Verify dormant Budget CAS V2 durable journal (compiled Swift/Linux, no network)
         run: python3 -m unittest -v scripts/test_issue80_budget_v2_journal.py
 
+      - name: Compile and validate old-schema signed bridge candidate (Swift Linux, no network)
+        run: python3 -m unittest -v scripts/test_issue80_legacy_bridge.py
+
       - name: Compile isolated QA scripts (syntax only)
         run: |
           python3 -m py_compile \
