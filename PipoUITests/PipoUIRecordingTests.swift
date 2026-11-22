@@ -161,7 +161,7 @@ final class PipoUIRecordingTests: XCTestCase {
         tapButton("Continue")
         XCTAssertTrue(app.staticTexts["Review your saving plan"].waitForExistence(timeout: 15))
         tapButton("Start saving plan")
-        XCTAssertTrue(app.staticTexts["Your plan is ready!"].waitForExistence(timeout: 15))
+        XCTAssertTrue(app.staticTexts["Well, look at that."].waitForExistence(timeout: 15))
         XCTAssertTrue(app.staticTexts["pipo.firstSave.planDisclosure"].exists)
         XCTAssertFalse(app.staticTexts["First Step unlocked"].exists,
                        "Creating a plan is not recording a contribution")

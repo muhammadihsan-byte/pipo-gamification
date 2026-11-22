@@ -166,10 +166,10 @@ struct ReviewPlanView: View {
                 .frame(width: 94, height: 99)
                 .accessibilityHidden(true)
 
-            Text("Your plan is ready!")
+            Text("Well, look at that.")
                 .font(.title3.bold())
                 .accessibilityAddTraits(.isHeader)
-            Text("You've made a plan, not a deposit. Take it one save at a time.")
+            Text("\(plan.title) is officially a plan. No saving has been recorded yet.")
                 .font(.footnote)
                 .foregroundStyle(PersonalPlanStyle.muted)
 

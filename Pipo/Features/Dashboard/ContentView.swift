@@ -1171,59 +1171,123 @@ struct DashboardView: View {
         }
     }
 
+    /// First Save V1: a branded native sheet, not a generic editable Form.
+    /// Keep the amount editable and locally owned. This screen never moves
+    /// money and a failed SwiftData save must retain the user's typed value.
     private var saveConfirmation: some View {
         NavigationStack {
-            Form {
-                if let goalToRecord {
-                    Section {
-                        Text(isFirstSaveEligible(for: goalToRecord)
-                             ? "Your first step starts with what you've saved."
-                             : "Keep your goal up to date with a saving you've made.")
-                            .font(.subheadline.weight(.semibold))
-                        Text("Enter money you've already saved elsewhere. Pipo doesn't transfer money or verify bank balances.")
-                            .font(.footnote)
-                            .foregroundStyle(PipoTheme.muted)
-                            .accessibilityIdentifier("pipo.firstSave.manualDisclosure")
-                    }
-                    Section("Goal") {
-                        Text(goalToRecord.title)
-                    }
-                }
-                Section("Amount") {
-                    TextField("Amount in " + (goalToRecord?.effectiveCurrencyCode ?? "IDR"), text: $savingAmount)
-                        .accessibilityIdentifier("pipo.currency.recordSavingAmount")
-                        .keyboardType(.decimalPad)
-                        .onChange(of: savingAmount) { _, _ in savingInlineError = nil }
-                }
-                if let savingInlineError {
-                    Section {
-                        Text(savingInlineError)
-                            .foregroundStyle(.red)
-                            .font(.footnote.weight(.semibold))
-                            .fixedSize(horizontal: false, vertical: true)
-                            .accessibilityFocused($savingInlineErrorFocused)
-                            .accessibilityIdentifier("pipo.firstSave.saveError")
-                        Text("Your amount is still here. You can retry or cancel.")
-                            .font(.footnote)
+            ScrollView {
+                VStack(alignment: .leading, spacing: 22) {
+                    VStack(alignment: .leading, spacing: 8) {
+                        Text("Record a saving")
+                            .font(.system(size: 28, weight: .bold, design: .rounded))
+                            .foregroundStyle(PipoTheme.ink)
+                            .accessibilityAddTraits(.isHeader)
+                        Text("Already saved money? Let's log that progress.")
+                            .font(.subheadline)
                             .foregroundStyle(PipoTheme.muted)
                     }
+
+                    VStack(alignment: .leading, spacing: 8) {
+                        Text("AMOUNT (\(goalToRecord?.effectiveCurrencyCode ?? "IDR"))")
+                            .font(.caption2.bold())
+                            .foregroundStyle(PipoTheme.muted)
+                        HStack(spacing: 10) {
+                            Text(goalToRecord?.effectiveCurrencyCode == "IDR"
+                                 ? "Rp" : (goalToRecord?.effectiveCurrencyCode ?? "IDR"))
+                                .font(.title3.bold())
+                                .foregroundStyle(PipoTheme.ink)
+                                .accessibilityHidden(true)
+                            TextField(
+                                "Amount in " + (goalToRecord?.effectiveCurrencyCode ?? "IDR"),
+                                text: $savingAmount
+                            )
+                            .font(.title3.bold())
+                            .foregroundStyle(PipoTheme.ink)
+                            .keyboardType(.decimalPad)
+                            .accessibilityIdentifier("pipo.currency.recordSavingAmount")
+                            .onChange(of: savingAmount) { _, _ in
+                                savingInlineError = nil
+                            }
+                        }
+                        .padding(.horizontal, 16)
+                        .frame(minHeight: 64)
+                        .background(Color(.secondarySystemGroupedBackground),
+                                    in: RoundedRectangle(cornerRadius: 16))
+                    }
+
+                    if let goalToRecord {
+                        VStack(alignment: .leading, spacing: 8) {
+                            Text("GOAL")
+                                .font(.caption2.bold())
+                                .foregroundStyle(PipoTheme.muted)
+                            Text(goalToRecord.title)
+                                .font(.subheadline.weight(.semibold))
+                                .foregroundStyle(PipoTheme.ink)
+                                .frame(maxWidth: .infinity, minHeight: 50,
+                                       alignment: .leading)
+                                .padding(.horizontal, 16)
+                                .background(Color(.secondarySystemGroupedBackground),
+                                            in: RoundedRectangle(cornerRadius: 14))
+                        }
+                    }
+
+                    Text("Pipo records savings you make elsewhere. No money moves here, and bank balances aren't verified.")
+                        .font(.footnote)
+                        .foregroundStyle(PipoTheme.muted)
+                        .fixedSize(horizontal: false, vertical: true)
+                        .padding(14)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .background(PipoTheme.palePink,
+                                    in: RoundedRectangle(cornerRadius: 14))
+                        .accessibilityIdentifier("pipo.firstSave.manualDisclosure")
+
+                    if let savingInlineError {
+                        VStack(alignment: .leading, spacing: 6) {
+                            Text(savingInlineError)
+                                .font(.footnote.weight(.semibold))
+                                .foregroundStyle(.red)
+                                .fixedSize(horizontal: false, vertical: true)
+                                .accessibilityFocused($savingInlineErrorFocused)
+                                .accessibilityIdentifier("pipo.firstSave.saveError")
+                            Text("Your amount is still here. You can retry or cancel.")
+                                .font(.footnote)
+                                .foregroundStyle(PipoTheme.muted)
+                        }
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                    }
                 }
+                .padding(.horizontal, 24)
+                .padding(.top, 26)
+                .padding(.bottom, 12)
+                .frame(maxWidth: 560)
+                .frame(maxWidth: .infinity)
             }
-            .navigationTitle("Record a saving")
-            .navigationBarTitleDisplayMode(.inline)
-            .toolbar {
-                ToolbarItem(placement: .cancellationAction) {
-                    Button("Cancel") { isShowingSaveConfirmation = false }
-                        .frame(minHeight: 44)
-                }
-                ToolbarItem(placement: .confirmationAction) {
+            .scrollDismissesKeyboard(.interactively)
+            .safeAreaInset(edge: .bottom, spacing: 0) {
+                VStack(spacing: 8) {
                     Button("Save") { confirmSaving() }
+                        .buttonStyle(PrimaryActionButtonStyle())
                         .disabled(parsedSavingAmount == nil
                                   || goalToRecord?.canRecordSaving != true
                                   || isSubmittingSaving || completedSavingReward != nil)
-                        .frame(minHeight: 44)
+                        .frame(minHeight: 48)
+                        .accessibilityHint("Record the amount you've already saved, without moving money")
+                    Button("Cancel") { isShowingSaveConfirmation = false }
+                        .font(.subheadline.weight(.semibold))
+                        .foregroundStyle(PipoTheme.muted)
+                        .frame(maxWidth: .infinity, minHeight: 44)
+                        .contentShape(Rectangle())
                 }
+                .padding(.horizontal, 24)
+                .padding(.top, 12)
+                .padding(.bottom, 8)
+                .background(.white)
             }
+            .background(.white)
+            .navigationTitle("Record a saving")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar(.hidden, for: .navigationBar)
         }
     }
 
