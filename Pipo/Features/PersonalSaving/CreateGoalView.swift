@@ -67,6 +67,9 @@ struct CreateGoalView: View {
     @State private var currencyCode = PipoGoalCurrency.suggested()
     @State private var showsCurrencyPicker = false
     @State private var currencySearch = ""
+    @State private var focusAmountAfterCurrencySelection = false
+    @FocusState private var currencySearchFocused: Bool
+    @FocusState private var targetAmountFocused: Bool
     @State private var breakdown: [GoalBreakdownDraft] = []
     @State private var startDate: Date
     @State private var timeline: Timeline = .targetDate
@@ -130,7 +133,18 @@ struct CreateGoalView: View {
             if previous == .name && current != .name { wasEditingName = true }
         }
         .overlay { breakdownDialog }
-        .sheet(isPresented: $showsCurrencyPicker) { currencyPicker }
+        .sheet(isPresented: $showsCurrencyPicker, onDismiss: {
+            // Dismissing a searchable sheet while its query owns the keyboard
+            // can leave the previous search responder above the target step.
+            // Fully release search focus before directing attention to the
+            // amount entry the user is about to edit.
+            currencySearchFocused = false
+            currencySearch = ""
+            if focusAmountAfterCurrencySelection {
+                focusAmountAfterCurrencySelection = false
+                targetAmountFocused = true
+            }
+        }) { currencyPicker }
     }
 
     @ViewBuilder
@@ -282,6 +296,9 @@ struct CreateGoalView: View {
                     || PipoGoalCurrency.currencyName($0).localizedCaseInsensitiveContains(currencySearch)
                 }, id: \.self) { code in
                     Button {
+                        // Release .searchable keyboard ownership before the
+                        // selected-currency sheet disappears.
+                        currencySearchFocused = false
                         if currencyCode != code {
                             currencyCode = code
                             targetAmount = ""
@@ -289,6 +306,7 @@ struct CreateGoalView: View {
                             breakdown = []
                             showValidation = false
                         }
+                        focusAmountAfterCurrencySelection = true
                         showsCurrencyPicker = false
                     } label: {
                         HStack(alignment: .center, spacing: 12) {
@@ -323,10 +341,14 @@ struct CreateGoalView: View {
             }
             .listStyle(.plain)
             .searchable(text: $currencySearch, prompt: "Search code or currency")
+            .searchFocused($currencySearchFocused)
             .navigationTitle("Choose goal currency")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar { ToolbarItem(placement: .cancellationAction) {
-                Button("Done") { showsCurrencyPicker = false }
+                Button("Done") {
+                    currencySearchFocused = false
+                    showsCurrencyPicker = false
+                }
             }}
         }
         .presentationDetents([.large])
@@ -340,6 +362,8 @@ struct CreateGoalView: View {
                     // Reopening the sheet must not reuse an old search term,
                     // otherwise choosing IDR then USD can yield zero matches.
                     currencySearch = ""
+                    currencySearchFocused = false
+                    targetAmountFocused = false
                     showsCurrencyPicker = true
                 } label: {
                     HStack(spacing: 12) {
@@ -378,6 +402,7 @@ struct CreateGoalView: View {
                         .font(.subheadline.weight(.medium))
                         .frame(maxWidth: .infinity, minHeight: 44, alignment: .leading)
                         .contentShape(Rectangle())
+                        .focused($targetAmountFocused)
                         .accessibilityLabel("Target amount in " + currencyCode)
                         .accessibilityIdentifier("pipo.goal.currency.amount")
                 }
