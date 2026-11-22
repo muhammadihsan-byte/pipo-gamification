@@ -7,6 +7,146 @@ import XCTest
 
 final class PersonalGoalTests: XCTestCase {
 
+    // These are intentionally dormant contract tests. They do not contact
+    // Supabase or enable Manage Plan Save, and require iOS XCTest later.
+    func testIssue80CASRequestUsesExactAmountsAndOnlyRPCParameters() throws {
+        let owner = UUID(), goal = UUID(), id = UUID()
+        let request = try SavingPlanCASRequest(
+            requestID: id, goalID: goal, expectedRevision: 3,
+            targetMinorUnits: 30, currencyCode: "USD",
+            targetDate: Date(timeIntervalSince1970: 1_800_000_000),
+            rhythm: "weekly", preferredSavingDay: 2,
+            plannedContributionMinorUnits: 10
+        )
+        XCTAssertEqual(request.targetAmount, Decimal(string: "0.30"))
+        XCTAssertEqual(request.plannedContributionOverride, Decimal(string: "0.10"))
+        let encoded = try JSONEncoder().encode(request)
+        let fields = try XCTUnwrap(
+            JSONSerialization.jsonObject(with: encoded) as? [String: Any]
+        )
+        XCTAssertEqual(Set(fields.keys), Set([
+            "p_request_id", "p_goal_id", "p_expected_revision",
+            "p_target_amount", "p_target_date", "p_rhythm",
+            "p_preferred_saving_day", "p_planned_contribution_override"
+        ]))
+        XCTAssertEqual(fields["p_goal_id"] as? String, goal.uuidString)
+        XCTAssertEqual(fields["p_request_id"] as? String, id.uuidString)
+        XCTAssertEqual(fields["p_expected_revision"] as? Int, 3)
+        XCTAssertNil(fields["p_user_id"])
+        XCTAssertNil(fields["p_currency_code"])
+        XCTAssertNil(fields["currency_code"])
+        _ = owner // Owner comes from auth.uid(), never app-submitted JSON.
+
+        let flexible = try SavingPlanCASRequest(
+            requestID: UUID(), goalID: goal, expectedRevision: 0,
+            targetMinorUnits: 6_000_000, currencyCode: "IDR",
+            targetDate: Date(timeIntervalSince1970: 1_800_000_000),
+            rhythm: "flexible", preferredSavingDay: nil,
+            plannedContributionMinorUnits: nil
+        )
+        let flexibleFields = try XCTUnwrap(
+            JSONSerialization.jsonObject(with: JSONEncoder().encode(flexible))
+                as? [String: Any]
+        )
+        XCTAssertTrue(flexibleFields["p_preferred_saving_day"] is NSNull)
+        XCTAssertTrue(flexibleFields["p_planned_contribution_override"] is NSNull)
+    }
+
+    func testIssue80CASRejectsInvalidInputBeforeAnyBackendCall() throws {
+        func request(revision: Int64 = 0, minor: Int64 = 6_000_000,
+                     currency: String = "IDR", rhythm: String = "weekly",
+                     day: Int? = 2, contribution: Int64? = nil) throws
+            -> SavingPlanCASRequest {
+            try SavingPlanCASRequest(
+                requestID: UUID(), goalID: UUID(), expectedRevision: revision,
+                targetMinorUnits: minor, currencyCode: currency,
+                targetDate: Date(timeIntervalSince1970: 1_800_000_000),
+                rhythm: rhythm, preferredSavingDay: day,
+                plannedContributionMinorUnits: contribution
+            )
+        }
+        XCTAssertThrowsError(try request(revision: -1))
+        XCTAssertThrowsError(try request(revision: Int64.max))
+        XCTAssertThrowsError(try request(minor: 0))
+        XCTAssertThrowsError(try request(minor: Int64.max))
+        XCTAssertThrowsError(try request(currency: "KWD"))
+        XCTAssertThrowsError(try request(rhythm: "unexpected"))
+        XCTAssertThrowsError(try request(rhythm: "weekly", day: 8))
+        XCTAssertThrowsError(try request(rhythm: "flexible", day: 2))
+        XCTAssertThrowsError(try request(rhythm: "flexible", day: nil, contribution: 20))
+        XCTAssertThrowsError(try request(contribution: -1))
+        XCTAssertNoThrow(try request(currency: "USD", minor: 30, contribution: 10))
+    }
+
+    func testIssue80CASReceiptVerifiesExactPayloadAndRejectsSpuriousSuccess() throws {
+        let requestID = UUID(), goalID = UUID()
+        let targetDate = Date(timeIntervalSince1970: 1_800_000_000)
+        let request = try SavingPlanCASRequest(
+            requestID: requestID, goalID: goalID, expectedRevision: 0,
+            targetMinorUnits: 30, currencyCode: "USD",
+            targetDate: targetDate, rhythm: "weekly", preferredSavingDay: 2,
+            plannedContributionMinorUnits: 10
+        )
+        func decode(_ raw: String) throws -> SavingPlanCASWireResponse {
+            try JSONDecoder().decode(
+                SavingPlanCASWireResponse.self, from: Data(raw.utf8)
+            )
+        }
+        let applied = """
+        {"status":"applied","request_id":"\(requestID.uuidString)",
+         "goal_id":"\(goalID.uuidString)","currency_code":"USD",
+         "accepted_revision":1,"target_amount":0.30,
+         "target_date":"\(request.targetDate)","rhythm":"weekly",
+         "preferred_saving_day":2,"planned_contribution_override":0.10}
+        """
+        XCTAssertEqual(
+            try SavingPlanCASReceiptValidator.verify(decode(applied), for: request),
+            .applied(requestID: requestID, acceptedRevision: 1)
+        )
+        // An idempotent replay reports the original receipt, not revision +2.
+        XCTAssertEqual(
+            try SavingPlanCASReceiptValidator.verify(decode(applied), for: request),
+            .applied(requestID: requestID, acceptedRevision: 1)
+        )
+        let conflict = """
+        {"status":"conflict","goal_id":"\(goalID.uuidString)",
+         "current_revision":2}
+        """
+        XCTAssertEqual(
+            try SavingPlanCASReceiptValidator.verify(decode(conflict), for: request),
+            .conflict(currentRevision: 2)
+        )
+        let tamperedCurrency = applied.replacingOccurrences(
+            of: "\"currency_code\":\"USD\"", with: "\"currency_code\":\"IDR\""
+        )
+        XCTAssertThrowsError(try SavingPlanCASReceiptValidator.verify(
+            decode(tamperedCurrency), for: request
+        ))
+        let tamperedAmount = applied.replacingOccurrences(
+            of: "\"target_amount\":0.30", with: "\"target_amount\":0.31"
+        )
+        XCTAssertThrowsError(try SavingPlanCASReceiptValidator.verify(
+            decode(tamperedAmount), for: request
+        ))
+        let tamperedID = applied.replacingOccurrences(
+            of: goalID.uuidString, with: UUID().uuidString
+        )
+        XCTAssertThrowsError(try SavingPlanCASReceiptValidator.verify(
+            decode(tamperedID), for: request
+        ))
+        let tamperedRevision = applied.replacingOccurrences(
+            of: "\"accepted_revision\":1", with: "\"accepted_revision\":99"
+        )
+        XCTAssertThrowsError(try SavingPlanCASReceiptValidator.verify(
+            decode(tamperedRevision), for: request
+        ))
+        XCTAssertThrowsError(try SavingPlanCASReceiptValidator.verify(
+            decode("{\"status\":\"applied\",\"goal_id\":\"\(goalID.uuidString)\"}"),
+            for: request
+        ))
+    }
+
+
     /// Guard the actual SwiftUI Color tokens used as filled backgrounds behind
     /// white CTA text. WCAG AA normal-text threshold is 4.5:1. Do not test
     /// a duplicated hex value that could drift from the production button.
