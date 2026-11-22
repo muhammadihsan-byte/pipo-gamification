@@ -49,11 +49,13 @@ final class PipoUIRecordingTests: XCTestCase {
         attachOnboardingScreen("Global V1 — Currency confirmed at target step")
         // Begin with an explicit IDR choice independent of simulator region.
         tapButton("pipo.goal.currency.choose")
-        let idrSearch = app.searchFields.firstMatch
+        let idrSearch = app.textFields["pipo.goal.currency.search"].firstMatch
         XCTAssertTrue(idrSearch.waitForExistence(timeout: 15))
         idrSearch.tap()
         idrSearch.typeText("IDR")
         tapButton("pipo.goal.currency.IDR")
+        XCTAssertFalse(app.textFields["pipo.goal.currency.search"].exists,
+                       "Currency picker must close after selecting IDR")
         let idrAmount = app.textFields["pipo.goal.currency.amount"].firstMatch
         XCTAssertTrue(idrAmount.waitForExistence(timeout: 15))
         XCTAssertEqual(idrAmount.label, "Target amount in IDR",
@@ -61,11 +63,13 @@ final class PipoUIRecordingTests: XCTestCase {
         attachOnboardingScreen("Global V1 — IDR selection returns to editable amount")
         typeText("pipo.goal.currency.amount", value: "6000000")
         tapButton("pipo.goal.currency.choose")
-        let search = app.searchFields.firstMatch
+        let search = app.textFields["pipo.goal.currency.search"].firstMatch
         XCTAssertTrue(search.waitForExistence(timeout: 15), "Searchable currency sheet must appear")
         search.tap()
         search.typeText("USD")
         tapButton("pipo.goal.currency.USD")
+        XCTAssertFalse(app.textFields["pipo.goal.currency.search"].exists,
+                       "Currency picker must close after selecting USD")
         let target = app.textFields["pipo.goal.currency.amount"].firstMatch
         XCTAssertTrue(target.waitForExistence(timeout: 15))
         XCTAssertEqual(target.label, "Target amount in USD",
@@ -157,7 +161,7 @@ final class PipoUIRecordingTests: XCTestCase {
         // The real existing five-step creation flow is preserved.
         XCTAssertTrue(app.staticTexts["How much do you need?"].waitForExistence(timeout: 15))
         tapButton("pipo.goal.currency.choose")
-        let currencySearch = app.searchFields.firstMatch
+        let currencySearch = app.textFields["pipo.goal.currency.search"].firstMatch
         XCTAssertTrue(currencySearch.waitForExistence(timeout: 15))
         currencySearch.tap()
         currencySearch.typeText("IDR")
