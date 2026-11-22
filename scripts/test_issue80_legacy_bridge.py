@@ -59,14 +59,15 @@ reject(.untrustedReadback) {
         cloud(["user_id":foreign.uuidString]),
         request: request, authenticatedOwnerID: owner)
 }
-for differences: [String: Any] in [
+let mismatches: [[String:Any]] = [
     ["target_amount":1.01],
     ["title":"Other camera"],
     ["currency_code":"JPY"],
     ["rhythm":"daily"],
     ["preferred_saving_day":4],
     ["target_date":"2028-01-01T00:00:00Z"]
-] {
+]
+for differences in mismatches {
     reject(.cloudConflict) {
         try LegacyGoalBridgeReadbackVerifier.verify(
             cloud(differences), request: request, authenticatedOwnerID: owner)
@@ -149,7 +150,7 @@ class LegacyGoalBridgeChecks(unittest.TestCase):
         self.assertIn("LegacyGoalBridgeError.pendingConfirmation", adapter)
         self.assertIn("LegacyGoalBridgeIntentJournal.inApplicationSupport()", adapter)
         self.assertIn('client.auth.currentUser?.id == authenticatedUserID', adapter)
-        self.assertIn("No automatic second INSERT", bridge)
+        self.assertIn("No auto retry if INSERT timed out", bridge)
 
     def test_compiled_swift_bridge_fails_closed_with_disk_recovery(self):
         swiftc = shutil.which("swiftc")
