@@ -144,6 +144,12 @@ struct SavingTransactionPayload: Encodable, Equatable, Sendable {
                           authenticatedUserID: UUID) throws -> [SavingTransactionPayload] {
         guard transactions.allSatisfy({ $0.userID == authenticatedUserID })
         else { throw SupabaseServiceError.transactionBelongsToAnotherUser }
+        // Two local rows with a reused UUID are ambiguous, even when their
+        // goal and amount appear identical. Fail the complete upload batch.
+        // Do not let Postgres ON CONFLICT choose which entry becomes canonical.
+        guard Set(transactions.map(\.id)).count == transactions.count else {
+            throw SupabaseServiceError.invalidOrUnownedTransaction
+        }
         return transactions.map { SavingTransactionPayload(transaction: $0, userID: authenticatedUserID) }
     }
 
@@ -912,9 +918,17 @@ final class SupabaseService {
     }
 
     private nonisolated func upsertTransactionPayloads(_ payloads: [SavingTransactionPayload]) async throws {
+        // Historical contributions are immutable events. A retry with the
+        // same UUID must NEVER update amount, goal, date or awarded XP in
+        // the cloud, regardless of which device sent the retry.
+        //
+        // PostgREST ignore-duplicates is an atomic INSERT ... ON CONFLICT
+        // DO NOTHING, preserving offline UUID idempotency. This is a client
+        // guard only; server-side UPDATE/DELETE grants and conflict-aware
+        // read reconciliation remain release blockers (#29/#16/#42).
         try await client
             .from("saving_transactions")
-            .upsert(payloads, onConflict: "id")
+            .upsert(payloads, onConflict: "id", ignoreDuplicates: true)
             .execute()
     }
 
