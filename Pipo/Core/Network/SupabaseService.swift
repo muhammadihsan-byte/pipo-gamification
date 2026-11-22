@@ -1982,6 +1982,96 @@ final class SupabaseService {
         ).execute().value
     }
 
+    // ISSUE #80 STAGING ONLY. The project does not define this compilation
+    // flag. Neither method exists in the production app build. A later signed
+    // client + audited server migration MUST approve any activation.
+    #if PIPO_ISSUE80_STAGING
+    /// First attempt is persisted BEFORE the authenticated INSERT. If the
+    /// request was previously attempted, this method refuses a second INSERT.
+    /// Ambiguous insert errors always reconcile by authoritative SELECT.
+    func issue80StageOnlySubmitInitialGoal(
+        goalID: UUID, authenticatedUserID: UUID,
+        journal: SavingGoalCreateIntentJournal
+    ) async throws -> PendingSavingGoalCreateIntent.State {
+        guard client.auth.currentUser?.id == authenticatedUserID else {
+            throw SavingGoalCreateJournalError.accountChanged
+        }
+        let request = try journal.markInsertAttempted(
+            goalID: goalID, ownerID: authenticatedUserID
+        )
+        guard client.auth.currentUser?.id == authenticatedUserID else {
+            throw SavingGoalCreateJournalError.accountChanged
+        }
+
+        // A timeout, PostgREST 409, or dropped socket can occur AFTER the
+        // INSERT committed. Never create a fresh UUID or issue an UPSERT.
+        // Even on error, proceed to owner-filtered readback; a read error
+        // propagates as UNKNOWN while the journal stays attempted.
+        do {
+            try await issue80InsertGoalOnly(request)
+        } catch {
+            guard client.auth.currentUser?.id == authenticatedUserID else {
+                throw SavingGoalCreateJournalError.accountChanged
+            }
+            // Intentionally retain exact request and reconcile by SELECT.
+        }
+        return try await issue80StageOnlyRecoverInitialGoal(
+            goalID: goalID, authenticatedUserID: authenticatedUserID,
+            journal: journal
+        )
+    }
+
+    /// After a timeout or relaunch, READ FIRST; never repeat the INSERT.
+    /// The caller must not treat a thrown error as cloud-saved.
+    func issue80StageOnlyRecoverInitialGoal(
+        goalID: UUID, authenticatedUserID: UUID,
+        journal: SavingGoalCreateIntentJournal
+    ) async throws -> PendingSavingGoalCreateIntent.State {
+        guard client.auth.currentUser?.id == authenticatedUserID else {
+            throw SavingGoalCreateJournalError.accountChanged
+        }
+        guard try journal.all(for: authenticatedUserID).contains(where: {
+            $0.goalID == goalID
+        }) else { throw SavingGoalCreateJournalError.unknownGoal }
+
+        let rows = try await issue80FetchOwnedCreateGoal(
+            goalID: goalID, ownerID: authenticatedUserID
+        )
+        guard client.auth.currentUser?.id == authenticatedUserID else {
+            throw SavingGoalCreateJournalError.accountChanged
+        }
+        guard rows.count <= 1 else {
+            throw SavingGoalCreateJournalError.untrustedReadback
+        }
+        return try journal.recordReadback(
+            rows.first, goalID: goalID, ownerID: authenticatedUserID,
+            authenticatedOwnerID: authenticatedUserID
+        )
+    }
+
+    private nonisolated func issue80InsertGoalOnly(
+        _ request: SavingGoalCreateOnlyRequest
+    ) async throws {
+        try await client.from("saving_goals")
+            .insert(request)
+            .execute()
+    }
+
+    private nonisolated func issue80FetchOwnedCreateGoal(
+        goalID: UUID, ownerID: UUID
+    ) async throws -> [SavingGoalAuthoritativeCloudRow] {
+        // Decode an array, not single()/maybeSingle(), to distinguish 0
+        // matching rows from unexpected duplicates without 406 semantics.
+        try await client.from("saving_goals")
+            .select("id,user_id,title,category,custom_category,target_amount,currency_code,start_date,target_date,rhythm,preferred_saving_day,planned_contribution_override,plan_revision")
+            .eq("id", value: goalID.uuidString)
+            .eq("user_id", value: ownerID.uuidString)
+            .limit(2)
+            .execute()
+            .value
+    }
+    #endif
+
     // Purchased slot counts are authoritative server state. In particular,
     // the iOS app must never UPSERT public.user_profiles or inflate counters.
 
