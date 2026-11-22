@@ -532,6 +532,215 @@ enum SavingPlanCASReceiptValidator {
     }
 }
 
+// MARK: - #80: Dormant insert-only goal and authoritative readback contract
+//
+// This is an unconnected contract, NOT a network operation. The live app
+// continues its old goal UPSERT until the signed-client compatibility gate.
+// Never treat INSERT conflict/timeout as success without a verified SELECT.
+
+enum SavingGoalCreateContractError: Error, Equatable {
+    case invalidGoal
+    case invalidAmount
+    case invalidSchedule
+    case accountChanged
+    case missingOrInvisible
+    case mismatchedRemoteGoal
+    case remotelyRevised
+}
+
+/// INSERT-only payload: stable UUID and exact goal amounts. user_id is
+/// intentionally omitted so PostgreSQL defaults it to auth.uid() under RLS.
+/// The expected owner exists only in local verification, not the wire JSON.
+struct SavingGoalCreateOnlyRequest: Encodable, Equatable, Sendable {
+    let goalID: UUID
+    let expectedOwnerID: UUID
+    let title: String
+    let category: String
+    let customCategory: String?
+    let targetAmount: Decimal
+    let currencyCode: String
+    let startDate: String
+    let targetDate: String
+    let rhythm: String
+    let preferredSavingDay: Int?
+    let plannedContributionOverride: Decimal?
+
+    init(
+        goalID: UUID, ownerID: UUID, title: String, category: String,
+        customCategory: String?, targetMinorUnits: Int64,
+        currencyCode: String, startDate: Date, targetDate: Date,
+        rhythm: String, preferredSavingDay: Int?,
+        plannedContributionMinorUnits: Int64?
+    ) throws {
+        let normalizedTitle = title.trimmingCharacters(in: .whitespacesAndNewlines)
+        let normalizedCustom = customCategory?.trimmingCharacters(
+            in: .whitespacesAndNewlines
+        )
+        guard !normalizedTitle.isEmpty && normalizedTitle.count <= 120,
+              ["gadget", "trip", "gift", "debt", "automotive", "house", "other"]
+                .contains(category),
+              normalizedCustom == nil || (normalizedCustom!.count > 0
+                && normalizedCustom!.count <= 80)
+        else { throw SavingGoalCreateContractError.invalidGoal }
+
+        guard currencyCode == currencyCode.uppercased(),
+              PipoGoalCurrency.isSupported(currencyCode),
+              targetMinorUnits > 0,
+              PipoGoalCurrency.minorUnits(
+                PipoGoalCurrency.decimal(targetMinorUnits, code: currencyCode),
+                code: currencyCode
+              ) == targetMinorUnits
+        else { throw SavingGoalCreateContractError.invalidAmount }
+
+        var override: Decimal?
+        if let plannedContributionMinorUnits {
+            guard plannedContributionMinorUnits > 0,
+                  PipoGoalCurrency.minorUnits(
+                    PipoGoalCurrency.decimal(
+                        plannedContributionMinorUnits, code: currencyCode
+                    ), code: currencyCode
+                  ) == plannedContributionMinorUnits
+            else { throw SavingGoalCreateContractError.invalidAmount }
+            override = PipoGoalCurrency.decimal(
+                plannedContributionMinorUnits, code: currencyCode
+            )
+        }
+        guard startDate.timeIntervalSince1970.isFinite,
+              targetDate.timeIntervalSince1970.isFinite,
+              targetDate >= startDate,
+              ["daily", "weekly", "biWeekly", "monthly", "flexible"].contains(rhythm),
+              preferredSavingDay == nil || (1...31).contains(preferredSavingDay!),
+              (rhythm != "daily" && rhythm != "flexible"
+                || preferredSavingDay == nil),
+              (rhythm != "weekly" && rhythm != "biWeekly"
+                || preferredSavingDay == nil || preferredSavingDay! <= 7),
+              rhythm != "flexible" || override == nil
+        else { throw SavingGoalCreateContractError.invalidSchedule }
+
+        self.goalID = goalID
+        expectedOwnerID = ownerID
+        self.title = normalizedTitle
+        self.category = category
+        self.customCategory = normalizedCustom
+        targetAmount = PipoGoalCurrency.decimal(
+            targetMinorUnits, code: currencyCode
+        )
+        self.currencyCode = currencyCode
+        let timestamp = ISO8601DateFormatter()
+        self.startDate = timestamp.string(from: startDate)
+        self.targetDate = timestamp.string(from: targetDate)
+        self.rhythm = rhythm
+        self.preferredSavingDay = preferredSavingDay
+        plannedContributionOverride = override
+    }
+
+    enum CodingKeys: String, CodingKey {
+        case title, category, rhythm
+        case goalID = "id"
+        case customCategory = "custom_category"
+        case targetAmount = "target_amount"
+        case currencyCode = "currency_code"
+        case startDate = "start_date"
+        case targetDate = "target_date"
+        case preferredSavingDay = "preferred_saving_day"
+        case plannedContributionOverride = "planned_contribution_override"
+    }
+
+    func encode(to encoder: Encoder) throws {
+        var c = encoder.container(keyedBy: CodingKeys.self)
+        try c.encode(goalID, forKey: .goalID)
+        try c.encode(title, forKey: .title)
+        try c.encode(category, forKey: .category)
+        try c.encode(customCategory, forKey: .customCategory)
+        try c.encode(targetAmount, forKey: .targetAmount)
+        try c.encode(currencyCode, forKey: .currencyCode)
+        try c.encode(startDate, forKey: .startDate)
+        try c.encode(targetDate, forKey: .targetDate)
+        try c.encode(rhythm, forKey: .rhythm)
+        try c.encode(preferredSavingDay, forKey: .preferredSavingDay)
+        try c.encode(plannedContributionOverride, forKey: .plannedContributionOverride)
+    }
+}
+
+/// A *fresh* SELECT from the RLS-filtered goal table. This DTO is not
+/// itself proof the query was authenticated; verify the session before and
+/// after fetching and pass only rows from that confirmed owner-scoped read.
+struct SavingGoalAuthoritativeCloudRow: Decodable, Sendable {
+    let goalID: UUID
+    let ownerID: UUID
+    let title: String
+    let category: String
+    let customCategory: String?
+    let targetAmount: Decimal
+    let currencyCode: String
+    let startDate: String
+    let targetDate: String
+    let rhythm: String
+    let preferredSavingDay: Int?
+    let plannedContributionOverride: Decimal?
+    let planRevision: Int64
+
+    enum CodingKeys: String, CodingKey {
+        case title, category, rhythm
+        case goalID = "id"
+        case ownerID = "user_id"
+        case customCategory = "custom_category"
+        case targetAmount = "target_amount"
+        case currencyCode = "currency_code"
+        case startDate = "start_date"
+        case targetDate = "target_date"
+        case preferredSavingDay = "preferred_saving_day"
+        case plannedContributionOverride = "planned_contribution_override"
+        case planRevision = "plan_revision"
+    }
+}
+
+enum SavingGoalCreateReadbackVerifier {
+    private static func parseInstant(_ value: String) -> Date? {
+        let seconds = ISO8601DateFormatter()
+        if let instant = seconds.date(from: value) { return instant }
+        let fractional = ISO8601DateFormatter()
+        fractional.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+        return fractional.date(from: value)
+    }
+
+    /// Do NOT retry INSERT or mark the goal cloud-saved when readback is
+    /// nil, foreign, changed, malformed, or revision > 0. In particular,
+    /// a duplicate-key 409 is not evidence that the payload is identical.
+    static func verify(
+        _ row: SavingGoalAuthoritativeCloudRow?,
+        for request: SavingGoalCreateOnlyRequest,
+        authenticatedOwnerID: UUID
+    ) throws {
+        guard authenticatedOwnerID == request.expectedOwnerID else {
+            throw SavingGoalCreateContractError.accountChanged
+        }
+        guard let row else {
+            throw SavingGoalCreateContractError.missingOrInvisible
+        }
+        guard row.ownerID == authenticatedOwnerID,
+              row.goalID == request.goalID
+        else { throw SavingGoalCreateContractError.mismatchedRemoteGoal }
+        guard row.planRevision == 0 else {
+            throw SavingGoalCreateContractError.remotelyRevised
+        }
+        guard row.title == request.title,
+              row.category == request.category,
+              row.customCategory == request.customCategory,
+              row.targetAmount == request.targetAmount,
+              row.currencyCode == request.currencyCode,
+              row.rhythm == request.rhythm,
+              row.preferredSavingDay == request.preferredSavingDay,
+              row.plannedContributionOverride == request.plannedContributionOverride,
+              let start = parseInstant(row.startDate),
+              let target = parseInstant(row.targetDate),
+              let expectedStart = parseInstant(request.startDate),
+              let expectedTarget = parseInstant(request.targetDate),
+              start == expectedStart, target == expectedTarget
+        else { throw SavingGoalCreateContractError.mismatchedRemoteGoal }
+    }
+}
+
 // MARK: - #80: Durable local plan-edit intent (inactive, NO network send)
 //
 // Stored separately per authenticated owner using an atomic write, without a
