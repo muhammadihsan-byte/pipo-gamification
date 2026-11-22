@@ -416,19 +416,14 @@ struct RootView: View {
                     return
                 }
                 #endif
-                guard !goal.isGroupGoal, let supabaseService else { return }
-                Task {
-                    guard authStateManager.userID == userID else { return }
-                    do {
-                        try await supabaseService.syncPersonalSavings(
-                            goals: [goal], transactions: [transaction],
-                            authenticatedUserID: userID
-                        )
-                    } catch {
-                        guard authStateManager.userID == userID else { return }
-                        noticeMessage = "Saved on this device, but cloud backup failed: \(error.localizedDescription)"
-                    }
-                }
+                guard !goal.isGroupGoal, supabaseService != nil else { return }
+                // Replay every account-owned personal saving after a new local
+                // contribution. Sending only the latest transaction strands
+                // earlier offline entries until a background/foreground cycle.
+                // The existing sync batch validates ownership and currencies,
+                // and server UPSERT keys preserve each transaction's UUID so
+                // an uncertain previous acknowledgement cannot double count.
+                enqueuePersonalSavingsSync(for: userID)
             }
         )
         .confirmationDialog("Choose a saving plan", isPresented: $choosingPlan, titleVisibility: .visible) {
