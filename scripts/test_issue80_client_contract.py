@@ -132,6 +132,131 @@ for corrupted in [
         fatalError("Corrupted receipt accepted")
     } catch SavingPlanCASContractError.invalidServerResponse {}
 }
+// Dormant account-isolated journal: no HTTP client, no actual money writes.
+let temporary = FileManager.default.temporaryDirectory
+    .appendingPathComponent("pipo-cas-qa-" + UUID().uuidString, isDirectory: true)
+defer { try? FileManager.default.removeItem(at: temporary) }
+let accountA = UUID(), accountB = UUID()
+let journal = SavingPlanCASIntentJournal(directory: temporary)
+let staged = try journal.stage(request, ownerID: accountA)
+check(staged.state == .staged && staged.responseRevision == nil,
+      "Initial request must remain pending")
+check(try journal.stage(request, ownerID: accountA) == staged,
+      "Identical UUID request must reuse staged intent")
+check(try journal.all(for: accountB).isEmpty, "A cannot appear in B journal")
+let restarted = SavingPlanCASIntentJournal(directory: temporary)
+check(try restarted.all(for: accountA).count == 1,
+      "Atomic journal must survive process reconstruction")
+check(try restarted.all(for: accountA)[0].requestID == requestID,
+      "Request UUID must never change across relaunch")
+
+let otherRequest = try SavingPlanCASRequest(
+    requestID: UUID(), goalID: goalID, expectedRevision: 0,
+    targetMinorUnits: 31, currencyCode: "USD",
+    targetDate: Date(timeIntervalSince1970: 1_800_000_000),
+    rhythm: "weekly", preferredSavingDay: 2,
+    plannedContributionMinorUnits: 10
+)
+do {
+    _ = try restarted.stage(otherRequest, ownerID: accountA)
+    fatalError("A second unsent edit to the same goal was accepted")
+} catch SavingPlanCASJournalError.goalAlreadyPending {}
+
+let sameIDChangedAmount = try SavingPlanCASRequest(
+    requestID: requestID, goalID: goalID, expectedRevision: 0,
+    targetMinorUnits: 31, currencyCode: "USD",
+    targetDate: Date(timeIntervalSince1970: 1_800_000_000),
+    rhythm: "weekly", preferredSavingDay: 2,
+    plannedContributionMinorUnits: 10
+)
+do {
+    _ = try restarted.stage(sameIDChangedAmount, ownerID: accountA)
+    fatalError("Changed payload with same UUID was accepted")
+} catch SavingPlanCASJournalError.idempotencyConflict {}
+
+try restarted.recordVerifiedResponse(reply, requestID: requestID, ownerID: accountA)
+try restarted.recordVerifiedResponse(reply, requestID: requestID, ownerID: accountA)
+check(try restarted.all(for: accountA)[0].state == .acknowledged,
+      "Verified receipt should be persisted")
+do {
+    try restarted.recordVerifiedResponse(conflict, requestID: requestID, ownerID: accountA)
+    fatalError("Conflicting second acknowledgement was accepted")
+} catch SavingPlanCASJournalError.invalidTransition {}
+
+let readback = SavingPlanCASGoalReadback(
+    ownerID: accountA, goalID: goalID, revision: 1,
+    targetMinorUnits: 30, currencyCode: "USD",
+    targetDate: Date(timeIntervalSince1970: 1_800_000_000),
+    rhythm: "weekly", preferredSavingDay: 2,
+    plannedContributionMinorUnits: 10
+)
+do {
+    try restarted.finishVerifiedCurrentReadback(
+        requestID: requestID, ownerID: accountA,
+        current: SavingPlanCASGoalReadback(
+            ownerID: accountA, goalID: goalID, revision: 2,
+            targetMinorUnits: 30, currencyCode: "USD",
+            targetDate: readback.targetDate, rhythm: "weekly",
+            preferredSavingDay: 2, plannedContributionMinorUnits: 10
+        )
+    )
+    fatalError("Stale idempotent receipt cleared without current readback")
+} catch SavingPlanCASJournalError.unverifiedReadback {}
+do {
+    try restarted.finishVerifiedCurrentReadback(
+        requestID: requestID, ownerID: accountB, current: readback
+    )
+    fatalError("Cross-account readback cleared an intent")
+} catch SavingPlanCASJournalError.unknownIntent {}
+try restarted.finishVerifiedCurrentReadback(
+    requestID: requestID, ownerID: accountA, current: readback
+)
+check(try restarted.all(for: accountA).isEmpty,
+      "Matching current readback must remove only verified intent")
+
+// A conflicting plan stays local until explicit user review/discard.
+let conflictRequest = try SavingPlanCASRequest(
+    requestID: UUID(), goalID: goalID, expectedRevision: 1,
+    targetMinorUnits: 33, currencyCode: "USD",
+    targetDate: Date(timeIntervalSince1970: 1_800_000_000),
+    rhythm: "weekly", preferredSavingDay: 2,
+    plannedContributionMinorUnits: nil
+)
+try restarted.stage(conflictRequest, ownerID: accountA)
+let conflictJSON = """
+{"status":"conflict","goal_id":"\(goalID.uuidString)","current_revision":3}
+"""
+try restarted.recordVerifiedResponse(
+    decode(conflictJSON), requestID: conflictRequest.requestID, ownerID: accountA
+)
+check(try restarted.all(for: accountA)[0].state == .conflicted,
+      "Conflict must remain reviewable after restart")
+do {
+    try restarted.discardConflictedAfterUserDecision(
+        requestID: conflictRequest.requestID, ownerID: accountA,
+        userConfirmedDiscard: false
+    )
+    fatalError("Unconfirmed discard deleted conflict")
+} catch SavingPlanCASJournalError.userDecisionRequired {}
+try restarted.discardConflictedAfterUserDecision(
+    requestID: conflictRequest.requestID, ownerID: accountA,
+    userConfirmedDiscard: true
+)
+check(try restarted.all(for: accountA).isEmpty, "Approved discard")
+let corruptedOwner = temporary.appendingPathComponent(
+    accountB.uuidString.lowercased() + ".json"
+)
+try Data("[{\"ownerID\":\"invalid-json-uuid\"}]".utf8)
+    .write(to: corruptedOwner, options: [.atomic])
+do {
+    _ = try restarted.all(for: accountB)
+    fatalError("Corrupt journal was silently reset")
+} catch SavingPlanCASJournalError.invalidJournal {}
+check(try restarted.all(for: accountA).isEmpty,
+      "Malformed B journal must not expose or erase A records")
+
+print("PASS: #80 per-owner atomic pending intent, idempotency, relaunch, conflict and readback")
+
 print("PASS: #80 Swift exact-decimal CAS request, explicit null, conflict and receipt guards")
 '''
 
