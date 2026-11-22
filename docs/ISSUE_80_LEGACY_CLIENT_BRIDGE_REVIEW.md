@@ -35,3 +35,7 @@ It is compiled only when `PIPO_ISSUE80_BRIDGE` is explicitly defined for an appr
 - PR #83/#84 and this bridge remain draft/unmerged until owner approval; merging code is a separate event from deploying an approved signed bridge.
 
 **Do not merge, enable Save or deploy production SQL from green Linux/static QA alone.**
+
+## CI evidence checkpoint
+
+The PR fast and disposable Auth A/B workflows run when the draft is temporarily compared with `main` for integrated evaluation. It will then return to its stacked base (#84); those Linux results are source-head evidence, not a proof that dependent drafts were merged. The one-time macOS native check is separately label-triggered and uses only a temporary Debug flag.
