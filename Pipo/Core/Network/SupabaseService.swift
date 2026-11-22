@@ -341,6 +341,197 @@ struct SavingLedgerCloudAdjustment: Decodable, Sendable {
     }
 }
 
+// MARK: - #80: Inactive, server-revisioned Manage Plan contract
+//
+// Prepared for the staged CAS backend, but deliberately NOT wired to a
+// production Supabase RPC or to any Manage Plan Save button. Current
+// goal-first UPSERT is incompatible with the proposed revocation of UPDATE.
+// Do not activate until signed-old-client migration and backend review pass.
+
+enum SavingPlanCASContractError: Error, Equatable {
+    case invalidRevision
+    case invalidGoalAmount
+    case invalidSchedule
+    case invalidServerResponse
+}
+
+/// Owns a stable request UUID across offline retries. Encodes only the
+/// allowlisted p_* RPC parameters, never a user_id or currency override.
+/// Target and future contribution use exact Decimal major units, not Double.
+struct SavingPlanCASRequest: Encodable, Equatable, Sendable {
+    let requestID: UUID
+    let goalID: UUID
+    let expectedRevision: Int64
+    let targetAmount: Decimal
+    let targetDate: String
+    let rhythm: String
+    let preferredSavingDay: Int?
+    let plannedContributionOverride: Decimal?
+
+    // Local-only evidence used to validate the server's immutable goal code.
+    // This MUST NOT be sent to the RPC as a currency-setting argument.
+    let currencyCode: String
+
+    init(
+        requestID: UUID, goalID: UUID, expectedRevision: Int64,
+        targetMinorUnits: Int64, currencyCode: String, targetDate: Date,
+        rhythm: String, preferredSavingDay: Int?,
+        plannedContributionMinorUnits: Int64?
+    ) throws {
+        guard expectedRevision >= 0 && expectedRevision < Int64.max else {
+            throw SavingPlanCASContractError.invalidRevision
+        }
+        guard PipoGoalCurrency.isSupported(currencyCode) &&
+                currencyCode == currencyCode.uppercased(),
+              targetMinorUnits > 0
+        else { throw SavingPlanCASContractError.invalidGoalAmount }
+        let target = PipoGoalCurrency.decimal(targetMinorUnits, code: currencyCode)
+        guard PipoGoalCurrency.minorUnits(target, code: currencyCode) == targetMinorUnits
+        else { throw SavingPlanCASContractError.invalidGoalAmount }
+
+        let cadence = ["daily", "weekly", "biWeekly", "monthly", "flexible"]
+        guard cadence.contains(rhythm), targetDate.timeIntervalSince1970.isFinite,
+              (preferredSavingDay == nil || (1...31).contains(preferredSavingDay!)),
+              (rhythm != "daily" && rhythm != "flexible" || preferredSavingDay == nil),
+              (rhythm != "weekly" && rhythm != "biWeekly"
+                || preferredSavingDay == nil || preferredSavingDay! <= 7),
+              (rhythm != "flexible" || plannedContributionMinorUnits == nil)
+        else { throw SavingPlanCASContractError.invalidSchedule }
+
+        let contribution: Decimal?
+        if let plannedContributionMinorUnits {
+            guard plannedContributionMinorUnits > 0 else {
+                throw SavingPlanCASContractError.invalidGoalAmount
+            }
+            let amount = PipoGoalCurrency.decimal(
+                plannedContributionMinorUnits, code: currencyCode
+            )
+            guard PipoGoalCurrency.minorUnits(amount, code: currencyCode)
+                    == plannedContributionMinorUnits else {
+                throw SavingPlanCASContractError.invalidGoalAmount
+            }
+            contribution = amount
+        } else {
+            contribution = nil
+        }
+
+        self.requestID = requestID
+        self.goalID = goalID
+        self.expectedRevision = expectedRevision
+        self.targetAmount = target
+        self.targetDate = ISO8601DateFormatter().string(from: targetDate)
+        self.rhythm = rhythm
+        self.preferredSavingDay = preferredSavingDay
+        self.plannedContributionOverride = contribution
+        self.currencyCode = currencyCode
+    }
+
+    enum CodingKeys: String, CodingKey {
+        case requestID = "p_request_id"
+        case goalID = "p_goal_id"
+        case expectedRevision = "p_expected_revision"
+        case targetAmount = "p_target_amount"
+        case targetDate = "p_target_date"
+        case rhythm = "p_rhythm"
+        case preferredSavingDay = "p_preferred_saving_day"
+        case plannedContributionOverride = "p_planned_contribution_override"
+    }
+
+    func encode(to encoder: Encoder) throws {
+        var c = encoder.container(keyedBy: CodingKeys.self)
+        try c.encode(requestID, forKey: .requestID)
+        try c.encode(goalID, forKey: .goalID)
+        try c.encode(expectedRevision, forKey: .expectedRevision)
+        try c.encode(targetAmount, forKey: .targetAmount)
+        try c.encode(targetDate, forKey: .targetDate)
+        try c.encode(rhythm, forKey: .rhythm)
+        // The SQL function requires all nullable arguments to be present.
+        try c.encode(preferredSavingDay, forKey: .preferredSavingDay)
+        try c.encode(plannedContributionOverride, forKey: .plannedContributionOverride)
+    }
+}
+
+struct SavingPlanCASWireResponse: Decodable, Sendable {
+    let status: String
+    let goalID: UUID
+    let requestID: UUID?
+    let acceptedRevision: Int64?
+    let currentRevision: Int64?
+    let currencyCode: String?
+    let targetAmount: Decimal?
+    let targetDate: String?
+    let rhythm: String?
+    let preferredSavingDay: Int?
+    let plannedContributionOverride: Decimal?
+
+    enum CodingKeys: String, CodingKey {
+        case status, rhythm
+        case goalID = "goal_id"
+        case requestID = "request_id"
+        case acceptedRevision = "accepted_revision"
+        case currentRevision = "current_revision"
+        case currencyCode = "currency_code"
+        case targetAmount = "target_amount"
+        case targetDate = "target_date"
+        case preferredSavingDay = "preferred_saving_day"
+        case plannedContributionOverride = "planned_contribution_override"
+    }
+}
+
+/// This result NEVER writes SwiftData, XP, saving entries, or achievements.
+/// A verified applied receipt is not necessarily the most recent plan:
+/// a later successful edit may follow an idempotent replay of an older UUID.
+enum SavingPlanCASOutcome: Equatable, Sendable {
+    case applied(requestID: UUID, acceptedRevision: Int64)
+    case conflict(currentRevision: Int64)
+}
+
+enum SavingPlanCASReceiptValidator {
+    static func verify(
+        _ response: SavingPlanCASWireResponse,
+        for request: SavingPlanCASRequest
+    ) throws -> SavingPlanCASOutcome {
+        guard response.goalID == request.goalID else {
+            throw SavingPlanCASContractError.invalidServerResponse
+        }
+        if response.status == "conflict" {
+            guard let current = response.currentRevision,
+                  current >= 0 && current != request.expectedRevision,
+                  response.requestID == nil, response.acceptedRevision == nil,
+                  response.currencyCode == nil, response.targetAmount == nil,
+                  response.targetDate == nil
+            else { throw SavingPlanCASContractError.invalidServerResponse }
+            return .conflict(currentRevision: current)
+        }
+        guard response.status == "applied",
+              response.requestID == request.requestID,
+              response.currentRevision == nil,
+              response.acceptedRevision == request.expectedRevision + 1,
+              response.currencyCode == request.currencyCode,
+              response.targetAmount == request.targetAmount,
+              response.rhythm == request.rhythm,
+              response.preferredSavingDay == request.preferredSavingDay,
+              response.plannedContributionOverride == request.plannedContributionOverride,
+              let date = response.targetDate
+        else { throw SavingPlanCASContractError.invalidServerResponse }
+
+        // PostgreSQL JSON timestamps can have a timezone offset and/or
+        // fractional seconds. Compare the instant, not its textual timezone.
+        let whole = ISO8601DateFormatter()
+        let fractional = ISO8601DateFormatter()
+        fractional.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+        guard let reported = fractional.date(from: date) ?? whole.date(from: date),
+              let requested = whole.date(from: request.targetDate),
+              abs(reported.timeIntervalSince1970 - requested.timeIntervalSince1970) < 0.001
+        else { throw SavingPlanCASContractError.invalidServerResponse }
+
+        return .applied(
+            requestID: request.requestID,
+            acceptedRevision: request.expectedRevision + 1
+        )
+    }
+}
+
 enum SavingMoneyOutRequestError: Error, Equatable {
     case invalidAmount
     case invalidNote
