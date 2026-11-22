@@ -314,6 +314,65 @@ try MainActor.assumeIsolated {
         fatalError("Cross-account reconciliation was allowed")
     } catch SavingGoalCreateJournalError.accountChanged {}
 
+    // The local goal is already persisted. The journal commit ONLY changes
+    // an atomic status receipt, with no goal/ledger/XP mutations.
+    let safeLocal = SavingGoalCreateLocalSnapshot(
+        ownerID: ownerID, request: request, pendingSavingEventCount: 0,
+        hasLocalOnlyBudgetItems: false, hasUnresolvedPlanChanges: false
+    )
+    let heldLocal = SavingGoalCreateLocalSnapshot(
+        ownerID: ownerID, request: request, pendingSavingEventCount: 1,
+        hasLocalOnlyBudgetItems: false, hasUnresolvedPlanChanges: false
+    )
+    expectJournal(.localNotReady) {
+        _ = try afterRelaunch.markLocalCommitVerified(
+            goalID: goalID, ownerID: ownerID,
+            authenticatedOwnerID: ownerID, local: heldLocal
+        )
+    }
+    require(try afterRelaunch.all(for: ownerID)[0].state == .verified,
+            "Pending history must keep original verified receipt")
+    require(try afterRelaunch.pending(for: ownerID).count == 1,
+            "Verified intent is pending until local commit")
+    expectJournal(.accountChanged) {
+        _ = try afterRelaunch.markLocalCommitVerified(
+            goalID: goalID, ownerID: ownerID,
+            authenticatedOwnerID: foreignOwner, local: safeLocal
+        )
+    }
+    require(try afterRelaunch.markLocalCommitVerified(
+        goalID: goalID, ownerID: ownerID,
+        authenticatedOwnerID: ownerID, local: safeLocal
+    ) == .reconciled, "Matching persisted local goal can finish")
+    require(try afterRelaunch.pending(for: ownerID).isEmpty,
+            "Terminal receipt is hidden from unresolved pending")
+    let postCommit = SavingGoalCreateIntentJournal(directory: dir)
+    require(try postCommit.all(for: ownerID)[0].state == .reconciled,
+            "Crash after journal commit preserves durable terminal receipt")
+    require(try postCommit.pending(for: ownerID).isEmpty,
+            "Relaunch never reopens terminal create intent")
+    require(try postCommit.stage(request, ownerID: ownerID).state == .reconciled,
+            "Exact original UUID after relaunch does not re-stage INSERT")
+    expectJournal(.invalidTransition) {
+        _ = try postCommit.markInsertAttempted(
+            goalID: goalID, ownerID: ownerID
+        )
+    }
+    require(try postCommit.markLocalCommitVerified(
+        goalID: goalID, ownerID: ownerID,
+        authenticatedOwnerID: ownerID, local: safeLocal
+    ) == .reconciled, "Repeated commit is idempotent")
+    expectJournal(.localNotReady) {
+        _ = try postCommit.markLocalCommitVerified(
+            goalID: goalID, ownerID: ownerID,
+            authenticatedOwnerID: ownerID, local: heldLocal
+        )
+    }
+    require(try postCommit.recordReadback(
+        canonical, goalID: goalID, ownerID: ownerID,
+        authenticatedOwnerID: ownerID
+    ) == .reconciled, "Safe repeat readback does not undo local completion")
+
     let conflictGoal = UUID()
     let conflictRequest = try SavingGoalCreateOnlyRequest(
         goalID: conflictGoal, ownerID: ownerID, title: "Trip",
@@ -415,6 +474,22 @@ class GoalCreateReadbackContractChecks(unittest.TestCase):
         self.assertIn("markInsertAttempted", self.source)
         # Existing goal-first UPSERT has intentionally NOT been replaced.
         self.assertIn('.upsert(payloads, onConflict: "id")', self.source)
+
+    def test_swiftdata_local_commit_is_inactive_and_never_rewrites_finances(self):
+        native = (APP_SOURCE.parent.parent.parent / "Models" / "PersonalGoal.swift").read_text()
+        start = native.split("// MARK: - #80 staging-only SwiftData reconciliation commit", 1)[1]
+        self.assertIn("#if PIPO_ISSUE80_STAGING", start)
+        self.assertIn("finalizeAfterFreshCloudReadback", start)
+        self.assertIn("ModelContext(modelContainer)", start)
+        self.assertIn("issue80StageOnlyRecoverInitialGoal", start)
+        self.assertIn("journal.markLocalCommitVerified(", start)
+        self.assertIn("SavingTransaction", start)
+        self.assertIn("!goal.subItems.isEmpty", start)
+        self.assertNotIn("readContext.save(", start)
+        self.assertNotIn("readContext.insert(", start)
+        self.assertNotIn("readContext.delete(", start)
+        self.assertIn("case reconciled", self.contract)
+        self.assertIn("func pending(for ownerID:", self.contract)
 
     def test_static_owner_and_revision_never_in_insert_wire(self):
         block = self.contract.split("struct SavingGoalCreateOnlyRequest:", 1)[1].split(
