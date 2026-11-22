@@ -22,7 +22,7 @@ Allowed unfinished transitions: Active → Paused or Archived; Paused → Active
 
 ## Saving and gamification protection
 
-- Main dashboard, personal detail, external widget deep-link, confirmation sheet and GamificationManager all block saving if status is paused, archived or completed.
+- Main dashboard, personal detail, external widget deep-link, confirmation sheet and GamificationManager all block saving if status is paused, archived or completed. The widget URL handler must use the same owner-aware `canRecordSaving` eligibility as the app, rather than treating `progress < 1` as proof the goal is active.
 - Completing a goal remains automatic upon recording sufficient user-entered savings; the existing one-time badge engine still determines unlocks and celebrations.
 - **Consistency caveat:** pausing does not retroactively forgive scheduled streak periods. The existing period-based streak logic is retained, and Pipo should not claim a magical freeze/grace policy without separately specifying and testing its rules.
 - Group goals remain **device-local** and do not create actual network member invitations. Group pause/resume is a local UI operation.
@@ -34,9 +34,11 @@ Allowed unfinished transitions: Active → Paused or Archived; Paused → Active
 - [x] Record-a-saving guards at UI *and* the gamification mutation layer
 - [x] Resume paused/archived goals and allow view of completed history
 - [x] Unit tests for default state, invalid transitions, blocked rewards and reopening a local SwiftData store
+- [x] Validate local disk-backed full-schema close/reopen/reopen persistence for paused, archived, resumed, completed and account-owned focus; preserve transaction history, badges and XP, quarantine ownerless rows (automated QA, **not** a signed migration proof)
+- [x] Reject stale widget deposit URLs for paused, archived, completed, group and foreign-account goals before routing, including a resumed goal recovery check
 - [ ] Validate a signed iOS upgrade from pre-V1 persisted SwiftData on physical device
 - [ ] Decide and design explicit grace/freeze behavior before changing consistency rules
-- [ ] Add remote sync/restoration of status/focus only with versioned DB schema and conflict semantics
+- [ ] Add remote sync/restoration of status/focus only with versioned DB schema and conflict semantics. Proposed contract: server-issued monotonic revision (or ETag) per owned goal, compare-and-swap updates, conflict response with explicit local/remote review, and the active account's exclusive focus choice enforced atomically. A sync request must not overwrite a newer pause/archive with an older active copy. Deployed `saving_goals` currently lacks these versioned fields; no production SQL/grants/RLS changes are authorized in this PR.
 - [ ] Confirm keyboard, large text, accessibility, widget and small iPhone on signed device
 - [ ] Confirm product policy for archive vs paid goal-slot entitlement before monetization
 
