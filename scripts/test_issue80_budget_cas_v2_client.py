@@ -24,8 +24,10 @@ func expectFailure(_ operation: () throws -> Void) {
     do {
         try operation()
         fatalError("Invalid state accepted")
-    } catch let e as SavingPlanBudgetV2ContractError {
-        check(e != .userReviewRequired || true, "Expected typed fail closed")
+    } catch is SavingPlanBudgetV2ContractError {
+        // Typed failure is required; no generic network/JSON exception.
+    } catch {
+        fatalError("Unexpected error type: \(error)")
     }
 }
 let user = UUID(), goal = UUID(), transaction = UUID()
