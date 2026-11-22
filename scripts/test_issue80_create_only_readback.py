@@ -159,6 +159,183 @@ let flexWire = try JSONSerialization.jsonObject(
 require(flexWire["preferred_saving_day"] is NSNull, "Flexible day must be null")
 require(flexWire["planned_contribution_override"] is NSNull,
         "Flexible override must be null")
+// The production journal is @MainActor. Keep all operations isolated while
+// testing real atomic files and process reconstruction, no HTTP calls.
+try MainActor.assumeIsolated {
+    let dir = FileManager.default.temporaryDirectory.appendingPathComponent(
+        "pipo-first-goal-qa-" + UUID().uuidString, isDirectory: true
+    )
+    defer { try? FileManager.default.removeItem(at: dir) }
+    let first = SavingGoalCreateIntentJournal(directory: dir)
+    let initial = try first.stage(request, ownerID: ownerID)
+    require(initial.state == .staged && initial.observedRevision == nil,
+            "New goal must remain staged")
+    require(try first.stage(request, ownerID: ownerID) == initial,
+            "Exact create replay reuses original UUID and data")
+    require(try first.all(for: foreignOwner).isEmpty,
+            "An absent owner has a separate empty queue")
+    let afterRelaunch = SavingGoalCreateIntentJournal(directory: dir)
+    require(try afterRelaunch.all(for: ownerID).count == 1,
+            "Atomic queue must survive reconstruction")
+    require(try afterRelaunch.all(for: ownerID)[0].goalID == goalID,
+            "Stable original goal UUID must survive relaunch")
+
+    func expectJournal(
+        _ expected: SavingGoalCreateJournalError,
+        _ operation: () throws -> Void
+    ) {
+        do {
+            try operation()
+            fatalError("Expected journal failure \(expected)")
+        } catch let failure as SavingGoalCreateJournalError {
+            require(failure == expected, "Unexpected journal error \(failure)")
+        } catch {
+            fatalError("Unexpected thrown error \(error)")
+        }
+    }
+
+    let sameIDButChangedPayload = try SavingGoalCreateOnlyRequest(
+        goalID: goalID, ownerID: ownerID, title: "Different target",
+        category: "gadget", customCategory: nil,
+        targetMinorUnits: 31, currencyCode: "USD",
+        startDate: epoch, targetDate: target, rhythm: "weekly",
+        preferredSavingDay: 2, plannedContributionMinorUnits: 10
+    )
+    expectJournal(.idempotencyConflict) {
+        _ = try afterRelaunch.stage(sameIDButChangedPayload, ownerID: ownerID)
+    }
+    expectJournal(.accountChanged) {
+        _ = try afterRelaunch.stage(request, ownerID: foreignOwner)
+    }
+    // A successful INSERT or a 409/timeout is NOT enough to advance this
+    // state; there is intentionally no "mark HTTP success" method.
+    do {
+        _ = try afterRelaunch.recordReadback(
+            nil, goalID: goalID, ownerID: ownerID,
+            authenticatedOwnerID: ownerID
+        )
+        fatalError("Missing readback was considered success")
+    } catch SavingGoalCreateContractError.missingOrInvisible {}
+    require(try afterRelaunch.all(for: ownerID)[0].state == .staged,
+            "Missing readback preserves staged state")
+    expectJournal(.accountChanged) {
+        _ = try afterRelaunch.recordReadback(
+            canonical, goalID: goalID, ownerID: ownerID,
+            authenticatedOwnerID: foreignOwner
+        )
+    }
+    expectJournal(.untrustedReadback) {
+        _ = try afterRelaunch.recordReadback(
+            serverRow(["user_id": foreignOwner.uuidString]),
+            goalID: goalID, ownerID: ownerID,
+            authenticatedOwnerID: ownerID
+        )
+    }
+    require(try afterRelaunch.all(for: ownerID)[0].state == .staged,
+            "Foreign response must not mutate staged request")
+
+    let verified = try afterRelaunch.recordReadback(
+        canonical, goalID: goalID, ownerID: ownerID,
+        authenticatedOwnerID: ownerID
+    )
+    require(verified == .verified, "Matching original row verified")
+    require(try afterRelaunch.recordReadback(
+        canonical, goalID: goalID, ownerID: ownerID,
+        authenticatedOwnerID: ownerID
+    ) == .verified, "Same verified result is idempotent")
+    require(try afterRelaunch.all(for: ownerID)[0].observedRevision == 0,
+            "Verified create preserves revision zero")
+    expectJournal(.invalidTransition) {
+        _ = try afterRelaunch.recordReadback(
+            serverRow(["plan_revision": 2]),
+            goalID: goalID, ownerID: ownerID,
+            authenticatedOwnerID: ownerID
+        )
+    }
+    expectJournal(.invalidTransition) {
+        try afterRelaunch.discardConflictedAfterUserDecision(
+            goalID: goalID, ownerID: ownerID,
+            userConfirmedDiscard: true
+        )
+    }
+    require(try afterRelaunch.all(for: ownerID).count == 1,
+            "Verified entry is NOT erased until future local merge gate")
+
+    let conflictGoal = UUID()
+    let conflictRequest = try SavingGoalCreateOnlyRequest(
+        goalID: conflictGoal, ownerID: ownerID, title: "Trip",
+        category: "trip", customCategory: nil,
+        targetMinorUnits: 100, currencyCode: "USD",
+        startDate: epoch, targetDate: target, rhythm: "flexible",
+        preferredSavingDay: nil, plannedContributionMinorUnits: nil
+    )
+    try afterRelaunch.stage(conflictRequest, ownerID: ownerID)
+    func conflictRow(_ changes: [String: Any] = [:]) throws
+        -> SavingGoalAuthoritativeCloudRow {
+        var json = try JSONSerialization.jsonObject(
+            with: JSONEncoder().encode(conflictRequest)) as! [String: Any]
+        json["user_id"] = ownerID.uuidString
+        json["plan_revision"] = 0
+        for (key, value) in changes { json[key] = value }
+        return try JSONDecoder().decode(
+            SavingGoalAuthoritativeCloudRow.self,
+            from: JSONSerialization.data(withJSONObject: json))
+    }
+    require(try afterRelaunch.recordReadback(
+        conflictRow(["title": "Updated elsewhere", "plan_revision": 1]),
+        goalID: conflictGoal, ownerID: ownerID,
+        authenticatedOwnerID: ownerID
+    ) == .conflicted, "Remote goal change requires user review")
+    require(try afterRelaunch.all(for: ownerID)[1].observedRevision == 1,
+            "Conflict preserves remote revision")
+    expectJournal(.userDecisionRequired) {
+        try afterRelaunch.discardConflictedAfterUserDecision(
+            goalID: conflictGoal, ownerID: ownerID,
+            userConfirmedDiscard: false
+        )
+    }
+    require(try afterRelaunch.all(for: ownerID).count == 2,
+            "Unapproved conflict discard must not delete data")
+    try afterRelaunch.discardConflictedAfterUserDecision(
+        goalID: conflictGoal, ownerID: ownerID, userConfirmedDiscard: true
+    )
+    require(try afterRelaunch.all(for: ownerID).count == 1,
+            "Approved conflict discard keeps unrelated verified intent")
+
+    // Malformed per-owner file never becomes an empty queue or deletes A.
+    let foreignFile = dir.appendingPathComponent(
+        foreignOwner.uuidString.lowercased() + ".json"
+    )
+    try Data("{\"ownerID\":\"invalid\"}".utf8).write(
+        to: foreignFile, options: [.atomic]
+    )
+    expectJournal(.invalidJournal) {
+        _ = try afterRelaunch.all(for: foreignOwner)
+    }
+    require(try afterRelaunch.all(for: ownerID).count == 1,
+            "Corrupted account B is isolated from A")
+    // Duplicate IDs inside a file are rejected on reconstruction.
+    let ownedFile = dir.appendingPathComponent(
+        ownerID.uuidString.lowercased() + ".json"
+    )
+    let repeated = try JSONEncoder().encode([initial, initial])
+    try repeated.write(to: ownedFile, options: [.atomic])
+    expectJournal(.invalidJournal) {
+        _ = try afterRelaunch.all(for: ownerID)
+    }
+    // A tampered owner fails closed, even when a file is named for account A.
+    var forged = try JSONSerialization.jsonObject(
+        with: JSONEncoder().encode([initial])) as! [[String: Any]]
+    forged[0]["ownerID"] = foreignOwner.uuidString
+    try JSONSerialization.data(withJSONObject: forged).write(
+        to: ownedFile, options: [.atomic]
+    )
+    expectJournal(.invalidJournal) {
+        _ = try afterRelaunch.all(for: ownerID)
+    }
+}
+print("PASS: #80 pending first-goal atomic journal, relaunch, conflict, account and corruption gates")
+
 print("PASS: #80 create-only safe insert shape, exact account readback and ambiguity rejection")
 '''
 
