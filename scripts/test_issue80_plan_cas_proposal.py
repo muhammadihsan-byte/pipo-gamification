@@ -82,7 +82,7 @@ class PlanRevisionCASProposalSafety(unittest.TestCase):
         signature = rpc.split(") RETURNS jsonb", 1)[0]
         self.assertNotIn("p_currency", signature)
         update = self.sql.split("UPDATE public.saving_goals", 1)[1].split(
-            "RETURNING * INTO v_goal", 1
+            "WHERE id=v_goal.id", 1
         )[0]
         for forbidden in ("currency_code=", "user_id=", "xp_earned=", "created_at="):
             self.assertNotIn(forbidden, update)
