@@ -760,7 +760,8 @@ enum SavingGoalCreateJournalError: Error, Equatable {
 
 struct PendingSavingGoalCreateIntent: Codable, Equatable, Sendable {
     enum State: String, Codable, Sendable {
-        case staged       // Server response unknown: keep original create UUID.
+        case staged       // Persisted but no INSERT has been attempted.
+        case attempted    // INSERT may have committed; MUST read before retry.
         case verified     // Exact owner/goal/revision-zero readback; local merge pending.
         case conflicted   // Owned goal exists but differs; user decision required.
     }
@@ -836,7 +837,7 @@ struct PendingSavingGoalCreateIntent: Codable, Equatable, Sendable {
               canonical.startDate == startDate, canonical.targetDate == targetDate
         else { throw SavingGoalCreateJournalError.invalidJournal }
         switch state {
-        case .staged:
+        case .staged, .attempted:
             guard observedRevision == nil else {
                 throw SavingGoalCreateJournalError.invalidJournal
             }
@@ -928,6 +929,24 @@ final class SavingGoalCreateIntentJournal {
         return entry
     }
 
+    /// Persist BEFORE the first network INSERT. On timeout or crash, read back
+    /// the original UUID instead of automatically issuing another INSERT.
+    @discardableResult
+    func markInsertAttempted(goalID: UUID, ownerID: UUID)
+        throws -> SavingGoalCreateOnlyRequest {
+        var entries = try all(for: ownerID)
+        guard let index = entries.firstIndex(where: { $0.goalID == goalID }) else {
+            throw SavingGoalCreateJournalError.unknownGoal
+        }
+        guard entries[index].state == .staged else {
+            throw SavingGoalCreateJournalError.invalidTransition
+        }
+        let request = try entries[index].checkedRequest(for: ownerID)
+        entries[index].state = .attempted
+        try persist(entries, for: ownerID)
+        return request
+    }
+
     /// Nil/unauthorized readback never changes state. An owned mismatching
     /// row becomes a CONFLICT rather than a new INSERT or an overwrite.
     /// No state transition performs a network request or changes SwiftData.
@@ -968,7 +987,7 @@ final class SavingGoalCreateIntentJournal {
             next = .conflicted
         }
         let observed = row.planRevision
-        if entries[i].state != .staged {
+        if entries[i].state != .staged && entries[i].state != .attempted {
             guard entries[i].state == next,
                   entries[i].observedRevision == observed else {
                 throw SavingGoalCreateJournalError.invalidTransition
