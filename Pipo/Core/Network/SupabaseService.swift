@@ -2950,7 +2950,7 @@ final class SupabaseService {
                 throw SupabaseServiceError.invalidSavingGoal
             }
             return try SavingGoalCreateOnlyRequest(
-                goalID: request.goalID, ownerID: authenticatedUserID,
+                goalID: goal.id, ownerID: authenticatedUserID,
                 title: goal.title, category: goal.category.rawValue,
                 customCategory: goal.customCategory,
                 targetMinorUnits: minor, currencyCode: goal.effectiveCurrencyCode,
