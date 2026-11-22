@@ -368,7 +368,19 @@ enum SavingGoalCreateSwiftDataCommit {
         guard result == .verified || result == .reconciled else {
             throw SavingGoalCreateJournalError.localNotReady
         }
+        return try finalizePersistedGoal(
+            goalID: goalID, authenticatedOwnerID: authenticatedOwnerID,
+            modelContainer: modelContainer, journal: journal
+        )
+    }
 
+    /// Offline-only native XCTest seam: no network, no mutation. This is
+    /// never called from production and may only finalize a previously
+    /// verified owner-scoped server receipt in the durable create journal.
+    static func finalizePersistedGoal(
+        goalID: UUID, authenticatedOwnerID: UUID,
+        modelContainer: ModelContainer, journal: SavingGoalCreateIntentJournal
+    ) throws -> PendingSavingGoalCreateIntent.State {
         // Read through a new context to prove the original local goal was
         // durably persisted. Do not save, insert, delete, or modify SwiftData
         // while reconciling cloud creation. A wrong owner or duplicate local
@@ -381,8 +393,7 @@ enum SavingGoalCreateSwiftDataCommit {
               goal.ownerUserID == authenticatedOwnerID, !goal.isGroupGoal,
               goal.groupDetails == nil,
               let targetMinor = goal.exactTargetMinor, targetMinor > 0,
-              let recordedMinor = goal.exactRecordedMinor, recordedMinor >= 0,
-              let originalRhythm = SavingRhythm(rawValue: goal.rhythm.rawValue)
+              let recordedMinor = goal.exactRecordedMinor, recordedMinor >= 0
         else { throw SavingGoalCreateJournalError.localNotReady }
 
         // Even malformed or other-owner transactions with the same goal UUID
@@ -400,7 +411,7 @@ enum SavingGoalCreateSwiftDataCommit {
                 targetMinorUnits: targetMinor,
                 currencyCode: goal.effectiveCurrencyCode,
                 startDate: goal.startDate, targetDate: goal.targetDate,
-                rhythm: originalRhythm.rawValue,
+                rhythm: goal.rhythm.rawValue,
                 preferredSavingDay: goal.preferredSavingDay,
                 plannedContributionMinorUnits: goal.plannedContributionOverride.map(Int64.init)
             )
