@@ -33,6 +33,9 @@ jobs:
           PYTHONPATH: scripts
         run: python3 -m unittest -v scripts/test_live_authenticated_qa.py
 
+      - name: Validate Issue 29 staged ledger ACL proposal (static only)
+        run: python3 -m unittest -v scripts/test_issue29_server_acl_proposal.py
+
       - name: Compile isolated QA scripts (syntax only)
         run: |
           python3 -m py_compile \
