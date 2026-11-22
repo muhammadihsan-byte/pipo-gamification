@@ -64,6 +64,8 @@ def bootstrap_local_schema(db_url: str) -> None:
     for filename in (
         "supabase/local_qa/20261120052238_verified_schema_snapshot.sql",
         "supabase/proposals/global_v1_goal_currency_immutable_REVIEW_ONLY.sql",
+        # NEVER installed in production by this script: strictly loopback DB.
+        "supabase/proposals/issue_42_money_out_ledger_REVIEW_ONLY.sql",
     ):
         subprocess.run(
             ["psql", "-X", "-v", "ON_ERROR_STOP=1", "-d", db_url, "-f", filename],
@@ -312,7 +314,7 @@ def main() -> None:
     route = "/rest/v1/saving_transactions?on_conflict=id&select=id,user_id,goal_id,amount,xp_earned"
     pending_body = {
         "id": pending_id, "goal_id": a_goal, "amount": "0.02",
-        "xp_earned": 7,
+        "xp_earned": 7, "date": "2026-11-22T01:00:00+00:00",
     }
     try:
         api("http://127.0.0.1:1", anon, route,
@@ -355,6 +357,27 @@ def main() -> None:
             "Two online retries duplicated or changed the saved contribution/XP")
     require(api(base, anon, read_pending, bearer=b_token) == (200, []),
             "Pending/replayed Alice saving leaked to Bob")
+
+    # Exercise the proposal over real local signed-in JWT + PostgREST.
+    expect_error(
+        api(base, anon, "/rest/v1/saving_transactions?id=eq." + pending_id,
+            method="PATCH", bearer=a_token, body={"amount": "9.99"}),
+        "23514", "Account owner could rewrite saved contribution amount",
+    )
+    expect_error(
+        api(base, anon, "/rest/v1/saving_transactions?id=eq." + pending_id,
+            method="PATCH", bearer=a_token, body={"xp_earned": 999}),
+        "23514", "Account owner could rewrite previously awarded XP",
+    )
+    expect_error(
+        api(base, anon, "/rest/v1/saving_transactions?id=eq." + pending_id,
+            method="DELETE", bearer=a_token),
+        "42501", "Account owner could delete saved transaction history",
+    )
+    require(api(base, anon, read_pending, bearer=a_token) == after,
+            "Rejected tampering changed persisted history")
+    print("PASS proposed immutable-history guard: amount, XP, DELETE denied")
+
     print("PASS local Auth REST offline failure -> retry -> ambiguous response retry: "
           "one saving UUID, exact cents and XP, no owner leak")
 

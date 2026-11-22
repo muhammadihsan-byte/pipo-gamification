@@ -7,6 +7,7 @@ on:
       - "supabase/local_qa/**"
       - "scripts/local_authenticated_global_v1_qa.py"
       - "supabase/proposals/global_v1_goal_currency_immutable_REVIEW_ONLY.sql"
+      - "supabase/proposals/issue_42_money_out_ledger_REVIEW_ONLY.sql"
       - ".github/workflows/global-v1-local-postgres.yml"
   workflow_dispatch:
 
@@ -72,13 +73,25 @@ jobs:
           set -euo pipefail
           psql -X -v ON_ERROR_STOP=1 -f supabase/local_qa/test_global_v1_currency_rls.sql
 
+      - name: Apply Issue 42 contribution history guard to disposable PostgreSQL ONLY
+        shell: bash
+        run: |
+          set -euo pipefail
+          psql -X -v ON_ERROR_STOP=1 -f supabase/proposals/issue_42_money_out_ledger_REVIEW_ONLY.sql
+
+      - name: Reject contribution tampering and allow only identical UUID replay
+        shell: bash
+        run: |
+          set -euo pipefail
+          psql -X -v ON_ERROR_STOP=1 -f supabase/local_qa/test_issue42_immutable_history.sql
+
       - name: Explicitly report test scope
         if: always()
         shell: bash
         run: |
           echo "LOCAL QA: disposable postgres:17 service on an ephemeral GitHub Linux runner."
           echo "NO Supabase project, database branch, production Auth users, secrets, or billing change."
-          echo "Verified by SQL: deployed initial schema mirror, currency trigger, RLS policy semantics, composite FK."
+          echo "Verified by SQL: initial schema, currency trigger, RLS, composite FK, and REVIEW-ONLY contribution guard."
           echo "NOT VERIFIED: real Auth JWT signing / PostgREST request routing / live Supabase 2-user roundtrip."
 
   local-auth-postgrest:
