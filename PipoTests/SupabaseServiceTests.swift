@@ -215,6 +215,84 @@ final class SupabaseServiceTests: XCTestCase {
         ))
     }
 
+
+    @MainActor
+    func testIssue29SyncBatchRejectsReusedEventUUIDWithinSameGoal() throws {
+        let owner = UUID()
+        let start = Date(timeIntervalSince1970: 1_700_000_000)
+        let goal = PersonalGoal(
+            title: "Laptop", category: .gadget, targetAmount: 500_000,
+            startDate: start, targetDate: start.addingTimeInterval(86400 * 30),
+            ownerUserID: owner
+        )
+        let sharedEventID = UUID()
+        let original = SavingTransaction(
+            id: sharedEventID, goalId: goal.id, amount: 50_000,
+            xpEarned: 300, date: start, userID: owner
+        )
+        let replayWithDifferentAmountAndXP = SavingTransaction(
+            id: sharedEventID, goalId: goal.id, amount: 99_000,
+            xpEarned: 999, date: start.addingTimeInterval(86400), userID: owner
+        )
+        XCTAssertThrowsError(
+            try SavingTransactionPayload.makeBatch(
+                from: [original, replayWithDifferentAmountAndXP],
+                authenticatedUserID: owner
+            )
+        )
+        XCTAssertThrowsError(
+            try PersonalSavingSyncBatch.make(
+                goals: [goal], transactions: [original, replayWithDifferentAmountAndXP],
+                authenticatedUserID: owner
+            )
+        )
+        let valid = try PersonalSavingSyncBatch.make(
+            goals: [goal], transactions: [original], authenticatedUserID: owner
+        )
+        XCTAssertEqual(valid.transactions.map(\.id), [sharedEventID])
+        XCTAssertEqual(valid.transactions.map(\.xpEarned), [300])
+    }
+
+    @MainActor
+    func testIssue29SyncBatchRejectsReusedEventUUIDAcrossTwoOwnedGoals() throws {
+        let owner = UUID()
+        let start = Date(timeIntervalSince1970: 1_700_000_000)
+        let goalA = PersonalGoal(
+            title: "Vacation", category: .trip, targetAmount: 100_000,
+            startDate: start, targetDate: start.addingTimeInterval(86400 * 20),
+            ownerUserID: owner
+        )
+        let goalB = PersonalGoal(
+            title: "Phone", category: .gadget, targetAmount: 100_000,
+            startDate: start, targetDate: start.addingTimeInterval(86400 * 20),
+            ownerUserID: owner
+        )
+        let repeatedID = UUID()
+        let transactionA = SavingTransaction(
+            id: repeatedID, goalId: goalA.id, amount: 20_000,
+            date: start, userID: owner
+        )
+        let transactionB = SavingTransaction(
+            id: repeatedID, goalId: goalB.id, amount: 30_000,
+            date: start.addingTimeInterval(86400), userID: owner
+        )
+        XCTAssertThrowsError(
+            try PersonalSavingSyncBatch.make(
+                goals: [goalA, goalB], transactions: [transactionA, transactionB],
+                authenticatedUserID: owner
+            )
+        )
+        let unambiguousB = SavingTransaction(
+            goalId: goalB.id, amount: 30_000,
+            date: start.addingTimeInterval(86400), userID: owner
+        )
+        let valid = try PersonalSavingSyncBatch.make(
+            goals: [goalA, goalB], transactions: [transactionA, unambiguousB],
+            authenticatedUserID: owner
+        )
+        XCTAssertEqual(Set(valid.transactions.map(\.id)).count, 2)
+    }
+
     func testGroupProgressPayloadUsesStableRealtimeFieldNames() throws {
         let update = GroupGoalProgressUpdate(
             goalID: UUID(),
