@@ -302,6 +302,44 @@ final class PipoUIRecordingTests: XCTestCase {
         attachOnboardingScreen("Dashboard B — confirmed saving milestone")
     }
 
+    /// #18: Exercise both Dashboard B metric cards at an iOS accessibility
+    /// text category. This is a simulator layout/accessibility-tree proxy,
+    /// not a substitute for VoiceOver focus order or physical-device review.
+    func testDashboardMetricCardsAtAccessibilityTextSize() {
+        continueAfterFailure = false
+        app.launchArguments = [
+            "-pipo-dashboard-qa",
+            "-UIPreferredContentSizeCategoryName",
+            "UICTContentSizeCategoryAccessibilityM"
+        ]
+        app.launch()
+
+        let rhythm = app.buttons["pipo.dashboard.rhythm"].firstMatch
+        let achievements = app.buttons["pipo.dashboard.achievements"].firstMatch
+        XCTAssertTrue(rhythm.waitForExistence(timeout: 25),
+                      "Rhythm metric card must remain reachable at large text")
+        XCTAssertTrue(achievements.waitForExistence(timeout: 10),
+                      "Achievement metric card must remain reachable at large text")
+
+        bringIntoView(rhythm)
+        XCTAssertTrue(rhythm.isHittable,
+                      "The rhythm metric must remain a usable action")
+        XCTAssertTrue(achievements.isHittable,
+                      "The achievements metric must remain a usable action")
+        XCTAssertTrue(rhythm.label.lowercased().contains("rhythm") ||
+                      rhythm.label.lowercased().contains("pace"),
+                      "Rhythm metric must expose a meaningful label")
+        XCTAssertTrue(achievements.label.lowercased().contains("badges"),
+                      "Achievement metric must announce the complete badge count")
+
+        let window = app.windows.firstMatch
+        XCTAssertLessThanOrEqual(rhythm.frame.maxX, window.frame.maxX + 1,
+                                "Rhythm card extends beyond the screen width")
+        XCTAssertLessThanOrEqual(achievements.frame.maxX, window.frame.maxX + 1,
+                                "Achievement card extends beyond the screen width")
+        attachOnboardingScreen("Issue 18 — Dashboard B metrics at accessibility text size")
+    }
+
     /// #18 Dashboard B: goal rows announce their state, progress and recorded
     /// amount as one action, instead of relying on a context-menu long press.
     func testDashboardGoalRowsHaveAccountSafeAccessibilitySummary() {
