@@ -19,6 +19,7 @@ Issue: https://github.com/muhammadihsan-byte/pipo-gamification/issues/80
 5. An exact retry of the same request UUID, goal, expected revision and canonical payload returns the original receipt, even if newer revisions exist. Reusing UUID with different content raises SQLSTATE 23505. Timestamp equality in request receipts uses epoch seconds, independent of client/PostgreSQL display time zone.
 6. At the SAME staged cutover, remove ordinary authenticated UPDATE on saving_goals and the old UPDATE policy. Otherwise a modified client could bypass CAS. Old goal-first UPSERT will fail; this is an intentional hold gate, not a production-ready rollout.
 7. Maintain the immutable goal currency trigger and account-owned read/insert. Do not change the Auth-admin deletion cascades.
+8. CRITICAL #42 compatibility discovered by disposable PostgreSQL QA: the preexisting contribution INSERT trigger uses a SECURITY INVOKER SELECT FOR UPDATE goal lock; revoking goal UPDATE breaks saving inserts. The proposed stage cutover therefore replaces the existing guard with a tightly restricted SECURITY DEFINER trigger, explicitly checks the authenticated contribution owner, preserves the original immutable-event comparison, and takes the same owner-goal row lock used by CAS and Money Out. This is a HIGH-RISK privileged-function review point: independently verify trigger execution, privileges, RLS, deposits under load and account deletion before production. Do not restore direct UPDATE grants to solve it.
 
 ## RPC contract
 
