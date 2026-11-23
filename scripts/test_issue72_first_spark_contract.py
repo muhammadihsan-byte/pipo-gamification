@@ -53,7 +53,7 @@ class FirstSparkOfflineContract(unittest.TestCase):
         self.assertIn('Image("PipoV4Neutral")', MOTION)
         self.assertIn("Task.sleep(nanoseconds:", MOTION)
         # Sum of nonzero keyframe delay positions, not proof of real fps.
-        delays = re.findall(r"\(\d, (\d{2,}_\d+),", MOTION)
+        delays = re.findall(r"\(\d, (\d[\d_]+),", MOTION)
         self.assertEqual(sum(int(x.replace("_", "")) for x in delays), 780_000_000)
 
     def test_native_regressions_are_authored_but_not_claimed_executed(self):
