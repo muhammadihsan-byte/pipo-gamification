@@ -841,6 +841,7 @@ struct PipoJourneyWaveAView: View {
     let onOpenRecord: (SavingTransaction) -> Void
 
     @Environment(\.calendar) private var calendar
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
     @State private var showingFullTimeline = false
     @State private var selectedPeriod: PipoJourneyPeriod = .month
 
@@ -907,6 +908,36 @@ struct PipoJourneyWaveAView: View {
         }
     }
 
+    private func monthCountSummary(_ count: Int, vertical: Bool) -> some View {
+        let label = VStack(alignment: .leading, spacing: 5) {
+            Text(count == 1 ? "save this month" : "saves this month")
+                .font(.headline.bold())
+                .foregroundStyle(PipoTheme.ink)
+            Text("Your recorded steps, at your own pace.")
+                .font(.caption)
+                .foregroundStyle(PipoTheme.muted)
+                .fixedSize(horizontal: false, vertical: true)
+        }
+        let number = Text("\(count)")
+            .font(.system(.largeTitle, design: .rounded, weight: .bold))
+            .foregroundStyle(PipoTheme.ink)
+            .monospacedDigit()
+            .accessibilityIdentifier("pipo.journey.monthCount")
+        return Group {
+            if vertical || dynamicTypeSize.isAccessibilitySize {
+                VStack(alignment: .leading, spacing: 8) {
+                    number
+                    label
+                }
+            } else {
+                HStack(alignment: .center, spacing: 15) {
+                    number.fixedSize(horizontal: true, vertical: false)
+                    label
+                }
+            }
+        }
+    }
+
     private var journeyOverview: some View {
         VStack(alignment: .leading, spacing: 18) {
             let monthly = PipoJourneyProjection.entries(
@@ -923,20 +954,9 @@ struct PipoJourneyWaveAView: View {
                             .foregroundStyle(PipoTheme.muted)
                     }
                     .font(.caption2.bold())
-                    HStack(alignment: .center, spacing: 15) {
-                        Text("\(monthly.count)")
-                            .font(.system(size: 52, weight: .bold, design: .rounded))
-                            .foregroundStyle(PipoTheme.ink)
-                            .monospacedDigit()
-                            .accessibilityIdentifier("pipo.journey.monthCount")
-                        VStack(alignment: .leading, spacing: 5) {
-                            Text(monthly.count == 1 ? "save this month" : "saves this month")
-                                .font(.headline.bold())
-                                .foregroundStyle(PipoTheme.ink)
-                            Text("Your recorded steps, at your own pace.")
-                                .font(.caption)
-                                .foregroundStyle(PipoTheme.muted)
-                        }
+                    ViewThatFits(in: .horizontal) {
+                        monthCountSummary(monthly.count, vertical: false)
+                        monthCountSummary(monthly.count, vertical: true)
                     }
                     let totals = PipoJourneyProjection.exactTotals(monthly)
                     if totals.count == 1, let first = totals.first {
@@ -1030,7 +1050,7 @@ struct PipoJourneyWaveAView: View {
 
     private var fullTimeline: some View {
         VStack(alignment: .leading, spacing: 18) {
-            HStack(spacing: 8) {
+            VStack(alignment: .leading, spacing: 8) {
                 ForEach(PipoJourneyPeriod.allCases) { period in
                     Button {
                         selectedPeriod = period
