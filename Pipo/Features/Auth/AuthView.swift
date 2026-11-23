@@ -18,6 +18,7 @@ struct AuthView: View {
     @State private var password = ""
     @State private var isPasswordVisible = false
     @State private var validationMessage: String?
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
 
     private let onSubmit: (AuthCredentials) -> Void
     private let onAppleSignIn: () -> Void
@@ -63,19 +64,26 @@ struct AuthView: View {
             brandHeader
             Spacer(minLength: 22)
             PipoMascotView(companion: .idle)
-                .frame(height: 290)
+                .frame(height: geometrySafeHeroHeight)
                 .frame(maxWidth: .infinity)
+                .overlay(alignment: .topTrailing) {
+                    authSpeechBubble("Ready for a little win?")
+                        .padding(.top, 8)
+                }
+                .accessibilityElement(children: .ignore)
+                .accessibilityLabel("Pipo is cheering you on")
             Text("SMALL STEPS. BIG DREAMS.")
                 .font(.caption2.weight(.heavy))
                 .foregroundStyle(PipoTheme.cardAccentReadable)
                 .padding(.top, 18)
-            Text("Saving can be\nfun, actually.")
-                .font(.system(size: 36, weight: .heavy, design: .rounded))
+            Text("Saving can be fun, actually.")
+                .font(.system(.largeTitle, design: .rounded, weight: .heavy))
                 .multilineTextAlignment(.center)
                 .foregroundStyle(PipoTheme.cardInk)
                 .fixedSize(horizontal: false, vertical: true)
+                .frame(maxWidth: 325)
                 .padding(.top, 10)
-            Text("Meet Pipo. Your tiny cheerleader\nfor the goals that matter.")
+            Text("Meet Pipo. Your tiny cheerleader for the goals that matter.")
                 .font(.subheadline)
                 .multilineTextAlignment(.center)
                 .foregroundStyle(PipoTheme.cardMuted)
@@ -83,7 +91,7 @@ struct AuthView: View {
                 .padding(.top, 10)
             Spacer(minLength: 28)
             Button("Get started") { open(.signUp) }
-                .buttonStyle(PrimaryActionButtonStyle())
+                .buttonStyle(AuthPrimaryButtonStyle())
                 .accessibilityIdentifier("pipo.auth.getStarted")
             Button("I already have an account") { open(.signIn) }
                 .buttonStyle(AuthOutlineButtonStyle())
@@ -133,11 +141,17 @@ struct AuthView: View {
                 brandName
             }
             PipoMascotView(companion: .reassurance)
-                .frame(height: 180)
+                .frame(height: dynamicTypeSize.isAccessibilitySize ? 136 : 160)
                 .frame(maxWidth: .infinity)
+                .overlay(alignment: .topTrailing) {
+                    authSpeechBubble(page == .signUp ? "I've got your back!" : "Missed you!")
+                }
+                .accessibilityElement(children: .ignore)
+                .accessibilityLabel(page == .signUp
+                    ? "Pipo is here to help you join" : "Pipo welcomes you back")
                 .padding(.top, 8)
             Text(page == .signUp ? "Let's get started!" : "You're back!")
-                .font(.system(size: 30, weight: .heavy, design: .rounded))
+                .font(.system(.title, design: .rounded, weight: .heavy))
                 .foregroundStyle(PipoTheme.cardInk)
                 .padding(.top, 16)
             Text(page == .signUp
@@ -152,11 +166,11 @@ struct AuthView: View {
                 .font(.subheadline)
                 .foregroundStyle(PipoTheme.cardMuted)
                 .fixedSize(horizontal: false, vertical: true)
-                .padding(.top, 20)
+                .padding(.top, dynamicTypeSize.isAccessibilitySize ? 12 : 16)
             credentialsForm
-                .padding(.top, 24)
+                .padding(.top, dynamicTypeSize.isAccessibilitySize ? 12 : 18)
             submitButton
-                .padding(.top, 22)
+                .padding(.top, 18)
             if AuthProviderAvailability.socialSignInEnabled {
                 providerDivider.padding(.top, 22)
                 providerButtons.padding(.top, 18)
@@ -180,11 +194,31 @@ struct AuthView: View {
                 .font(.caption)
                 .foregroundStyle(PipoTheme.cardMuted)
                 .frame(maxWidth: .infinity)
-                .padding(.top, 25)
+                .padding(.top, 20)
         }
         .padding(.horizontal, 24)
         .padding(.top, 12)
         .padding(.bottom, 28)
+    }
+
+    private var geometrySafeHeroHeight: CGFloat {
+        dynamicTypeSize.isAccessibilitySize ? 225 : 290
+    }
+
+    private func authSpeechBubble(_ text: String) -> some View {
+        Text(text)
+            .font(.caption.weight(.semibold))
+            .foregroundStyle(PipoTheme.cardAccentReadable)
+            .multilineTextAlignment(.center)
+            .padding(.horizontal, 12)
+            .padding(.vertical, 12)
+            .background(.white, in: RoundedRectangle(cornerRadius: 15))
+            .overlay {
+                RoundedRectangle(cornerRadius: 15)
+                    .strokeBorder(PipoTheme.palePink, lineWidth: 1)
+            }
+            .fixedSize(horizontal: false, vertical: true)
+            .frame(maxWidth: 152)
     }
 
     private func open(_ destination: Page) {
@@ -252,7 +286,9 @@ struct AuthView: View {
                             .foregroundStyle(PipoTheme.muted)
                     }
                     .buttonStyle(.plain)
+                    .frame(minWidth: 44, minHeight: 44)
                     .accessibilityLabel(isPasswordVisible ? "Hide password" : "Show password")
+                    .accessibilityIdentifier("pipo.auth.passwordVisibility")
                 }
                 .authFieldStyle()
             }
@@ -284,7 +320,8 @@ struct AuthView: View {
         } label: {
             Text(page == .signUp ? "Create account" : "Sign in")
         }
-        .buttonStyle(PrimaryActionButtonStyle())
+        .buttonStyle(AuthPrimaryButtonStyle())
+        .accessibilityIdentifier("pipo.auth.submit")
     }
 
     private var providerDivider: some View {
@@ -322,6 +359,22 @@ struct AuthView: View {
             }
             .buttonStyle(ProviderButtonStyle())
         }
+    }
+}
+
+/// Match the approved pink CTA while preserving legible text at AA contrast.
+@MainActor
+private struct AuthPrimaryButtonStyle: ButtonStyle {
+    func makeBody(configuration: Configuration) -> some View {
+        configuration.label
+            .font(.headline.weight(.bold))
+            .foregroundStyle(PipoTheme.cardInk)
+            .frame(maxWidth: .infinity, minHeight: 54)
+            .padding(.horizontal, 12)
+            .background(
+                configuration.isPressed ? PipoTheme.palePink : PipoTheme.pink,
+                in: RoundedRectangle(cornerRadius: 17)
+            )
     }
 }
 
@@ -365,7 +418,8 @@ private struct ProviderButtonStyle: ButtonStyle {
 private extension View {
     func authFieldStyle() -> some View {
         padding(.horizontal, 14)
-            .frame(height: 48)
+            .frame(minHeight: 52)
+            .padding(.vertical, 4)
             .background(PipoTheme.cream, in: RoundedRectangle(cornerRadius: 13))
             .overlay {
                 RoundedRectangle(cornerRadius: 13)
