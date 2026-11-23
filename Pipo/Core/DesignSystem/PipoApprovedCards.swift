@@ -137,6 +137,7 @@ struct PipoGoalProgressBCard: View {
                         }
                     }
                 }
+                .accessibilityElement(children: .contain)
                 .accessibilityIdentifier("pipo.card.goalProgressB")
             }
         }
@@ -187,6 +188,7 @@ struct PipoMilestonesDCard: View {
                     .accessibilityIdentifier("pipo.dashboard.journey.achievements")
             }
         }
+        .accessibilityElement(children: .contain)
         .accessibilityIdentifier("pipo.card.milestonesD")
     }
 }
@@ -575,6 +577,7 @@ struct PipoCompletionBCard: View {
                             .accessibilityHidden(true)
                     }
                 }
+                .accessibilityElement(children: .contain)
                 .accessibilityIdentifier("pipo.card.completionB")
             }
         }
@@ -605,6 +608,7 @@ struct PipoEmptyStateBCard: View {
                 .buttonStyle(PrimaryActionButtonStyle())
                 .accessibilityIdentifier("pipo.card.empty.create")
         }
+        .accessibilityElement(children: .contain)
         .accessibilityIdentifier("pipo.card.emptyStateB")
     }
 }
