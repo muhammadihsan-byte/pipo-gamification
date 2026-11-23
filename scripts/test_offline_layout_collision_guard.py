@@ -93,17 +93,24 @@ class OfflineLayoutCollisionContract(unittest.TestCase):
         self.assertIn("scroll.swipeDown()", UI_TEST)
 
 
-    def test_one_native_visual_batch_requires_explicit_owner_authorization(self):
+    def test_native_visual_batch_requires_manual_dispatch_not_labels(self):
         self.assertIn("          - visual-layout-qa", IOS_CI)
         self.assertIn("id: visual_layout", IOS_CI)
         self.assertIn(
-            "(github.event_name == 'workflow_dispatch' && inputs.validation_mode == 'visual-layout-qa')",
+            "github.event_name == 'workflow_dispatch' && inputs.validation_mode == 'visual-layout-qa'",
             IOS_CI
         )
-        self.assertIn("github.event.label.name == 'bug'", IOS_CI)
-        self.assertIn("github.event.pull_request.number == 101", IOS_CI)
-        self.assertIn("github.head_ref == 'fix/pipo-offline-visual-layout-20261123'", IOS_CI)
-        self.assertIn("EXACT_NATIVE_QA_HEAD=$EXPECTED_SHA", IOS_CI)
+        self.assertNotIn("github.event.label.name == 'bug'", IOS_CI)
+        self.assertNotIn("github.event.action == 'labeled'", IOS_CI)
+        self.assertNotIn("github.event.pull_request.number == 101", IOS_CI)
+        self.assertNotIn("EXACT_NATIVE_QA_HEAD=$EXPECTED_SHA", IOS_CI)
+        header = IOS_CI.split("  workflow_dispatch:", 1)[0]
+        self.assertNotIn("      - labeled", header)
+        job_gate = IOS_CI.split("  build-and-test:", 1)[1].split("    runs-on: macos-15", 1)[0]
+        self.assertIn("(github.event_name == 'pull_request' && github.event.pull_request.draft == false)", job_gate)
+        self.assertNotIn("github.event.label", job_gate)
+        legacy_gate = IOS_CI.split("  issue80-integrated-qa:", 1)[1].split("    runs-on: macos-15", 1)[0]
+        self.assertIn("false # Owner-paused:", legacy_gate)
         # The focused native suite is ready to run later, NOT executed by
         # this Linux static assertion or Draft PR CI.
         for method in (
