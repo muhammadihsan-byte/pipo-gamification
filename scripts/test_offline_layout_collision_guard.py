@@ -36,6 +36,28 @@ class OfflineLayoutCollisionContract(unittest.TestCase):
         self.assertIn("github.event.pull_request.draft == false", IOS_CI)
         self.assertIn("id: visual_layout", IOS_CI)
 
+    def test_ax3_manage_plan_preserves_semantics_with_compact_typography(self):
+        self.assertIn("if step == .overview && dynamicTypeSize.isAccessibilitySize", MANAGE)
+        self.assertIn('.accessibilityLabel("Goal: " + original.title)', MANAGE)
+        self.assertIn('Text("What do you want to adjust?")', MANAGE)
+        self.assertIn("? .title3.bold() : .title2.bold()", MANAGE)
+        self.assertIn('Text(dynamicTypeSize.isAccessibilitySize && value == "ALREADY RECORDED"', MANAGE)
+        self.assertIn('Text(step == .overview && dynamicTypeSize.isAccessibilitySize', MANAGE)
+        self.assertIn('? "Choose an edit" : actionLabel)', MANAGE)
+        self.assertIn(".accessibilityLabel(actionLabel)", MANAGE)
+        self.assertIn(".lineLimit(step == .overview ? 1 : nil)", MANAGE)
+
+    def test_group_and_personal_primary_ctas_share_approved_pink(self):
+        # Approved GROUP/03 Figma CTA uses bright #FF6584 plus raised edge.
+        # White text on that surface would be below 4.5:1, so use ink.
+        self.assertIn("shape.fill(PersonalPlanStyle.pink.opacity(", PLAN)
+        self.assertIn(
+            ".foregroundStyle(dimmed ? PersonalPlanStyle.muted : PersonalPlanStyle.ink)",
+            PLAN
+        )
+        self.assertIn("shape.fill(PersonalPlanStyle.berry)", PLAN)
+        self.assertNotIn("PersonalPlanStyle.buttonEdge.opacity(", PLAN)
+
     def test_manage_plan_footer_is_bounded_by_compact_viewport(self):
         part = MANAGE.split("struct PipoManagePlanV2Sheet: View {", 1)[1]
         body = part.split("    private var topBar:", 1)[0]
