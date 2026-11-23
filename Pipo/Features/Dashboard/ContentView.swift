@@ -292,6 +292,7 @@ struct DashboardView: View {
                 .foregroundStyle(PipoTheme.ink)
                 .padding(12)
                 .background(PipoTheme.palePink, in: RoundedRectangle(cornerRadius: 12))
+                .accessibilityElement(children: .contain)
                 .accessibilityIdentifier("pipo.dashboard.mascotReply")
             }
         }
