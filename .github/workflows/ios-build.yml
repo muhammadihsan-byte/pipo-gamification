@@ -386,13 +386,7 @@ jobs:
       - name: Pipo cross-screen visual layout — manual simulator QA + MP4
         id: visual_layout
         if: >-
-          (github.event_name == 'workflow_dispatch' && inputs.validation_mode == 'visual-layout-qa') ||
-          (github.event_name == 'pull_request' &&
-           github.event.action == 'labeled' &&
-           github.event.label.name == 'bug' &&
-           github.event.pull_request.number == 101 &&
-           github.event.pull_request.draft == true &&
-           github.head_ref == 'fix/pipo-offline-visual-layout-20261123')
+          github.event_name == 'workflow_dispatch' && inputs.validation_mode == 'visual-layout-qa'
         shell: bash
         run: |
           set -euo pipefail
@@ -710,12 +704,7 @@ jobs:
   issue80-integrated-qa:
     name: "Issue #80: controlled native QA (draft #83 only)"
     if: >-
-      github.event_name == 'pull_request' &&
-      github.event.action == 'labeled' &&
-      (github.event.label.name == 'enhancement' || github.event.label.name == 'bug') &&
-      github.event.pull_request.number == 83 &&
-      github.event.pull_request.draft == true &&
-      github.event.pull_request.head.ref == 'integration/issue80-79-81-82-linux-qa'
+      false # Owner-paused: legacy label-triggered paid macOS QA is disabled
     runs-on: macos-15
     timeout-minutes: 45
     steps:
