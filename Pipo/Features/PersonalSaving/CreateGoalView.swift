@@ -85,11 +85,13 @@ struct CreateGoalView: View {
     private let onBack: () -> Void
     private let onCreated: (UUID) -> Void
     private let onLater: (UUID) -> Void
+    private let onRecordFirst: (UUID) -> Void
 
     init(
         onBack: @escaping () -> Void,
         onCreated: @escaping (UUID) -> Void = { _ in },
         onLater: ((UUID) -> Void)? = nil,
+        onRecordFirst: ((UUID) -> Void)? = nil,
         initialTitle: String = "",
         initialCategory: GoalCategory = .gadget,
         initialRhythm: SavingRhythm = .monthly
@@ -101,6 +103,7 @@ struct CreateGoalView: View {
         self.onBack = onBack
         self.onCreated = onCreated
         self.onLater = onLater ?? onCreated
+        self.onRecordFirst = onRecordFirst ?? onCreated
         _title = State(initialValue: initialTitle)
         _category = State(initialValue: initialCategory)
         _rhythm = State(initialValue: initialRhythm)
@@ -113,7 +116,8 @@ struct CreateGoalView: View {
     var body: some View {
         if step == .review, let plan {
             ReviewPlanView(plan: plan, onBack: goBack, onEdit: edit,
-                           onCreated: onCreated, onLater: onLater)
+                           onCreated: onCreated, onLater: onLater,
+                           onRecordFirst: onRecordFirst)
         } else {
             editPage
         }
