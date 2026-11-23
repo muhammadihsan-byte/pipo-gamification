@@ -33,6 +33,99 @@ final class PipoUIRecordingTests: XCTestCase {
         XCTAssertTrue(app.staticTexts["Pipo QA Personal Trip"].waitForExistence(timeout: 20))
     }
 
+    /// #93 approved Journey Wave A: on-device zero states, real recorded
+    /// history, month/all-time navigation, record detail and badge collection.
+    /// Only synthetic Debug Auth + an isolated on-disk SwiftData account are used.
+    func testJourneyWaveAEmptyStatesAndRealHistory() {
+        continueAfterFailure = false
+        app.launchArguments = ["-pipo-global-currency-qa", "-pipo-global-currency-qa-reset"]
+        app.launch()
+
+        tapButton("pipo.dashboard.tab.journey")
+        XCTAssertTrue(app.buttons["pipo.journey.createGoal"].waitForExistence(timeout: 20))
+        XCTAssertTrue(app.staticTexts["Start small."].exists)
+        attachOnboardingScreen("Journey A 01 — approved no-goals state")
+        tapButton("pipo.journey.createGoal")
+
+        tapButton("Personal saving")
+        typeText("Goal name", value: "Journey QA Holiday")
+        tapButton("Continue")
+        tapButton("pipo.goal.currency.choose")
+        let search = app.textFields["pipo.goal.currency.search"].firstMatch
+        XCTAssertTrue(search.waitForExistence(timeout: 15))
+        search.tap()
+        search.typeText("IDR")
+        tapButton("pipo.goal.currency.IDR")
+        typeText("pipo.goal.currency.amount", value: "5000000")
+        tapButton("Continue")
+        interactWithCalendar()
+        tapButton("Continue")
+        tapButton("Continue")
+        XCTAssertTrue(app.staticTexts["Review your saving plan"].waitForExistence(timeout: 15))
+        tapButton("Start saving plan")
+        tapButton("pipo.firstSave.later")
+
+        tapButton("pipo.dashboard.tab.journey")
+        XCTAssertTrue(app.buttons["pipo.journey.viewGoal"].waitForExistence(timeout: 20),
+            "An owned goal with zero saving records needs its own working CTA")
+        XCTAssertTrue(app.staticTexts["Your first save."].exists)
+        XCTAssertFalse(app.buttons["pipo.journey.seeAll"].exists)
+        attachOnboardingScreen("Journey A 05 — real owned goal with zero records")
+
+        tapButton("pipo.dashboard.tab.home")
+        tapButton("pipo.dashboard.recordSaving")
+        typeText("Amount in IDR", value: "250000")
+        tapButton("Save")
+        XCTAssertTrue(app.staticTexts["pipo.firstSave.badge"].waitForExistence(timeout: 20))
+        // Actual process relaunch proves stored SwiftData, not an in-memory mock.
+        app.terminate()
+        app.launchArguments = ["-pipo-global-currency-qa"]
+        app.launch()
+
+        tapButton("pipo.dashboard.tab.journey")
+        XCTAssertTrue(app.staticTexts["pipo.journey.monthCount"].waitForExistence(timeout: 20))
+        XCTAssertTrue(app.buttons["pipo.journey.seeAll"].exists,
+            "A real saved record must be present in Journey")
+        XCTAssertTrue(app.staticTexts["pipo.journey.manualDisclosure"].exists)
+        attachOnboardingScreen("Journey A 01 — real monthly story and saving timeline")
+
+        tapButton("pipo.journey.seeAll")
+        XCTAssertTrue(app.buttons["pipo.journey.filter.allTime"].waitForExistence(timeout: 12))
+        attachOnboardingScreen("Journey A 09 — real all-time timeline")
+        tapButton("pipo.journey.filter.month")
+        attachOnboardingScreen("Journey A 02 — local calendar month filter")
+
+        // SwiftUI exposes the identified accessible record row as an Other
+        // wrapping the tappable Button on iOS 18.5. Match by stable identifier
+        // across element types rather than assuming the AX role is Button.
+        let record = app.descendants(matching: .any).matching(
+            NSPredicate(format: "identifier BEGINSWITH %@", "pipo.journey.record.")
+        ).firstMatch
+        XCTAssertTrue(record.waitForExistence(timeout: 15))
+        bringIntoView(record)
+        record.tap()
+        XCTAssertTrue(app.staticTexts["pipo.journey.recordDetail.amount"]
+            .waitForExistence(timeout: 15),
+            "Each real saved event must open its own read-only detail")
+        attachOnboardingScreen("Journey A — saved record detail, no financial mutation")
+        tapButton("pipo.journey.recordDetail.done")
+        tapButton("pipo.journey.back")
+        tapButton("pipo.journey.openAchievements")
+        XCTAssertTrue(app.staticTexts["pipo.achievements.count"].waitForExistence(timeout: 15))
+        let nextMilestone = app.descendants(matching: .any).matching(
+            identifier: "pipo.achievements.nextMilestone"
+        ).firstMatch
+        XCTAssertTrue(nextMilestone.waitForExistence(timeout: 12))
+        let achievementScroll = app.scrollViews.containing(.any,
+            identifier: "pipo.achievements.nextMilestone").firstMatch
+        assertScrollableElementClearsBottomEdge(nextMilestone,
+            scroll: achievementScroll,
+            bottomBoundary: achievementScroll.frame.maxY,
+            description: "Achievements next milestone",
+            isButton: false)
+        attachOnboardingScreen("Journey A 03 — real earned and locked badge collection")
+    }
+
     /// Global V1 Option B: currency selection belongs to Create Goal and
     /// clears any amount entered under a different code. No network or live user.
     func testGlobalExperienceUSDGoalCurrencySelectionAndReopen() {
@@ -368,7 +461,8 @@ final class PipoUIRecordingTests: XCTestCase {
         XCTAssertTrue(focusButton.label.contains("personal saving goal"), focusButton.label)
         XCTAssertTrue(focusButton.label.contains("recorded"), focusButton.label)
         XCTAssertTrue(focusButton.label.contains("percent complete"), focusButton.label)
-        XCTAssertTrue(focusButton.label.contains("active"), focusButton.label)
+        // Lifecycle state is read aloud as “In progress”, not the obsolete “active”.
+        XCTAssertTrue(focusButton.label.contains("In progress"), focusButton.label)
         XCTAssertTrue(app.buttons["pipo.dashboard.recordSaving"].waitForExistence(timeout: 12),
                       "Record a saving must remain a separately accessible action")
         XCTAssertTrue(app.staticTexts["60% complete"].exists)
@@ -381,10 +475,10 @@ final class PipoUIRecordingTests: XCTestCase {
 
         tapButton("pipo.dashboard.tab.journey")
         XCTAssertTrue(app.staticTexts["Your journey"].waitForExistence(timeout: 12))
-        XCTAssertTrue(app.staticTexts["RECENT ACTIVITY"].exists)
+        XCTAssertTrue(app.staticTexts["Your timeline"].exists)
         attachOnboardingScreen("Dashboard B — real recorded activity")
 
-        tapButton("pipo.dashboard.journey.achievements")
+        tapButton("pipo.journey.openAchievements")
         XCTAssertTrue(app.staticTexts["pipo.achievements.count"].waitForExistence(timeout: 12),
                       "The approved badge gallery must be accessible")
         attachOnboardingScreen("P0 — authentic achievement gallery")
@@ -685,6 +779,15 @@ final class PipoUIRecordingTests: XCTestCase {
         tapButton("pipo.plan.v2.editTarget")
         XCTAssertTrue(app.staticTexts["Change the target."].waitForExistence(timeout: 10))
         XCTAssertTrue(app.textFields["pipo.plan.v2.targetAmount"].exists)
+        let budgetAction = app.buttons["pipo.plan.v2.editBudget"].firstMatch
+        let editorScroll = app.scrollViews.containing(.button,
+            identifier: "pipo.plan.v2.editBudget").firstMatch
+        let manageFooter = app.buttons["pipo.plan.v2.primary"].firstMatch
+        assertScrollableElementClearsBottomEdge(budgetAction,
+            scroll: editorScroll,
+            bottomBoundary: manageFooter.frame.minY,
+            description: "Manage Plan target budget row",
+            isButton: true)
         attachOnboardingScreen("Manage Plan V2 B02 — Focused target")
         // Keyboard can be shown without hiding target context or forcing a save.
         let field = app.textFields["pipo.plan.v2.targetAmount"]
@@ -698,6 +801,14 @@ final class PipoUIRecordingTests: XCTestCase {
         XCTAssertTrue(app.datePickers["pipo.plan.v2.finishDate"].exists ||
                       app.buttons["pipo.plan.v2.finishDate"].exists,
                       "The native date picker must remain VoiceOver discoverable")
+        let dateWarning = app.staticTexts["Your amount stays the same"].firstMatch
+        let dateScroll = app.scrollViews.containing(.any,
+            identifier: "pipo.plan.v2.finishDate").firstMatch
+        assertScrollableElementClearsBottomEdge(dateWarning,
+            scroll: dateScroll,
+            bottomBoundary: app.buttons["pipo.plan.v2.primary"].frame.minY,
+            description: "Manage Plan date impact warning",
+            isButton: false)
         attachOnboardingScreen("Manage Plan V2 B13 — Finish date")
         XCTAssertFalse(app.buttons["pipo.plan.v2.primary"].isEnabled)
     }
@@ -901,6 +1012,48 @@ final class PipoUIRecordingTests: XCTestCase {
         bringIntoView(button)
         XCTAssertTrue(button.isEnabled, "Disabled button: \(label)")
         button.tap()
+    }
+
+    /// Native visual-layout regression: the element must be entirely within
+    /// the scroll viewport and ABOVE a pinned footer, not merely "exists" or
+    /// "isHittable" (both passed while text was visually covered).
+    /// Runs only when the product owner re-enables native iOS QA.
+    private func assertScrollableElementClearsBottomEdge(
+        _ element: XCUIElement,
+        scroll: XCUIElement,
+        bottomBoundary: CGFloat,
+        description: String,
+        isButton: Bool
+    ) {
+        XCTAssertTrue(scroll.waitForExistence(timeout: 15),
+            "\(description): expected a scrollable content region")
+        XCTAssertTrue(element.waitForExistence(timeout: 15),
+            "\(description): content is missing from accessibility tree")
+        for _ in 0..<10 {
+            let top = scroll.frame.minY + 8
+            let bottom = bottomBoundary - 10
+            if (!isButton || element.isHittable) && element.frame.minY >= top
+                && element.frame.maxY <= bottom { break }
+            if element.frame.minY < top {
+                scroll.swipeDown()
+            } else {
+                scroll.swipeUp()
+            }
+        }
+        // Static text and VoiceOver grouping containers can have a frame
+        // without advertising a tappable XCUIElement. The geometry rule
+        // applies to all content; isHittable only applies to real buttons.
+        let visible = (!isButton || element.isHittable)
+            && element.frame.minY >= scroll.frame.minY + 8
+            && element.frame.maxY <= bottomBoundary - 10
+        XCTAssertTrue(visible,
+            "\(description) is clipped or covered by a footer. "
+            + "Content=\(element.frame), scroll=\(scroll.frame), bottom=\(bottomBoundary). "
+            + app.debugDescription)
+        if isButton {
+            XCTAssertGreaterThanOrEqual(element.frame.height, 44,
+                "\(description) actionable hit target must be at least 44pt")
+        }
     }
 
     /// XCUIElement.isHittable can be true even when a button's tap center

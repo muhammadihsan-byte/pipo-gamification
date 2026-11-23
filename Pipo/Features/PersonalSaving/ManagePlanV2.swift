@@ -413,20 +413,26 @@ struct PipoManagePlanV2Sheet: View {
     private var canPreview: Bool { draft.isDirty && draft.validationError == nil }
 
     var body: some View {
-        NavigationStack {
-            GeometryReader { geometry in
-                let horizontal: CGFloat = geometry.size.width <= 350 ? 16 : 20
-                // Compact iPhone layouts need a bottom breathing area for
-                // the primary action even when NavigationStack and a hosted
-                // sheet report mismatched safe-area geometry during rotation.
-                // Reserve this space by shrinking the scrollable editor, not
-                // by shifting or clipping the action itself.
-                let compactBottomReserve: CGFloat = horizontal <= 16
-                    ? max(geometry.safeAreaInsets.bottom, 40) + 16
-                    : 0
+        // Measure the hosting viewport before constructing NavigationStack.
+        // The previous inner GeometryReader inherited an inflated vertical
+        // region from the navigation container in a constrained 320pt host.
+        GeometryReader { geometry in
+            let horizontal: CGFloat = geometry.size.width <= 350 ? 16 : 20
+            // Native QA measured originY = safeTop = 29.5pt, while the
+            // constrained host still reported its full 760pt height.
+            // Subtract that inherited top inset ONCE before giving the
+            // navigation host its viewport. Otherwise the footer ends
+            // at 777.7pt and clips below the 760pt screenshot boundary.
+            let hostHeight = max(0, geometry.size.height - geometry.safeAreaInsets.top)
+            NavigationStack {
                 VStack(spacing: 0) {
                     topBar
                         .padding(.horizontal, horizontal)
+                    // A bounded VStack gives the scroll view exactly the
+                    // space remaining after the header and its *actual*
+                    // dynamic-height footer, including accessibility text.
+                    // A safeAreaInset on the nested ScrollView pushed the
+                    // footer beyond the 320pt snapshot host's lower edge.
                     ScrollView {
                         VStack(alignment: .leading, spacing: 20) {
                             VStack(alignment: .leading, spacing: 8) {
@@ -442,17 +448,12 @@ struct PipoManagePlanV2Sheet: View {
                             }
                             .padding(.top, 15)
                             content
-                            // Keep the safety note in scrollable content on narrow
-                            // devices so it cannot push the primary footer action
-                            // beneath the bottom edge of a 320pt screenshot.
-                            if horizontal <= 16 {
-                                Text(step == .review
-                                     ? "Prototype only · No changes saved"
-                                     : "Preview only · Changes are not saved")
-                                    .font(.footnote)
-                                    .foregroundStyle(PipoTheme.cardMuted)
-                                    .fixedSize(horizontal: false, vertical: true)
-                            }
+                            Text(step == .review
+                                 ? "Prototype only · No changes saved"
+                                 : "Preview only · Changes are not saved")
+                                .font(.footnote)
+                                .foregroundStyle(PipoTheme.cardMuted)
+                                .fixedSize(horizontal: false, vertical: true)
                             if step != .review && step != .overview {
                                 Text("Nothing changes in your saved records until a secure save is available.")
                                     .font(.footnote)
@@ -461,41 +462,22 @@ struct PipoManagePlanV2Sheet: View {
                             }
                         }
                         .padding(.horizontal, horizontal)
-                        .padding(.bottom, 22)
+                        .padding(.bottom, 28)
                         .frame(maxWidth: 520, alignment: .leading)
                         .frame(maxWidth: .infinity)
                     }
                     .scrollDismissesKeyboard(.interactively)
-                    // Keep the footer inside the measured sheet layout, rather
-                    // than extending a scroll inset below a 320pt container.
-                    // The ScrollView receives the remaining height; its body
-                    // can scroll without hiding the review-only primary CTA.
+                    .scrollBounceBehavior(.basedOnSize)
                     footer(horizontal: horizontal)
-                        // When content is taller than a compact sheet, keep
-                        // the primary action fully visible and shrink only
-                        // the scrollable editor area.
-                        .fixedSize(horizontal: false, vertical: true)
-                        .layoutPriority(1)
+                        .padding(.bottom, 12)
+                        .background(.white)
                 }
-                .padding(.bottom, compactBottomReserve)
-                .frame(width: geometry.size.width,
-                       height: geometry.size.height,
-                       alignment: .top)
+                // Do not force the child to the full outer host height:
+                // NavigationStack reserves its own safe-area region first.
+                // A fixed inner height extends the footer below the host.
+                // The bounded outer NavigationStack owns the exact viewport.
+                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
                 .background(.white)
-                .onAppear {
-                    #if DEBUG
-                    if horizontal <= 16 {
-                        print("PIPO_320_GEOMETRY height=\(geometry.size.height) top=\(geometry.safeAreaInsets.top) bottom=\(geometry.safeAreaInsets.bottom)")
-                    }
-                    #endif
-                }
-                .onChange(of: geometry.size) { _ in
-                    #if DEBUG
-                    if horizontal <= 16 {
-                        print("PIPO_320_GEOMETRY_UPDATE height=\(geometry.size.height) top=\(geometry.safeAreaInsets.top) bottom=\(geometry.safeAreaInsets.bottom) reserved=\(compactBottomReserve)")
-                    }
-                    #endif
-                }
             }
             .navigationBarHidden(true)
             .toolbar {
@@ -514,7 +496,17 @@ struct PipoManagePlanV2Sheet: View {
             } message: {
                 Text("Your recorded savings, XP, badges and history remain unchanged.")
             }
-    
+            .frame(width: geometry.size.width,
+                   height: hostHeight, alignment: .top)
+            .onAppear {
+                #if DEBUG
+                if horizontal <= 16 {
+                    let host = geometry.frame(in: .global)
+                    print("PIPO_320_HOST originY=\(host.minY) sizeH=\(geometry.size.height) " +
+                          "safeTop=\(geometry.safeAreaInsets.top) safeBottom=\(geometry.safeAreaInsets.bottom)")
+                }
+                #endif
+            }
         }
         .preferredColorScheme(.light)
     }
@@ -1044,13 +1036,6 @@ struct PipoManagePlanV2Sheet: View {
 
     private func footer(horizontal: CGFloat) -> some View {
         VStack(alignment: .leading, spacing: 8) {
-            if horizontal > 16 {
-                Text(step == .review
-                     ? "Prototype only · No changes saved"
-                     : "Preview only · Changes are not saved")
-                    .font(.footnote)
-                    .foregroundStyle(PipoTheme.cardMuted)
-            }
             Button(action: continueForward) {
                 Text(actionLabel)
                     .font(.subheadline.bold())
