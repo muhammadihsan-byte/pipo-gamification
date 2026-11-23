@@ -54,6 +54,9 @@ jobs:
       - name: Compile and validate old-schema signed bridge candidate (Swift Linux, no network)
         run: python3 -m unittest -v scripts/test_issue80_legacy_bridge.py
 
+      - name: Assert owner isolation and physically clear Widget App Group private data (Swift Linux)
+        run: python3 -m unittest -v scripts/test_issue80_final_account_safety.py
+
       - name: Compile isolated QA scripts (syntax only)
         run: |
           python3 -m py_compile \
