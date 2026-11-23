@@ -460,10 +460,10 @@ final class PipoUIRecordingTests: XCTestCase {
 
         tapButton("pipo.dashboard.tab.journey")
         XCTAssertTrue(app.staticTexts["Your journey"].waitForExistence(timeout: 12))
-        XCTAssertTrue(app.staticTexts["RECENT ACTIVITY"].exists)
+        XCTAssertTrue(app.staticTexts["Your timeline"].exists)
         attachOnboardingScreen("Dashboard B — real recorded activity")
 
-        tapButton("pipo.dashboard.journey.achievements")
+        tapButton("pipo.journey.openAchievements")
         XCTAssertTrue(app.staticTexts["pipo.achievements.count"].waitForExistence(timeout: 12),
                       "The approved badge gallery must be accessible")
         attachOnboardingScreen("P0 — authentic achievement gallery")
