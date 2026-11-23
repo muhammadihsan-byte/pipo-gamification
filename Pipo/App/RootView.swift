@@ -304,12 +304,15 @@ struct RootView: View {
         .sheet(isPresented: $showingAccountDeletion) {
             AccountDeletionConfirmationView(onDelete: performAccountDeletion)
         }
-        .sheet(isPresented: $navigationManager.isMilestonePresented) {
+        .sheet(isPresented: $navigationManager.isMilestonePresented, onDismiss: {
+            navigationManager.milestoneFirstSparkEligible = false
+        }) {
             ConsistencyMilestoneView(
                 xpEarned: navigationManager.milestoneXPEarned,
                 streakDays: navigationManager.milestoneStreakDays,
                 badgeTitles: navigationManager.milestoneNewBadges,
                 isFirstSave: navigationManager.milestoneIsFirstSave,
+                firstSparkEligible: navigationManager.milestoneFirstSparkEligible,
                 onViewAchievements: {
                     navigationManager.requestAchievementsOpen()
                     navigationManager.isMilestonePresented = false
@@ -403,7 +406,7 @@ struct RootView: View {
                 showingAccountDeletion = true
             },
             onSignOut: signOutCurrentAccount,
-            onSavingCompleted: { transaction, goal, xpEarned, streakDays, badges in
+            onSavingCompleted: { transaction, goal, xpEarned, streakDays, badges, firstSparkEligible in
                 guard !isDeletingAccount,
                       let userID = authStateManager.userID,
                       AccountScope.owns(goal, userID: userID),
@@ -412,7 +415,8 @@ struct RootView: View {
                     xpEarned: xpEarned,
                     streakDays: streakDays,
                     badgeTitles: badges.map(\.title),
-                    isFirstSave: badges.contains(.firstSave)
+                    isFirstSave: badges.contains(.firstSave),
+                    firstSparkEligible: firstSparkEligible
                 )
                 // Group plans are not shared or sent to other people yet.
                 // Only personal goals have deployed cloud ownership rules.
@@ -663,6 +667,7 @@ struct RootView: View {
                 streakDays: navigationManager.milestoneStreakDays,
                 badgeTitles: navigationManager.milestoneNewBadges,
                 isFirstSave: navigationManager.milestoneIsFirstSave,
+                firstSparkEligible: false, // legacy navigation is not a committed save event
                 onViewAchievements: {
                     navigationManager.requestAchievementsOpen()
                     navigationManager.popToRoot()
