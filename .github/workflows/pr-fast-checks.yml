@@ -72,6 +72,9 @@ jobs:
       - name: Assert approved Flexible Saving V2 UI routing and source contract (Linux only)
         run: python3 -m unittest -v scripts/test_flexible_v2_ui_contract.py
 
+      - name: Verify Pipo #95-#99 cross-branch safe integration contracts (Linux only)
+        run: python3 -m unittest -v scripts/test_offline_ui_integration_95_99.py
+
       - name: Compile isolated QA scripts (syntax only)
         run: |
           python3 -m py_compile \
