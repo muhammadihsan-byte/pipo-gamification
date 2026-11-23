@@ -35,7 +35,7 @@ class FlexibleV2OfflineContract(unittest.TestCase):
         self.assertIn("plan.rhythm == .flexible", REVIEW)
 
     def test_ready_actions_go_to_existing_manual_flow_without_deposit(self):
-        self.assertIn('Button("Record first saving") { onRecordFirst(goalID) }', REVIEW)
+        self.assertIn('Button("Record a saving") { onRecordFirst(goalID) }', REVIEW)
         self.assertIn('Button("Not now, view my goal") { onCreated(goalID) }', REVIEW)
         self.assertIn("onRecordFirst: onRecordFirst", CREATE)
         self.assertIn("onRecordFirst: { goalID in", ROOTVIEW)
