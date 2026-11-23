@@ -370,7 +370,7 @@ private struct AuthPrimaryButtonStyle: ButtonStyle {
             .frame(maxWidth: .infinity, minHeight: 54)
             .padding(.horizontal, 12)
             .background(
-                configuration.isPressed ? PipoTheme.palePink : PipoTheme.pink,
+                configuration.isPressed ? PipoTheme.palePink : PipoTheme.approvedActionPink,
                 in: RoundedRectangle(cornerRadius: 17)
             )
     }
