@@ -383,16 +383,10 @@ jobs:
 
       # Explicit owner-authorized one-batch proof. This is NEVER selected
       # automatically by a Draft PR synchronization or a review label.
-      # Explicit owner-authorized one-shot: run focused native visual checks
-      # on the isolated AX typography PR only. No label bypass for Draft PRs,
-      # and no other branch receives the additional paid macOS UI suite.
-      - name: Pipo cross-screen visual layout — authorized iOS simulator QA + MP4
+      - name: Pipo cross-screen visual layout — manual simulator QA + MP4
         id: visual_layout
         if: >-
-          (github.event_name == 'workflow_dispatch' && inputs.validation_mode == 'visual-layout-qa') ||
-          (github.event_name == 'pull_request' &&
-           github.event.pull_request.draft == false &&
-           github.head_ref == 'fix/pipo-ax-typography-qa-20261124')
+          github.event_name == 'workflow_dispatch' && inputs.validation_mode == 'visual-layout-qa'
         shell: bash
         run: |
           set -euo pipefail
