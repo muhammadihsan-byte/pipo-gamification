@@ -1050,7 +1050,9 @@ struct PipoJourneyWaveAView: View {
 
     private var fullTimeline: some View {
         VStack(alignment: .leading, spacing: 18) {
-            VStack(alignment: .leading, spacing: 8) {
+            AnyLayout(dynamicTypeSize.isAccessibilitySize
+                ? VStackLayout(alignment: .leading, spacing: 8)
+                : HStackLayout(spacing: 8)) {
                 ForEach(PipoJourneyPeriod.allCases) { period in
                     Button {
                         selectedPeriod = period
@@ -1148,13 +1150,21 @@ struct PipoJourneyWaveAView: View {
                     ) + " · Saved manually")
                         .font(.caption)
                         .foregroundStyle(PipoTheme.muted)
+                    if dynamicTypeSize.isAccessibilitySize {
+                        Text("+ " + entry.amountText)
+                            .font(.subheadline.bold())
+                            .foregroundStyle(PipoTheme.deepPink)
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
                 }
-                Spacer(minLength: 4)
-                Text("+ " + entry.amountText)
-                    .font(.subheadline.bold())
-                    .foregroundStyle(PipoTheme.deepPink)
-                    .multilineTextAlignment(.trailing)
-                    .fixedSize(horizontal: false, vertical: true)
+                if !dynamicTypeSize.isAccessibilitySize {
+                    Spacer(minLength: 4)
+                    Text("+ " + entry.amountText)
+                        .font(.subheadline.bold())
+                        .foregroundStyle(PipoTheme.deepPink)
+                        .multilineTextAlignment(.trailing)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
             }
             .padding(.vertical, 10)
             .contentShape(Rectangle())
