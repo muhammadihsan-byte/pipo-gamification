@@ -25,7 +25,7 @@ struct DashboardView: View {
     private let onCreateGoal: () -> Void
     private let onDeleteAccount: () -> Void
     private let onSignOut: () -> Void
-    private let onSavingCompleted: (SavingTransaction, PersonalGoal, Int, Int, [PipoBadge]) -> Void
+    private let onSavingCompleted: (SavingTransaction, PersonalGoal, Int, Int, [PipoBadge], Bool) -> Void
 
     @Environment(\.modelContext) private var modelContext
     @Environment(AuthStateManager.self) private var authStateManager
@@ -53,15 +53,16 @@ struct DashboardView: View {
         goal: PersonalGoal,
         xpEarned: Int,
         streakDays: Int,
-        unlockedBadges: [PipoBadge]
+        unlockedBadges: [PipoBadge],
+        firstSparkEligible: Bool
     )?
 
     init(
         onCreateGoal: @escaping () -> Void,
         onDeleteAccount: @escaping () -> Void = {},
         onSignOut: @escaping () -> Void = {},
-        onSavingCompleted: @escaping (SavingTransaction, PersonalGoal, Int, Int, [PipoBadge]) -> Void = {
-            _, _, _, _, _ in
+        onSavingCompleted: @escaping (SavingTransaction, PersonalGoal, Int, Int, [PipoBadge], Bool) -> Void = {
+            _, _, _, _, _, _ in
         }
     ) {
         self.onCreateGoal = onCreateGoal
@@ -1441,12 +1442,19 @@ struct DashboardView: View {
             return
         }
 
+        // Only an actually committed first scheduled-period entry may present
+        // First Spark. Never infer this from goal creation or a badge alone.
+        let firstSparkEligible = PipoFirstSparkEligibility.forCommittedFirstPeriod(
+            transaction, goal: goal, ownerID: userID,
+            priorTransactions: priorGoalTransactions
+        )
         completedSavingReward = (
             transaction,
             goal,
             transaction.xpEarned,
             profile.streakDays,
-            newlyUnlocked
+            newlyUnlocked,
+            firstSparkEligible
         )
         updateWidgetSnapshot(latestTransaction: transaction)
         isShowingSaveConfirmation = false
@@ -1542,7 +1550,8 @@ struct DashboardView: View {
                 reward.goal,
                 reward.xpEarned,
                 reward.streakDays,
-                reward.unlockedBadges
+                reward.unlockedBadges,
+                reward.firstSparkEligible
             )
             completedSavingReward = nil
         }
