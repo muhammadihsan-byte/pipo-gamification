@@ -17,6 +17,7 @@ GOAL = source("Pipo/Features/PersonalSaving/ReviewPlanView.swift")
 PLAN = source("Pipo/Features/PersonalSaving/PersonalPlanComponents.swift")
 MILESTONE = source("Pipo/Features/Gamification/ConsistencyMilestoneView.swift")
 UI_TEST = source("PipoUITests/PipoUIRecordingTests.swift")
+IOS_CI = source(".github/workflows/ios-build.yml")
 
 
 class OfflineLayoutCollisionContract(unittest.TestCase):
@@ -83,6 +84,25 @@ class OfflineLayoutCollisionContract(unittest.TestCase):
         self.assertIn("element.frame.minY >= scroll.frame.minY + 8", UI_TEST)
         self.assertIn("scroll.swipeUp()", UI_TEST)
         self.assertIn("scroll.swipeDown()", UI_TEST)
+
+
+    def test_one_native_visual_batch_requires_explicit_owner_dispatch(self):
+        self.assertIn("          - visual-layout-qa", IOS_CI)
+        self.assertIn("id: visual_layout", IOS_CI)
+        self.assertIn(
+            "if: github.event_name == 'workflow_dispatch' && inputs.validation_mode == 'visual-layout-qa'",
+            IOS_CI
+        )
+        # The focused native suite is ready to run later, NOT executed by
+        # this Linux static assertion or Draft PR CI.
+        for method in (
+            "testJourneyWaveAEmptyStatesAndRealHistory",
+            "testManagePlanV2TargetAndDateEditorsAreFocusedAndNonMutating",
+            "testManagePlanV2OverviewFlexibleImpactReviewAndMoneyOutSafety",
+            "testAllElevenApprovedCardFamilies",
+            "testGlobalV1AccessibilityLabelsAndTargetsAtLargeText",
+        ):
+            self.assertIn("-only-testing:PipoUITests/PipoUIRecordingTests/" + method, IOS_CI)
 
 
 if __name__ == "__main__":
