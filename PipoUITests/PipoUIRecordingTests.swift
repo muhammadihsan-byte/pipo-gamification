@@ -1032,7 +1032,7 @@ final class PipoUIRecordingTests: XCTestCase {
         for _ in 0..<10 {
             let top = scroll.frame.minY + 8
             let bottom = bottomBoundary - 10
-            if element.isHittable && element.frame.minY >= top
+            if (!isButton || element.isHittable) && element.frame.minY >= top
                 && element.frame.maxY <= bottom { break }
             if element.frame.minY < top {
                 scroll.swipeDown()
@@ -1040,7 +1040,10 @@ final class PipoUIRecordingTests: XCTestCase {
                 scroll.swipeUp()
             }
         }
-        let visible = element.isHittable
+        // Static text and VoiceOver grouping containers can have a frame
+        // without advertising a tappable XCUIElement. The geometry rule
+        // applies to all content; isHittable only applies to real buttons.
+        let visible = (!isButton || element.isHittable)
             && element.frame.minY >= scroll.frame.minY + 8
             && element.frame.maxY <= bottomBoundary - 10
         XCTAssertTrue(visible,
