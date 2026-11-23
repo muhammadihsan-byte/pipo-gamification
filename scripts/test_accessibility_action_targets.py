@@ -92,8 +92,17 @@ def unsafe_grouped_actions(path: Path) -> list[tuple[int, str]]:
             continue
         prefix, body, _ = candidate
         # Static grouped cards containing an action should never suppress that
-        # action's independent VoiceOver node.
-        if CONTAINER.search(prefix) and BUTTON.search(body):
+        # action's independent VoiceOver node. The second case catches
+        # Button { action } label: { content } and Button("Title") { action }
+        # accidentally turned into a synthetic Other accessibility wrapper.
+        direct_button = bool(re.search(
+            r"\bButton\s*(?:\([^{}]*\))?\s*$", prefix
+        ))
+        labeled_button = bool(re.search(
+            r"\bButton\s*\{[^{}]*\}\s*label:\s*$", prefix
+        ))
+        if ((CONTAINER.search(prefix) and BUTTON.search(body))
+                or direct_button or labeled_button):
             issues.append((text.count("\n", 0, match.start()) + 1, match.group(1)))
     return issues
 
@@ -118,6 +127,40 @@ class AccessibilityActionTargetGuardTests(unittest.TestCase):
                 for line, kind in unsafe_grouped_actions(path)
             ]
         self.assertEqual(failures, [], "\n" + "\n".join(failures))
+
+    def test_detector_rejects_action_buttons_converted_to_other_elements(self):
+        import tempfile
+        with tempfile.TemporaryDirectory() as temporary:
+            example = Path(temporary) / "Broken.swift"
+            example.write_text("""
+                struct Example: View {
+                    var body: some View {
+                        Button { record() } label: { Text("Save") }
+                            .accessibilityElement(children: .ignore)
+                    }
+                }
+            """, encoding="utf-8")
+            self.assertEqual(len(unsafe_grouped_actions(example)), 1)
+            example.write_text("""
+                struct Example: View {
+                    var body: some View {
+                        Button("Record") { record() }
+                            .accessibilityElement(children: .combine)
+                    }
+                }
+            """, encoding="utf-8")
+            self.assertEqual(len(unsafe_grouped_actions(example)), 1)
+            example.write_text("""
+                struct Example: View {
+                    var body: some View {
+                        VStack { Button("Record") { record() } }
+                            .accessibilityElement(children: .contain)
+                            .accessibilityIdentifier("record-section")
+                    }
+                }
+            """, encoding="utf-8")
+            self.assertFalse(unsafe_grouped_actions(example))
+            self.assertFalse(unsafe_container_identifiers(example))
 
     def test_journey_record_is_a_real_accessible_button(self):
         path = ROOT / "Core/DesignSystem/PipoApprovedCards.swift"
