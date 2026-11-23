@@ -859,7 +859,7 @@ struct PersonalGoalDetailView: View {
                 .padding(.horizontal, 6)
 
                 HStack(alignment: .center, spacing: 12) {
-                    Text(UserProfile.existing(
+                    Text(goal.progress >= 0.25 && UserProfile.existing(
                         for: authStateManager.userID, in: profiles
                     )?.unlockedBadgeIds.contains(PipoBadge.quarterWay.rawValue) == true
                         ? "A quarter of the way there!" : "Your goal. Your pace.")
