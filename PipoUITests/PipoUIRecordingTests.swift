@@ -116,9 +116,11 @@ final class PipoUIRecordingTests: XCTestCase {
             identifier: "pipo.achievements.nextMilestone"
         ).firstMatch
         XCTAssertTrue(nextMilestone.waitForExistence(timeout: 12))
+        let achievementScroll = app.scrollViews.containing(.any,
+            identifier: "pipo.achievements.nextMilestone").firstMatch
         assertScrollableElementClearsBottomEdge(nextMilestone,
-            scroll: app.scrollViews.firstMatch,
-            bottomBoundary: app.scrollViews.firstMatch.frame.maxY,
+            scroll: achievementScroll,
+            bottomBoundary: achievementScroll.frame.maxY,
             description: "Achievements next milestone",
             isButton: false)
         attachOnboardingScreen("Journey A 03 — real earned and locked badge collection")
@@ -800,8 +802,10 @@ final class PipoUIRecordingTests: XCTestCase {
                       app.buttons["pipo.plan.v2.finishDate"].exists,
                       "The native date picker must remain VoiceOver discoverable")
         let dateWarning = app.staticTexts["Your amount stays the same"].firstMatch
+        let dateScroll = app.scrollViews.containing(.any,
+            identifier: "pipo.plan.v2.finishDate").firstMatch
         assertScrollableElementClearsBottomEdge(dateWarning,
-            scroll: app.scrollViews.firstMatch,
+            scroll: dateScroll,
             bottomBoundary: app.buttons["pipo.plan.v2.primary"].frame.minY,
             description: "Manage Plan date impact warning",
             isButton: false)
