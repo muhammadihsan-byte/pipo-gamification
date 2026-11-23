@@ -1083,12 +1083,22 @@ struct DashboardView: View {
                     }
                     TicketCard(style: .approvedCompact) {
                         VStack(alignment: .leading, spacing: 14) {
-                            HStack {
-                                Text("YOUR COLLECTION")
-                                    .foregroundStyle(PipoTheme.deepPink)
-                                Spacer()
-                                Text("ALL TIME")
-                                    .foregroundStyle(PipoTheme.muted)
+                            ViewThatFits(in: .horizontal) {
+                                HStack {
+                                    Text("YOUR COLLECTION")
+                                        .foregroundStyle(PipoTheme.deepPink)
+                                        .fixedSize(horizontal: true, vertical: false)
+                                    Spacer(minLength: 8)
+                                    Text("ALL TIME")
+                                        .foregroundStyle(PipoTheme.muted)
+                                        .fixedSize(horizontal: true, vertical: false)
+                                }
+                                VStack(alignment: .leading, spacing: 4) {
+                                    Text("YOUR COLLECTION")
+                                        .foregroundStyle(PipoTheme.deepPink)
+                                    Text("ALL TIME")
+                                        .foregroundStyle(PipoTheme.muted)
+                                }
                             }
                             .font(.caption2.bold())
                             Text("\(earnedBadges.count) earned badges")
@@ -1114,6 +1124,8 @@ struct DashboardView: View {
                                             Text(badge.title)
                                                 .font(.subheadline.bold())
                                                 .foregroundStyle(PipoTheme.ink)
+                                                .multilineTextAlignment(.center)
+                                                .fixedSize(horizontal: false, vertical: true)
                                             Text("Earned")
                                                 .font(.caption)
                                                 .foregroundStyle(PipoTheme.muted)
