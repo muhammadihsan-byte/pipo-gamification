@@ -13,6 +13,7 @@ def source(path):
 
 MANAGE = source("Pipo/Features/PersonalSaving/ManagePlanV2.swift")
 DASH = source("Pipo/Features/Dashboard/ContentView.swift")
+CARDS = source("Pipo/Core/DesignSystem/PipoApprovedCards.swift")
 GOAL = source("Pipo/Features/PersonalSaving/ReviewPlanView.swift")
 PLAN = source("Pipo/Features/PersonalSaving/PersonalPlanComponents.swift")
 MILESTONE = source("Pipo/Features/Gamification/ConsistencyMilestoneView.swift")
@@ -21,6 +22,20 @@ IOS_CI = source(".github/workflows/ios-build.yml")
 
 
 class OfflineLayoutCollisionContract(unittest.TestCase):
+    def test_accessibility_typography_adapts_without_clipping_or_hiding_values(self):
+        self.assertIn("private func progressSummary(axis: Axis)", MANAGE)
+        self.assertIn("ViewThatFits(in: .horizontal)", MANAGE)
+        self.assertIn("private func monthCountSummary", CARDS)
+        self.assertIn("AnyLayout(VStackLayout(alignment: .leading, spacing: 8))", CARDS)
+        self.assertIn("AnyLayout(HStackLayout(spacing: 8))", CARDS)
+        self.assertIn("if dynamicTypeSize.isAccessibilitySize {", CARDS)
+        self.assertIn("multilineTextAlignment(.center)", DASH)
+
+    def test_one_shot_owner_authorized_pr_visual_qa_is_branch_scoped(self):
+        self.assertIn("github.head_ref == 'fix/pipo-ax-typography-qa-20261124'", IOS_CI)
+        self.assertIn("github.event.pull_request.draft == false", IOS_CI)
+        self.assertIn("id: visual_layout", IOS_CI)
+
     def test_manage_plan_footer_is_bounded_by_compact_viewport(self):
         part = MANAGE.split("struct PipoManagePlanV2Sheet: View {", 1)[1]
         body = part.split("    private var topBar:", 1)[0]
