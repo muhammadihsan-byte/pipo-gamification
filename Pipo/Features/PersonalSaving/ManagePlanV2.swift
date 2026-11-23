@@ -363,6 +363,7 @@ struct PipoManagePlanV2Sheet: View {
     @State private var returnEditor: Step = .target
     @State private var askDiscard = false
     @FocusState private var focusedInput: String?
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
 
     init(original: PipoPlanV2Original, onClose: @escaping () -> Void) {
         self.onClose = onClose
@@ -521,10 +522,21 @@ struct PipoManagePlanV2Sheet: View {
     private var topBar: some View {
         HStack(spacing: 8) {
             Button(action: navigateBack) {
-                Label("Back", systemImage: "chevron.left")
-                    .font(.subheadline.weight(.medium))
-                    .frame(minWidth: 58, minHeight: 48, alignment: .leading)
-                    .contentShape(Rectangle())
+                Group {
+                    if dynamicTypeSize.isAccessibilitySize {
+                        // At AX3/320pt, "Back" previously split into "Bac/k".
+                        // Keep the full accessible label on an icon-only
+                        // 48pt+ hit target; never truncate the VoiceOver name.
+                        Image(systemName: "chevron.left")
+                            .font(.body.weight(.semibold))
+                    } else {
+                        Label("Back", systemImage: "chevron.left")
+                            .font(.subheadline.weight(.medium))
+                            .lineLimit(1)
+                    }
+                }
+                .frame(minWidth: 58, minHeight: 48, alignment: .leading)
+                .contentShape(Rectangle())
             }
             .buttonStyle(.plain)
             // Apply hit-area geometry to the Button itself, not just its
@@ -534,12 +546,19 @@ struct PipoManagePlanV2Sheet: View {
             .foregroundStyle(PipoTheme.cardMuted)
             .accessibilityLabel("Back")
             .accessibilityIdentifier("pipo.plan.v2.back")
-            Spacer()
+            Spacer(minLength: 4)
             Text("Manage plan")
                 .font(.subheadline.bold())
+                .lineLimit(1)
+                // Navigation chrome must stay on one line on AX3/320pt.
+                // The actual page heading and editors remain fully scalable
+                // and scrollable, with no caps on user information.
+                .minimumScaleFactor(0.65)
+                .layoutPriority(1)
                 .foregroundStyle(PipoTheme.cardInk)
+                .accessibilityLabel("Manage plan")
                 .accessibilityIdentifier("pipo.plan.v2.title")
-            Spacer()
+            Spacer(minLength: 4)
             Color.clear.frame(width: 48, height: 44)
                 .accessibilityHidden(true)
         }
