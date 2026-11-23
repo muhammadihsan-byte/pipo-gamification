@@ -840,6 +840,110 @@ final class GamificationManagerTests: XCTestCase {
     }
 
     @MainActor
+    func testIssue70PeriodHistoryOnlyUsesGoalOwnedScheduledWindows() {
+        let owner = UUID()
+        let start = makeDate(day: 1)
+        let goal = PersonalGoal(
+            title: "Holiday", category: .trip, targetAmount: 6_000_000,
+            startDate: start, targetDate: makeDate(day: 31),
+            rhythm: .weekly, ownerUserID: owner
+        )
+        let entries = [1, 8, 15].map { day in
+            SavingTransaction(goalId: goal.id, amount: 75_000,
+                              date: makeDate(day: day), userID: owner)
+        }
+        let extra = SavingTransaction(
+            goalId: goal.id, amount: 10_000,
+            date: makeDate(day: 15).addingTimeInterval(60), userID: owner
+        )
+        let foreign = SavingTransaction(
+            goalId: goal.id, amount: 12_000,
+            date: makeDate(day: 22), userID: UUID()
+        )
+        var cal = Calendar(identifier: .gregorian)
+        cal.timeZone = TimeZone(secondsFromGMT: 0)!
+        let rows = PipoSparkPeriodHistory.rows(
+            for: goal, transactions: entries + [extra, foreign],
+            userID: owner, asOf: makeDate(day: 22), calendar: cal
+        )
+        XCTAssertEqual(rows.map(\.id), [3, 2, 1, 0])
+        XCTAssertEqual(rows.map(\.count), [0, 2, 1, 1])
+        XCTAssertEqual(rows[0].statusText, "This period is still open")
+        XCTAssertEqual(rows[1].statusText, "Saved in this period")
+        XCTAssertTrue(rows[0].dateLabel(calendar: cal).contains("Jan"))
+        XCTAssertEqual(PipoSparkPeriodHistory.rows(
+            for: goal, transactions: entries, userID: UUID(),
+            asOf: makeDate(day: 22), calendar: cal
+        ).count, 0)
+    }
+
+    @MainActor
+    func testIssue70CompassionateRecoveryAndNoFlexibleStreakCells() {
+        let owner = UUID()
+        let goal = PersonalGoal(
+            title: "Emergency fund", category: .house, targetAmount: 10_000,
+            startDate: makeDate(day: 1), targetDate: makeDate(day: 31),
+            rhythm: .weekly, ownerUserID: owner
+        )
+        let first = SavingTransaction(
+            goalId: goal.id, amount: 100, date: makeDate(day: 1), userID: owner
+        )
+        let restart = SavingTransaction(
+            goalId: goal.id, amount: 100, date: makeDate(day: 22), userID: owner
+        )
+        let rows = PipoSparkPeriodHistory.rows(
+            for: goal, transactions: [first, restart],
+            userID: owner, asOf: makeDate(day: 22)
+        )
+        XCTAssertEqual(rows.first?.statusText, "Back on track — saving recorded")
+        XCTAssertEqual(rows.first?.count, 1)
+        XCTAssertTrue(rows.dropFirst().contains {
+            $0.statusText == "No saving recorded in this period"
+        })
+        // Duplicate journal IDs must not look like two saving events.
+        let replay = SavingTransaction(
+            id: first.id, goalId: goal.id,
+            amount: 100, date: makeDate(day: 8), userID: owner
+        )
+        XCTAssertTrue(PipoSparkPeriodHistory.rows(
+            for: goal, transactions: [first, replay],
+            userID: owner, asOf: makeDate(day: 22)
+        ).isEmpty)
+        goal.rhythm = .flexible
+        XCTAssertTrue(PipoSparkPeriodHistory.rows(
+            for: goal, transactions: [first, restart],
+            userID: owner, asOf: makeDate(day: 22)
+        ).isEmpty)
+    }
+
+    @MainActor
+    func testIssue70MonthlyWindowUsesCalendarMonthNotRollingThirtyDays() {
+        let owner = UUID()
+        let goal = PersonalGoal(
+            title: "Long term", category: .house, targetAmount: 10_000,
+            startDate: makeDate(day: 31), targetDate: makeDate(day: 31),
+            rhythm: .monthly, ownerUserID: owner
+        )
+        let saved = SavingTransaction(
+            goalId: goal.id, amount: 100, date: makeDate(day: 31),
+            userID: owner
+        )
+        var cal = Calendar(identifier: .gregorian)
+        cal.timeZone = TimeZone(secondsFromGMT: 0)!
+        let february = cal.date(from: DateComponents(
+            year: 2026, month: 2, day: 15, hour: 12
+        ))!
+        let rows = PipoSparkPeriodHistory.rows(
+            for: goal, transactions: [saved],
+            userID: owner, asOf: february, calendar: cal
+        )
+        XCTAssertEqual(rows.count, 2)
+        XCTAssertEqual(rows.map(\.count), [0, 1])
+        XCTAssertEqual(rows[0].statusText, "This period is still open")
+        XCTAssertEqual(rows[1].dateLabel(calendar: cal), "Jan 1 – Jan 31")
+    }
+
+    @MainActor
     private func makeGoal() -> PersonalGoal {
         PersonalGoal(
             title: "Emergency fund",
