@@ -175,8 +175,7 @@ struct CreateGoalView: View {
             PersonalPlanActions(
                 back: goBack,
                 showsBack: step != .goal || isEditingFromReview,
-                title: isEditingFromReview && plan != nil ? "Back to review" :
-                    step == .rhythm && rhythm == .flexible ? "Continue to review" : "Continue",
+                title: isEditingFromReview && plan != nil ? "Back to review" : "Continue",
                 dimmed: !stepIsValid && !(step == .target && breakdownMismatch != nil),
                 action: advance
             )
