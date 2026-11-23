@@ -29,6 +29,7 @@ on:
           - dashboard-a11y-qa
           - first-save-qa
           - spark-goal-qa
+          - visual-layout-qa
   push:
     tags:
       - "v*-rc*"
@@ -46,12 +47,36 @@ jobs:
     if: >-
       github.event_name == 'workflow_dispatch' ||
       github.event_name == 'push' ||
-      (github.event_name == 'pull_request' && github.event.pull_request.draft == false)
+      (github.event_name == 'pull_request' && github.event.pull_request.draft == false) ||
+      (github.event_name == 'pull_request' &&
+       github.event.action == 'labeled' &&
+       github.event.label.name == 'bug' &&
+       github.event.pull_request.number == 101 &&
+       github.event.pull_request.draft == true &&
+       github.head_ref == 'fix/pipo-offline-visual-layout-20261123')
     runs-on: macos-15
     timeout-minutes: 45
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
+        with:
+          # Pin one authorized QA run to this exact candidate, never the
+          # synthetic PR merge SHA or mutable upstream main.
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+
+      - name: Verify PR #101 exact-head native QA target
+        if: >-
+          github.event_name == 'pull_request' &&
+          github.event.action == 'labeled' &&
+          github.event.label.name == 'bug' &&
+          github.event.pull_request.number == 101
+        env:
+          EXPECTED_SHA: ${{ github.event.pull_request.head.sha }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(git rev-parse HEAD)" = "$EXPECTED_SHA"
+          echo "EXACT_NATIVE_QA_HEAD=$EXPECTED_SHA"
 
       - name: Detect Xcode
         run: |
@@ -336,6 +361,99 @@ jobs:
           }
           exit "$QA_STATUS"
 
+      - name: Approved Journey Wave A — focused native interaction QA and MP4
+        id: journey_wave_a
+        if: github.event_name == 'pull_request' && github.head_ref == 'feat/journey-achievements-wave-a-20261123'
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p validation
+          xcrun simctl boot "$SIMULATOR_UDID" || true
+          xcrun simctl bootstatus "$SIMULATOR_UDID" -b
+          xcrun simctl io "$SIMULATOR_UDID" recordVideo --codec=h264 \
+            validation/pipo-journey-wave-a-qa.mp4 > validation/journey-wave-a-video.log 2>&1 &
+          VIDEO_PID=$!
+          cleanup() {
+            kill -INT "$VIDEO_PID" 2>/dev/null || true
+            wait "$VIDEO_PID" 2>/dev/null || true
+          }
+          trap cleanup EXIT
+          set +e
+          xcodebuild \
+            -project "$XCODE_PROJECT" \
+            -scheme "$XCODE_SCHEME" \
+            -destination "id=$SIMULATOR_UDID" \
+            -derivedDataPath "$RUNNER_TEMP/PipoDerivedData" \
+            -resultBundlePath "$RUNNER_TEMP/PipoJourneyWaveAQA.xcresult" \
+            -only-testing:PipoUITests/PipoUIRecordingTests/testJourneyWaveAEmptyStatesAndRealHistory \
+            -only-testing:PipoUITests/PipoUIRecordingTests/testReturningDashboardB \
+            -only-testing:PipoUITests/PipoUIRecordingTests/testAllElevenApprovedCardFamilies \
+            -only-testing:PipoUITests/PipoUIRecordingTests/testGlobalV1AccessibilityLabelsAndTargetsAtLargeText \
+            CODE_SIGNING_ALLOWED=NO \
+            CODE_SIGNING_REQUIRED=NO \
+            test 2>&1 | tee validation/pipo-journey-wave-a-qa.log
+          QA_STATUS=$?
+          set -e
+          cleanup
+          trap - EXIT
+          test -s validation/pipo-journey-wave-a-qa.mp4 || {
+            echo "Journey Wave A MP4 missing or empty" >&2
+            exit 1
+          }
+          exit "$QA_STATUS"
+
+      # Explicit owner-authorized one-batch proof. This is NEVER selected
+      # automatically by a Draft PR synchronization or a review label.
+      - name: Pipo cross-screen visual layout — manual simulator QA + MP4
+        id: visual_layout
+        if: >-
+          (github.event_name == 'workflow_dispatch' && inputs.validation_mode == 'visual-layout-qa') ||
+          (github.event_name == 'pull_request' &&
+           github.event.action == 'labeled' &&
+           github.event.label.name == 'bug' &&
+           github.event.pull_request.number == 101 &&
+           github.event.pull_request.draft == true &&
+           github.head_ref == 'fix/pipo-offline-visual-layout-20261123')
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p validation
+          xcrun simctl boot "$SIMULATOR_UDID" || true
+          xcrun simctl bootstatus "$SIMULATOR_UDID" -b
+          xcrun simctl io "$SIMULATOR_UDID" recordVideo --codec=h264 \
+            validation/pipo-cross-screen-visual-layout.mp4 > validation/visual-layout-video.log 2>&1 &
+          VIDEO_PID=$!
+          cleanup() {
+            kill -INT "$VIDEO_PID" 2>/dev/null || true
+            wait "$VIDEO_PID" 2>/dev/null || true
+          }
+          trap cleanup EXIT
+          set +e
+          xcodebuild \
+            -project "$XCODE_PROJECT" \
+            -scheme "$XCODE_SCHEME" \
+            -destination "id=$SIMULATOR_UDID" \
+            -derivedDataPath "$RUNNER_TEMP/PipoDerivedData" \
+            -resultBundlePath "$RUNNER_TEMP/PipoVisualLayoutQAResults.xcresult" \
+            -parallel-testing-enabled NO \
+            -only-testing:PipoUITests/PipoUIRecordingTests/testJourneyWaveAEmptyStatesAndRealHistory \
+            -only-testing:PipoUITests/PipoUIRecordingTests/testManagePlanV2TargetAndDateEditorsAreFocusedAndNonMutating \
+            -only-testing:PipoUITests/PipoUIRecordingTests/testManagePlanV2OverviewFlexibleImpactReviewAndMoneyOutSafety \
+            -only-testing:PipoUITests/PipoUIRecordingTests/testAllElevenApprovedCardFamilies \
+            -only-testing:PipoUITests/PipoUIRecordingTests/testGlobalV1AccessibilityLabelsAndTargetsAtLargeText \
+            CODE_SIGNING_ALLOWED=NO \
+            CODE_SIGNING_REQUIRED=NO \
+            test 2>&1 | tee validation/pipo-cross-screen-visual-layout.log
+          QA_STATUS=${PIPESTATUS[0]}
+          set -e
+          cleanup
+          trap - EXIT
+          test -s validation/pipo-cross-screen-visual-layout.mp4 || {
+            echo "Cross-screen visual layout MP4 missing or empty" >&2
+            exit 1
+          }
+          exit "$QA_STATUS"
+
       - name: Issue 48 — goal detail photo hero focused native iOS QA
         if: github.event_name == 'pull_request' && github.head_ref == 'feat/pipo-48-goal-photo-hero-v1'
         shell: bash
@@ -536,7 +654,7 @@ jobs:
         if: always()
         shell: bash
         run: |
-          for bundle in "$RUNNER_TEMP/PipoTestResults.xcresult" "$RUNNER_TEMP/PipoDashboardResults.xcresult" "$RUNNER_TEMP/PipoAuthQAResults.xcresult" "$RUNNER_TEMP/PipoCardParityResults.xcresult" "$RUNNER_TEMP/PipoAllCardsQAResults.xcresult" "$RUNNER_TEMP/PipoGoalPhotoHeroQA.xcresult" "$RUNNER_TEMP/PipoIssue42ReviewQA.xcresult" "$RUNNER_TEMP/PipoManagePlanV2QA.xcresult" "$RUNNER_TEMP/PipoGlobalExperienceV1QA.xcresult" "$RUNNER_TEMP/PipoDashboardAccessibilityQA.xcresult" "$RUNNER_TEMP/PipoFirstSaveQA.xcresult" "$RUNNER_TEMP/PipoSparkGoalQA.xcresult"; do
+          for bundle in "$RUNNER_TEMP/PipoTestResults.xcresult" "$RUNNER_TEMP/PipoDashboardResults.xcresult" "$RUNNER_TEMP/PipoAuthQAResults.xcresult" "$RUNNER_TEMP/PipoCardParityResults.xcresult" "$RUNNER_TEMP/PipoAllCardsQAResults.xcresult" "$RUNNER_TEMP/PipoGoalPhotoHeroQA.xcresult" "$RUNNER_TEMP/PipoIssue42ReviewQA.xcresult" "$RUNNER_TEMP/PipoManagePlanV2QA.xcresult" "$RUNNER_TEMP/PipoGlobalExperienceV1QA.xcresult" "$RUNNER_TEMP/PipoDashboardAccessibilityQA.xcresult" "$RUNNER_TEMP/PipoFirstSaveQA.xcresult" "$RUNNER_TEMP/PipoSparkGoalQA.xcresult" "$RUNNER_TEMP/PipoJourneyWaveAQA.xcresult"; do
             if test -d "$bundle"; then
               name="$(basename "$bundle" .xcresult)"
               mkdir -p "validation/visual-qa/$name"
@@ -566,6 +684,7 @@ jobs:
             ${{ runner.temp }}/PipoDashboardAccessibilityQA.xcresult
             ${{ runner.temp }}/PipoFirstSaveQA.xcresult
             ${{ runner.temp }}/PipoSparkGoalQA.xcresult
+            ${{ runner.temp }}/PipoJourneyWaveAQA.xcresult
           if-no-files-found: warn
           retention-days: 7
 
@@ -583,6 +702,7 @@ jobs:
           DASHBOARD_A11Y: ${{ steps.dashboard_a11y.outcome }}
           FIRST_SAVE: ${{ steps.first_save.outcome }}
           SPARK_GOAL: ${{ steps.spark_goal.outcome }}
+          JOURNEY_WAVE_A: ${{ steps.journey_wave_a.outcome }}
         run: |
           {
             echo '## Pipo iOS QA checkpoint'
@@ -599,6 +719,7 @@ jobs:
             echo "| Dashboard B accessibility simulator QA | ${DASHBOARD_A11Y:-not-selected} |"
             echo "| Issue 40 first-saving activation simulator QA | ${FIRST_SAVE:-not-selected} |"
             echo "| Issue 69 Spark Home/Goal Detail simulator QA | ${SPARK_GOAL:-not-selected} |"
+            echo "| Approved Journey Wave A simulator QA | ${JOURNEY_WAVE_A:-not-selected} |"
             echo ''
             echo 'A skipped focused suite was not executed, and does not count as QA evidence.'
             echo 'Manual focused QA is supplemental; required PR checks still apply before merge.'

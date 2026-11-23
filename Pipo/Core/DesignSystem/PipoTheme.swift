@@ -169,6 +169,7 @@ struct PipoBudgetBreakdownCard: View {
             }
             .frame(maxWidth: .infinity, alignment: .leading)
         }
+        .accessibilityElement(children: .contain)
         .accessibilityIdentifier("pipo.card.budgetBreakdownB")
     }
 }
