@@ -660,6 +660,10 @@ struct RootView: View {
                     // contribution, transfer money or grant XP from this CTA.
                     guard authStateManager.authState == .authenticated,
                           authStateManager.userID != nil else { return }
+                    // Dashboard owns the manual saving sheet. Dismiss the
+                    // create-goal route first so its .onAppear can pick up
+                    // the deferred owner-scoped SwiftData goal event.
+                    navigationManager.popToRoot()
                     navigationManager.requestDeposit(goalID: goalID)
                     if let userID = authStateManager.userID {
                         enqueuePersonalSavingsSync(for: userID)
