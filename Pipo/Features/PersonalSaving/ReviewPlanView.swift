@@ -646,6 +646,18 @@ struct PersonalGoalDetailView: View {
                 }
             }
 
+            // #70: a compact account-owned period summary. This never
+            // substitutes for the full read-only manual saving journal.
+            if goal.canRecordSaving && !goal.isGroupGoal &&
+               goal.rhythm != .flexible {
+                PipoSparkPeriodHistoryView(
+                    goal: goal,
+                    transactions: ownedHistory(for: goal),
+                    userID: authStateManager.userID,
+                    onOpenJournal: { showingSavingJournal = true }
+                )
+            }
+
             PipoGoalProgressBCard(
                 quarterWayEarned: UserProfile.existing(
                     for: authStateManager.userID, in: profiles
