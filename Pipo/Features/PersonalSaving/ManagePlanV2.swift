@@ -418,6 +418,12 @@ struct PipoManagePlanV2Sheet: View {
         // region from the navigation container in a constrained 320pt host.
         GeometryReader { geometry in
             let horizontal: CGFloat = geometry.size.width <= 350 ? 16 : 20
+            // Native QA measured originY = safeTop = 29.5pt, while the
+            // constrained host still reported its full 760pt height.
+            // Subtract that inherited top inset ONCE before giving the
+            // navigation host its viewport. Otherwise the footer ends
+            // at 777.7pt and clips below the 760pt screenshot boundary.
+            let hostHeight = max(0, geometry.size.height - geometry.safeAreaInsets.top)
             NavigationStack {
                 VStack(spacing: 0) {
                     topBar
@@ -491,7 +497,7 @@ struct PipoManagePlanV2Sheet: View {
                 Text("Your recorded savings, XP, badges and history remain unchanged.")
             }
             .frame(width: geometry.size.width,
-                   height: geometry.size.height, alignment: .top)
+                   height: hostHeight, alignment: .top)
             .onAppear {
                 #if DEBUG
                 if horizontal <= 16 {
