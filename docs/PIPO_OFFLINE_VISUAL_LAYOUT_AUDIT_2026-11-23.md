@@ -48,3 +48,15 @@ This branch is layered on #100's complete #95–#99 feature combination, **not**
 - **Important:** these changes remain pending fresh native evidence. We did **not** trigger a second paid macOS run. After owner authorizes the follow-up batch, rerun the exact new head and check all 157 native unit tests then five UI visual tests plus MP4.
 
 Current gate: **native visual QA FAIL on old commit; correction staged but NOT yet verified. PR remains Draft/unmerged.**
+
+## Final successful native verification — 23 November 2026 (supersedes failed checkpoint)
+
+**Acceptance source:** [GitHub Actions native iOS QA #45145482661](https://github.com/muhammadihsan-byte/pipo-gamification/actions/runs/45145482661), tested exact SwiftUI app/head SHA `87e0d1cf12a2c64d10c5cc60187b81dc872c37c2` on macOS 15 / Xcode 16.4 / iOS 18.5 simulator.
+
+- **157/157 native XCTest passed; 5/5 focused UI XCTest passed**. These include Journey Wave A, all eleven approved card families, large-text accessibility, Manage Plan Flexible/Impact review, target and date editors, and Money Out review safeguards.
+- Both 320pt native pixel/snapshot assertions that failed earlier **passed without modifying the assertion thresholds**. Measured `PIPO_320_FOOTER_UPDATE` bottom at **748pt** in a **760pt** host, a 12pt lower clearance. This includes large accessibility text and regular-size content; 393pt snapshots also passed.
+- Screen recordings and screenshots were exported in [ios-validation-45145482661](https://github.com/muhammadihsan-byte/pipo-gamification/actions/runs/45145482661), artifact ID `14804997648`. The five UI test cases and MP4 export concluded successfully. Prior failing runs are historical regression evidence, not the current head status.
+- Source identity: the subsequent [safety-only PR #102](https://github.com/muhammadihsan-byte/pipo-gamification/pull/102) changes only `.github/workflows/ios-build.yml` and the Linux guard file `scripts/test_offline_layout_collision_guard.py`; **no native SwiftUI, models, assets, or XCTest app behavior was changed** after the passing native run.
+- #102 replaces the old #101 label-gated macOS trigger with explicit workflow dispatch, removes `pull_request:labeled`, and permanently disables legacy draft #83/#85 macOS label jobs. It remains a **Draft** candidate, retargeted to `main` to execute combined Linux validation. Do not merge #101 and #102 independently.
+
+**Current release gate:** Native targeted regression QA **PASSED**; combined PR #102 Linux QA must pass for its final exact head. Full pixel-perfect Figma parity across all screens, the final Pipo V4 pose exports/motion rig, outstanding color and UX approvals, App Store/TestFlight signing, paid entitlements and production rollout are **not** established by these tests. Await owner's explicit final merge authorization.
