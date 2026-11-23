@@ -28,9 +28,11 @@ class OfflineLayoutCollisionContract(unittest.TestCase):
         self.assertIn("ScrollView {", body)
         self.assertIn("footer(horizontal: horizontal)", body)
         self.assertIn(".frame(width: geometry.size.width,", body)
-        self.assertIn("height: geometry.size.height, alignment: .top)", body)
-        self.assertEqual(body.count("height: geometry.size.height, alignment: .top)"), 1,
-                         "Only the outer NavigationStack may use the full host height")
+        self.assertIn("let hostHeight = max(0, geometry.size.height - geometry.safeAreaInsets.top)", body)
+        self.assertIn("height: hostHeight, alignment: .top)", body)
+        self.assertNotIn("height: geometry.size.height, alignment: .top)", body)
+        self.assertEqual(body.count("height: hostHeight, alignment: .top)"), 1,
+                         "Only the outer NavigationStack may own the inset-corrected host height")
         self.assertIn(".frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)", body)
         self.assertIn("footer(horizontal: horizontal)\n                        .padding(.bottom, 12)", body)
         self.assertNotIn("compactBottomReserve", body)
