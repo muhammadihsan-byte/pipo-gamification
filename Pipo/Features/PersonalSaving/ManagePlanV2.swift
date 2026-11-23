@@ -569,23 +569,51 @@ struct PipoManagePlanV2Sheet: View {
         }
     }
 
+    private func progressSummary(axis: Axis) -> some View {
+        let vertical = axis == .vertical
+        return Group {
+            if vertical {
+                VStack(alignment: .leading, spacing: 8) {
+                    progressAmount
+                    progressPercent
+                }
+            } else {
+                HStack(alignment: .firstTextBaseline, spacing: 8) {
+                    progressAmount
+                        .fixedSize(horizontal: true, vertical: false)
+                    Spacer(minLength: 8)
+                    progressPercent
+                        .fixedSize(horizontal: true, vertical: false)
+                }
+            }
+        }
+    }
+
+    private var progressAmount: some View {
+        VStack(alignment: .leading, spacing: 4) {
+            sectionTitle("ALREADY RECORDED")
+            Text(money(original.recorded))
+                .font(.title2.bold())
+                .foregroundStyle(PipoTheme.cardInk)
+                .fixedSize(horizontal: false, vertical: true)
+        }
+    }
+
+    private var progressPercent: some View {
+        Text(progressText)
+            .font(.headline.bold())
+            .foregroundStyle(PipoTheme.cardAccentReadable)
+            .accessibilityIdentifier("pipo.plan.v2.progress")
+    }
+
     private var overview: some View {
         VStack(alignment: .leading, spacing: 22) {
             VStack(alignment: .leading, spacing: 8) {
-                HStack(alignment: .firstTextBaseline) {
-                    VStack(alignment: .leading, spacing: 4) {
-                        sectionTitle("ALREADY RECORDED")
-                        Text(money(original.recorded))
-                            .font(.title2.bold())
-                            .foregroundStyle(PipoTheme.cardInk)
-                            .minimumScaleFactor(0.8)
-                            .fixedSize(horizontal: false, vertical: true)
-                    }
-                    Spacer(minLength: 8)
-                    Text(progressText)
-                        .font(.headline.bold())
-                        .foregroundStyle(PipoTheme.cardAccentReadable)
-                        .accessibilityIdentifier("pipo.plan.v2.progress")
+                // Keep monetary totals readable at AX sizes rather than forcing
+                // two growing text blocks to compete for a 320pt row.
+                ViewThatFits(in: .horizontal) {
+                    progressSummary(axis: .horizontal)
+                    progressSummary(axis: .vertical)
                 }
                 ProgressView(value: progress)
                     .progressViewStyle(.linear)
