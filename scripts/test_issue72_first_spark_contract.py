@@ -51,6 +51,8 @@ class FirstSparkOfflineContract(unittest.TestCase):
         self.assertIn("guard !started else { return }", MOTION)
         self.assertIn("if reduceMotion", MOTION)
         self.assertIn("pipo.firstSpark.scene", MOTION)
+        self.assertIn("ScrollView {", MOTION)
+        self.assertIn(".safeAreaInset(edge: .bottom, spacing: 0)", MOTION)
         self.assertIn("Your first saving period is recorded.", MOTION)
         self.assertIn('Image("PipoV4Neutral")', MOTION)
         self.assertIn("Task.sleep(nanoseconds:", MOTION)
