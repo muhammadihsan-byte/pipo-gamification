@@ -1212,7 +1212,9 @@ struct DashboardView: View {
                             .font(.system(size: 28, weight: .bold, design: .rounded))
                             .foregroundStyle(PipoTheme.ink)
                             .accessibilityAddTraits(.isHeader)
-                        Text("Already saved money? Let's log that progress.")
+                        Text(goalToRecord?.rhythm == .flexible
+                             ? "Log an amount whenever it works for you. No saving day is required."
+                             : "Already saved money? Let's log that progress.")
                             .font(.subheadline)
                             .foregroundStyle(PipoTheme.muted)
                     }
@@ -1258,6 +1260,13 @@ struct DashboardView: View {
                                 .padding(.horizontal, 16)
                                 .background(Color(.secondarySystemGroupedBackground),
                                             in: RoundedRectangle(cornerRadius: 14))
+                            if goalToRecord.rhythm == .flexible {
+                                Text("Flexible goal · no saving schedule or streak required.")
+                                    .font(.footnote)
+                                    .foregroundStyle(PipoTheme.muted)
+                                    .fixedSize(horizontal: false, vertical: true)
+                                    .accessibilityIdentifier("pipo.flex.v2.manualPace")
+                            }
                         }
                     }
 
