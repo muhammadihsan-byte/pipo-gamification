@@ -47,36 +47,12 @@ jobs:
     if: >-
       github.event_name == 'workflow_dispatch' ||
       github.event_name == 'push' ||
-      (github.event_name == 'pull_request' && github.event.pull_request.draft == false) ||
-      (github.event_name == 'pull_request' &&
-       github.event.action == 'labeled' &&
-       github.event.label.name == 'bug' &&
-       github.event.pull_request.number == 101 &&
-       github.event.pull_request.draft == true &&
-       github.head_ref == 'fix/pipo-offline-visual-layout-20261123')
+      (github.event_name == 'pull_request' && github.event.pull_request.draft == false)
     runs-on: macos-15
     timeout-minutes: 45
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
-        with:
-          # Exact PR HEAD is required for the one-shot visual QA;
-          # GitHub's synthetic PR merge commit is not the QA reference.
-          ref: ${{ github.event.pull_request.head.sha || github.sha }}
-
-      - name: Pin exact PR #101 approved QA revision
-        if: >-
-          github.event_name == 'pull_request' &&
-          github.event.action == 'labeled' &&
-          github.event.label.name == 'bug' &&
-          github.event.pull_request.number == 101
-        shell: bash
-        env:
-          EXPECTED_SHA: ${{ github.event.pull_request.head.sha }}
-        run: |
-          set -euo pipefail
-          test "$(git rev-parse HEAD)" = "$EXPECTED_SHA"
-          echo "VISUAL_QA_EXACT_HEAD=$EXPECTED_SHA"
 
       - name: Detect Xcode
         run: |
@@ -406,14 +382,7 @@ jobs:
       # automatically by a Draft PR synchronization or a review label.
       - name: Pipo cross-screen visual layout — manual simulator QA + MP4
         id: visual_layout
-        if: >-
-          (github.event_name == 'workflow_dispatch' && inputs.validation_mode == 'visual-layout-qa') ||
-          (github.event_name == 'pull_request' &&
-           github.event.action == 'labeled' &&
-           github.event.label.name == 'bug' &&
-           github.event.pull_request.number == 101 &&
-           github.event.pull_request.draft == true &&
-           github.head_ref == 'fix/pipo-offline-visual-layout-20261123')
+        if: github.event_name == 'workflow_dispatch' && inputs.validation_mode == 'visual-layout-qa'
         shell: bash
         run: |
           set -euo pipefail
