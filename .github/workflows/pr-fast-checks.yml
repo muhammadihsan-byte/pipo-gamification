@@ -75,6 +75,14 @@ jobs:
       - name: Verify Pipo #95-#99 cross-branch safe integration contracts (Linux only)
         run: python3 -m unittest -v scripts/test_offline_ui_integration_95_99.py
 
+      - name: Parse Swift source grammar on Linux (no Xcode or SDK)
+        shell: bash
+        run: |
+          set -euo pipefail
+          command -v swiftc >/dev/null || { echo "Linux Swift frontend is required for offline source parse" >&2; exit 1; }
+          find Pipo PipoTests PipoUITests -type f -name '*.swift' -print0 | xargs -0 swiftc -frontend -parse
+          echo "Swift grammar parsed successfully (not native compilation or type checking)"
+
       - name: Compile isolated QA scripts (syntax only)
         run: |
           python3 -m py_compile \
