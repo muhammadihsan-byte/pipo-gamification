@@ -13,6 +13,7 @@ def source(path):
 
 MANAGE = source("Pipo/Features/PersonalSaving/ManagePlanV2.swift")
 DASH = source("Pipo/Features/Dashboard/ContentView.swift")
+CARDS = source("Pipo/Core/DesignSystem/PipoApprovedCards.swift")
 GOAL = source("Pipo/Features/PersonalSaving/ReviewPlanView.swift")
 PLAN = source("Pipo/Features/PersonalSaving/PersonalPlanComponents.swift")
 MILESTONE = source("Pipo/Features/Gamification/ConsistencyMilestoneView.swift")
@@ -21,6 +22,45 @@ IOS_CI = source(".github/workflows/ios-build.yml")
 
 
 class OfflineLayoutCollisionContract(unittest.TestCase):
+    def test_accessibility_typography_adapts_without_clipping_or_hiding_values(self):
+        self.assertIn("private func progressSummary(axis: Axis)", MANAGE)
+        self.assertIn("ViewThatFits(in: .horizontal)", MANAGE)
+        self.assertIn("private func monthCountSummary", CARDS)
+        self.assertIn("AnyLayout(VStackLayout(alignment: .leading, spacing: 8))", CARDS)
+        self.assertIn("AnyLayout(HStackLayout(spacing: 8))", CARDS)
+        self.assertIn("if dynamicTypeSize.isAccessibilitySize {", CARDS)
+        self.assertIn("multilineTextAlignment(.center)", DASH)
+
+    def test_one_shot_native_visual_qa_gate_is_retired_before_merge(self):
+        self.assertIn("id: visual_layout", IOS_CI)
+        self.assertIn(
+            "github.event_name == 'workflow_dispatch' && inputs.validation_mode == 'visual-layout-qa'",
+            IOS_CI
+        )
+        self.assertNotIn("github.head_ref == 'fix/pipo-ax-typography-qa-20261124'", IOS_CI)
+
+    def test_ax3_manage_plan_preserves_semantics_with_compact_typography(self):
+        self.assertIn("if step == .overview && dynamicTypeSize.isAccessibilitySize", MANAGE)
+        self.assertIn('.accessibilityLabel("Goal: " + original.title)', MANAGE)
+        self.assertIn('Text("What do you want to adjust?")', MANAGE)
+        self.assertIn("? .title3.bold() : .title2.bold()", MANAGE)
+        self.assertIn('Text(dynamicTypeSize.isAccessibilitySize && value == "ALREADY RECORDED"', MANAGE)
+        self.assertIn('Text(step == .overview && dynamicTypeSize.isAccessibilitySize', MANAGE)
+        self.assertIn('? "Choose an edit" : actionLabel)', MANAGE)
+        self.assertIn(".accessibilityLabel(actionLabel)", MANAGE)
+        self.assertIn(".lineLimit(step == .overview ? 1 : nil)", MANAGE)
+
+    def test_group_and_personal_primary_ctas_share_approved_pink(self):
+        # Approved GROUP/03 Figma CTA uses bright #FF6584 plus raised edge.
+        # White text on that surface would be below 4.5:1, so use ink.
+        self.assertIn("shape.fill(PersonalPlanStyle.pink.opacity(", PLAN)
+        self.assertIn(
+            ".foregroundStyle(dimmed ? PersonalPlanStyle.muted : PersonalPlanStyle.ink)",
+            PLAN
+        )
+        self.assertIn("shape.fill(PersonalPlanStyle.berry)", PLAN)
+        self.assertNotIn("PersonalPlanStyle.buttonEdge.opacity(", PLAN)
+
     def test_manage_plan_footer_is_bounded_by_compact_viewport(self):
         part = MANAGE.split("struct PipoManagePlanV2Sheet: View {", 1)[1]
         body = part.split("    private var topBar:", 1)[0]
