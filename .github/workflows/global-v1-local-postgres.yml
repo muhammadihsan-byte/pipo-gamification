@@ -15,6 +15,9 @@ on:
       - "scripts/local_authenticated_issue80_cas_qa.py"
       - "scripts/local_authenticated_issue80_budget_v2_qa.py"
       - "scripts/test_issue80_concurrent_sessions.py"
+      - "Pipo/Widget/WidgetSharedData.swift"
+      - "Pipo/Features/Dashboard/ContentView.swift"
+      - "scripts/test_issue80_final_account_safety.py"
       - ".github/workflows/global-v1-local-postgres.yml"
   workflow_dispatch:
 
