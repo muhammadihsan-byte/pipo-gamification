@@ -953,7 +953,8 @@ struct PipoJourneyWaveAView: View {
                             Text("RECORDED BY CURRENCY")
                                 .font(.caption2.bold())
                                 .foregroundStyle(PipoTheme.muted)
-                            ForEach(totals, id: \.code) { item in
+                            ForEach(totals.indices, id: \.self) { index in
+                                let item = totals[index]
                                 HStack {
                                     Text(item.code).foregroundStyle(PipoTheme.muted)
                                     Spacer()
