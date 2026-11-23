@@ -1,0 +1,59 @@
+{
+  "decision_scope": "review_only_no_execution",
+  "repository_sha": null,
+  "distribution": {
+    "mode": null,
+    "app_store_and_testflight_inventory_verified": false,
+    "prior_adhoc_enterprise_and_local_signed_builds_reviewed": false,
+    "evidence_url": null
+  },
+  "adoption": {
+    "observation_window_days": null,
+    "observed_active_client_count": null,
+    "legacy_upsert_client_count": null,
+    "unknown_version_client_count": null,
+    "last_observed_at_utc": null,
+    "evidence_url": null
+  },
+  "checks": {
+    "signed_legacy_client_pre_post_cutover_qa": {
+      "status": "pending",
+      "evidence_url": null
+    },
+    "signed_insert_only_bridge_qa": {
+      "status": "pending",
+      "evidence_url": null
+    },
+    "signed_cas_v2_budget_client_qa": {
+      "status": "pending",
+      "evidence_url": null
+    },
+    "cross_device_offline_reinstall_recovery_qa": {
+      "status": "pending",
+      "evidence_url": null
+    },
+    "account_switch_and_deletion_journal_cleanup_qa": {
+      "status": "pending",
+      "evidence_url": null
+    },
+    "disposable_real_auth_a_b_qa": {
+      "status": "pending",
+      "evidence_url": null
+    },
+    "backup_restore_drill": {
+      "status": "pending",
+      "evidence_url": null
+    },
+    "rollback_forward_fix_drill": {
+      "status": "pending",
+      "evidence_url": null
+    },
+    "approved_user_upgrade_messaging": {
+      "status": "pending",
+      "evidence_url": null
+    }
+  },
+  "owner_approval_for_production_cutover": false,
+  "pre_cutover_operational_freeze_accepted": false,
+  "no_unsafe_update_regrant_rollback": false
+}
