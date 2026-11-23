@@ -182,6 +182,11 @@ struct DashboardView: View {
             // A presented sheet or deferred milestone cannot survive account switches.
             isShowingSaveConfirmation = false
             goalToRecord = nil
+            savingAmount = ""
+            savingInlineError = nil
+            savingInlineErrorFocused = false
+            saveErrorMessage = nil
+            isSubmittingSaving = false
             selectedGroupGoal = nil
             showingAchievements = false
             showingPrivacyOverview = false
