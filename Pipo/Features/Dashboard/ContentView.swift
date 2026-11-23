@@ -1066,7 +1066,9 @@ struct DashboardView: View {
             .first(where: { !earned.contains($0.rawValue) })
         return NavigationStack {
             ScrollView {
-                LazyVStack(alignment: .leading, spacing: 20) {
+                // Collection is small and bounded; eager sizing avoids
+                // late lazy-stack reflow hiding the milestone below the fold.
+                VStack(alignment: .leading, spacing: 20) {
                     VStack(alignment: .leading, spacing: 7) {
                         Text("YOUR STORY")
                             .font(.caption2.bold())
@@ -1142,10 +1144,14 @@ struct DashboardView: View {
                             Text(milestone.title)
                                 .font(.headline.bold())
                                 .foregroundStyle(PipoTheme.ink)
+                                .fixedSize(horizontal: false, vertical: true)
                             Text("Not earned. Keep going in your own time.")
                                 .font(.subheadline)
                                 .foregroundStyle(PipoTheme.muted)
+                                .fixedSize(horizontal: false, vertical: true)
                         }
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .accessibilityElement(children: .contain)
                         .accessibilityIdentifier("pipo.achievements.nextMilestone")
                     }
                     if !lockedBadges.isEmpty {
@@ -1188,8 +1194,15 @@ struct DashboardView: View {
                         .font(.footnote)
                         .foregroundStyle(PipoTheme.muted)
                 }
-                .padding(20)
+                .padding(.horizontal, 20)
+                .padding(.top, 20)
+                // The collection, milestone and locked rows must scroll fully
+                // above the home indicator on compact and large-text screens.
+                .padding(.bottom, 56)
+                .frame(maxWidth: 520)
+                .frame(maxWidth: .infinity)
             }
+            .scrollBounceBehavior(.basedOnSize)
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .confirmationAction) {
