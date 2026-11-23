@@ -29,6 +29,9 @@ class OfflineLayoutCollisionContract(unittest.TestCase):
         self.assertIn("footer(horizontal: horizontal)", body)
         self.assertIn(".frame(width: geometry.size.width,", body)
         self.assertIn("height: geometry.size.height, alignment: .top)", body)
+        self.assertEqual(body.count("height: geometry.size.height, alignment: .top)"), 1,
+                         "Only the outer NavigationStack may use the full host height")
+        self.assertIn(".frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)", body)
         self.assertIn("footer(horizontal: horizontal)\n                        .padding(.bottom, 12)", body)
         self.assertNotIn("compactBottomReserve", body)
         self.assertNotIn(".safeAreaInset(edge: .bottom, spacing: 0)", body)
