@@ -235,22 +235,22 @@ struct PersonalPlanPrimaryStyle: ButtonStyle {
         configuration.label
             .font(.subheadline.bold())
             .multilineTextAlignment(.center)
-            .foregroundStyle(.white)
+            // Approved Pipo pink (#FF6584) has ~2.8:1 contrast with
+            // white text. Use ink (~5.2:1) rather than darkening the
+            // brand surface into an unrelated red.
+            .foregroundStyle(dimmed ? PersonalPlanStyle.muted : PersonalPlanStyle.ink)
             .padding(.horizontal, 12)
             .frame(maxWidth: .infinity, minHeight: 48)
             .background {
                 let shape = RoundedRectangle(cornerRadius: 12)
                 ZStack {
-                    // A darker berry edge keeps the playful raised CTA
-                    // without relying on low-contrast bright pink behind text.
+                    // Preserve the approved raised-button silhouette.
                     shape.fill(PersonalPlanStyle.berry)
                         .offset(y: 4)
                         .opacity(dimmed ? 0 : 1)
-                    shape.fill(
-                        configuration.isPressed
-                            ? PersonalPlanStyle.berry
-                            : PersonalPlanStyle.buttonEdge.opacity(dimmed ? 0.45 : 1)
-                    )
+                    shape.fill(PersonalPlanStyle.pink.opacity(
+                        dimmed ? 0.45 : configuration.isPressed ? 0.85 : 1
+                    ))
                 }
             }
             .padding(.bottom, 4)
