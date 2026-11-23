@@ -304,7 +304,9 @@ struct RootView: View {
         .sheet(isPresented: $showingAccountDeletion) {
             AccountDeletionConfirmationView(onDelete: performAccountDeletion)
         }
-        .sheet(isPresented: $navigationManager.isMilestonePresented) {
+        .sheet(isPresented: $navigationManager.isMilestonePresented, onDismiss: {
+            navigationManager.milestoneFirstSparkEligible = false
+        }) {
             ConsistencyMilestoneView(
                 xpEarned: navigationManager.milestoneXPEarned,
                 streakDays: navigationManager.milestoneStreakDays,
@@ -665,7 +667,7 @@ struct RootView: View {
                 streakDays: navigationManager.milestoneStreakDays,
                 badgeTitles: navigationManager.milestoneNewBadges,
                 isFirstSave: navigationManager.milestoneIsFirstSave,
-                firstSparkEligible: navigationManager.milestoneFirstSparkEligible,
+                firstSparkEligible: false, // legacy navigation is not a committed save event
                 onViewAchievements: {
                     navigationManager.requestAchievementsOpen()
                     navigationManager.popToRoot()
