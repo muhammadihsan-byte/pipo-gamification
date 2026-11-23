@@ -1051,8 +1051,8 @@ struct PipoJourneyWaveAView: View {
     private var fullTimeline: some View {
         VStack(alignment: .leading, spacing: 18) {
             AnyLayout(dynamicTypeSize.isAccessibilitySize
-                ? VStackLayout(alignment: .leading, spacing: 8)
-                : HStackLayout(spacing: 8)) {
+                ? AnyLayout(VStackLayout(alignment: .leading, spacing: 8))
+                : AnyLayout(HStackLayout(spacing: 8))) {
                 ForEach(PipoJourneyPeriod.allCases) { period in
                     Button {
                         selectedPeriod = period
