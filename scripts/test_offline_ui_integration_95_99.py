@@ -97,7 +97,7 @@ class CrossBranchUIContract(unittest.TestCase):
         for method in required:
             text = GOAL_TESTS if method.startswith("testFlexible") else GAME_TESTS
             self.assertEqual(
-                len(re.findall(r"\\bfunc\\s+" + re.escape(method) + r"\\s*\\(", text)),
+                len(re.findall(r"\bfunc\s+" + re.escape(method) + r"\s*\(", text)),
                 1,
                 "Missing or duplicated XCTest: " + method
             )
