@@ -26,13 +26,13 @@ struct ConsistencyMilestoneView: View {
     }
 
     var body: some View {
-        VStack(spacing: 0) {
+        ScrollView {
             VStack(spacing: 18) {
                 Text(isFirstSave ? "Your first save!" : "That counts!\nNice work.")
                     .font(.system(size: 30, weight: .bold, design: .rounded))
                     .multilineTextAlignment(.center)
                     .foregroundStyle(PipoTheme.ink)
-                    .padding(.top, 54)
+                    .padding(.top, 34)
 
                 Text(isFirstSave
                      ? "You recorded a saving for the first time. That's a real step."
@@ -65,9 +65,11 @@ struct ConsistencyMilestoneView: View {
                 .frame(height: 300)
                 .padding(.horizontal, 8)
             }
-
-            Spacer(minLength: 20)
-
+            .frame(maxWidth: .infinity)
+            .padding(.horizontal, 20)
+            .padding(.bottom, 24)
+        }
+        .safeAreaInset(edge: .bottom, spacing: 0) {
             VStack(spacing: 12) {
                 Button("View my achievements", action: onViewAchievements)
                     .buttonStyle(PrimaryActionButtonStyle())
@@ -76,7 +78,9 @@ struct ConsistencyMilestoneView: View {
                     .foregroundStyle(PipoTheme.muted)
             }
             .padding(.horizontal, 24)
-            .padding(.bottom, 14)
+            .padding(.top, 12)
+            .padding(.bottom, 10)
+            .background(.white)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .background(.white)
