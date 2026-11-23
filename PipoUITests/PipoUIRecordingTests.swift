@@ -95,7 +95,10 @@ final class PipoUIRecordingTests: XCTestCase {
         tapButton("pipo.journey.filter.month")
         attachOnboardingScreen("Journey A 02 — local calendar month filter")
 
-        let record = app.buttons.matching(
+        // SwiftUI exposes the identified accessible record row as an Other
+        // wrapping the tappable Button on iOS 18.5. Match by stable identifier
+        // across element types rather than assuming the AX role is Button.
+        let record = app.descendants(matching: .any).matching(
             NSPredicate(format: "identifier BEGINSWITH %@", "pipo.journey.record.")
         ).firstMatch
         XCTAssertTrue(record.waitForExistence(timeout: 15))
