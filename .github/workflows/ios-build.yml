@@ -297,7 +297,9 @@ jobs:
         id: global_v1
         if: >-
           (github.event_name == 'workflow_dispatch' && inputs.validation_mode == 'global-experience-qa') ||
-          (github.event_name == 'pull_request' && github.head_ref == 'feat/pipo-global-experience-v1-currency')
+          (github.event_name == 'pull_request' &&
+           (github.head_ref == 'feat/pipo-global-experience-v1-currency' ||
+            github.head_ref == 'integration/issue80-final-stability-qa-review'))
         shell: bash
         run: |
           set -euo pipefail
