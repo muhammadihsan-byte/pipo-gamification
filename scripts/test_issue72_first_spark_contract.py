@@ -41,6 +41,8 @@ class FirstSparkOfflineContract(unittest.TestCase):
         self.assertIn("milestoneFirstSparkEligible = false", NAV)
         self.assertIn("milestoneFirstSparkEligible = firstSparkEligible", NAV)
         self.assertIn("navigationManager.resetAccountContext()", ROOT_VIEW)
+        self.assertIn("navigationManager.milestoneFirstSparkEligible = false", ROOT_VIEW)
+        self.assertIn("firstSparkEligible: false, // legacy navigation", ROOT_VIEW)
         self.assertIn("completedSavingReward = nil", DASH)
 
     def test_static_reduce_motion_and_finite_one_shot_timeline(self):
