@@ -121,7 +121,21 @@ struct CreateGoalView: View {
 
     private var editPage: some View {
         PersonalPlanPage(step: step, onBack: goBack) {
-            PersonalPlanIntro(step: step, title: stepHeading, subtitle: stepSubtitle)
+            if step == .rhythm {
+                VStack(alignment: .leading, spacing: 8) {
+                    Text("Your saving rhythm")
+                        .font(.system(size: 30, weight: .bold, design: .rounded))
+                        .foregroundStyle(PersonalPlanStyle.ink)
+                        .fixedSize(horizontal: false, vertical: true)
+                        .accessibilityAddTraits(.isHeader)
+                    Text("Choose a pace that works in real life.")
+                        .font(.subheadline)
+                        .foregroundStyle(PersonalPlanStyle.muted)
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
+            } else {
+                PersonalPlanIntro(step: step, title: stepHeading, subtitle: stepSubtitle)
+            }
             stepFields
         } footer: {
             footerActions
@@ -153,13 +167,22 @@ struct CreateGoalView: View {
     }
 
     private var footerActions: some View {
-        PersonalPlanActions(
-            back: goBack,
-            showsBack: step != .goal || isEditingFromReview,
-            title: isEditingFromReview && plan != nil ? "Back to review" : "Continue",
-            dimmed: !stepIsValid && !(step == .target && breakdownMismatch != nil),
-            action: advance
-        )
+        VStack(spacing: 5) {
+            PersonalPlanActions(
+                back: goBack,
+                showsBack: step != .goal || isEditingFromReview,
+                title: isEditingFromReview && plan != nil ? "Back to review" :
+                    step == .rhythm && rhythm == .flexible ? "Continue to review" : "Continue",
+                dimmed: !stepIsValid && !(step == .target && breakdownMismatch != nil),
+                action: advance
+            )
+            if step == .rhythm && rhythm == .flexible {
+                Text("You can change your rhythm later.")
+                    .font(.caption)
+                    .foregroundStyle(PersonalPlanStyle.muted)
+                    .accessibilityIdentifier("pipo.flex.v2.changeLater")
+            }
+        }
     }
 
     @ViewBuilder
@@ -602,38 +625,27 @@ struct CreateGoalView: View {
 
     private var rhythmFields: some View {
         VStack(alignment: .leading, spacing: 20) {
-            VStack(alignment: .leading, spacing: 8) {
-                Text("Saving frequency · Required")
-                    .font(.caption)
-                    .foregroundStyle(PersonalPlanStyle.muted)
-                HStack(spacing: 8) {
-                    rhythmChoice(.daily)
-                    rhythmChoice(.weekly)
+            VStack(alignment: .leading, spacing: 9) {
+                Text("STEP 4 OF 5  /  PERSONAL GOAL")
+                    .font(.caption2.bold())
+                    .foregroundStyle(PersonalPlanStyle.berry)
+                ForEach(SavingRhythm.allCases) { option in
+                    rhythmChoice(option)
                 }
-                HStack(spacing: 8) {
-                    rhythmChoice(.biWeekly)
-                    rhythmChoice(.monthly)
-                }
-                rhythmChoice(.flexible)
             }
 
             if rhythm == .flexible {
                 PersonalPlanNote(
-                    title: "Save at your own pace",
-                    message: "Choose when and how much to save. There’s no set saving day or amount."
+                    title: "Flexible is a valid rhythm.",
+                    message: "No saving days to miss. Record money you have already set aside whenever you are ready."
                 )
-                VStack(alignment: .leading, spacing: 10) {
-                    Text(cleanTitle).font(.subheadline.bold())
-                    if let targetRupiah { Text(money(targetRupiah)).font(.title3.bold()) }
-                    if let targetDate {
-                        Text("You’re aiming for \(dateLabel(targetDate)), without a fixed saving schedule.")
-                            .font(.footnote)
-                            .foregroundStyle(PersonalPlanStyle.muted)
-                    }
+                .accessibilityIdentifier("pipo.flex.v2.noSchedule")
+                if let targetDate {
+                    Text("Your goal date of \(dateLabel(targetDate)) is an aspiration, not a required saving day.")
+                        .font(.footnote)
+                        .foregroundStyle(PersonalPlanStyle.muted)
+                        .fixedSize(horizontal: false, vertical: true)
                 }
-                .frame(maxWidth: .infinity, alignment: .leading)
-                .padding(16)
-                .background(PersonalPlanStyle.surface, in: RoundedRectangle(cornerRadius: 16))
             } else {
                 if rhythm == .monthly {
                     SavingDayGrid(title: "Preferred saving date", days: Array(1...31), selection: $monthDay) { String($0) }
@@ -674,7 +686,50 @@ struct CreateGoalView: View {
     }
 
     private func rhythmChoice(_ option: SavingRhythm) -> some View {
-        PersonalPlanChoice(title: option.title, selected: rhythm == option) { rhythm = option }
+        let selected = rhythm == option
+        let subtitle: String = {
+            switch option {
+            case .daily: "Set a little aside each day."
+            case .weekly: "Choose your saving day each week."
+            case .biWeekly: "Plan around a 14-day cycle."
+            case .monthly: "Pick a date that suits you."
+            case .flexible: "Whenever you can. No saving streak."
+            }
+        }()
+        return Button { rhythm = option } label: {
+            HStack(spacing: 12) {
+                Image(systemName: selected ? "largecircle.fill.circle" : "circle")
+                    .font(.title3)
+                    .foregroundStyle(selected ? PersonalPlanStyle.berry : PersonalPlanStyle.muted)
+                    .frame(width: 22, height: 22)
+                    .accessibilityHidden(true)
+                VStack(alignment: .leading, spacing: 3) {
+                    Text(option.title)
+                        .font(.subheadline.bold())
+                        .foregroundStyle(PersonalPlanStyle.ink)
+                    Text(subtitle)
+                        .font(.caption)
+                        .foregroundStyle(PersonalPlanStyle.muted)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+                Spacer(minLength: 0)
+            }
+            .padding(.horizontal, 16)
+            .padding(.vertical, 12)
+            .frame(maxWidth: .infinity, minHeight: 74, alignment: .leading)
+            .background(selected ? PersonalPlanStyle.blush : .white,
+                        in: RoundedRectangle(cornerRadius: 16))
+            .overlay {
+                RoundedRectangle(cornerRadius: 16)
+                    .strokeBorder(selected ? PersonalPlanStyle.berry : PersonalPlanStyle.border,
+                                  lineWidth: selected ? 2 : 1)
+            }
+            .contentShape(RoundedRectangle(cornerRadius: 16))
+        }
+        .buttonStyle(.plain)
+        .accessibilityAddTraits(selected ? .isSelected : [])
+        .accessibilityLabel(option.title + ". " + subtitle)
+        .accessibilityIdentifier("pipo.flex.v2.rhythm." + option.rawValue)
     }
 
     private func money(_ minor: Int) -> String {
