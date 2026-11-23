@@ -1047,50 +1047,141 @@ struct DashboardView: View {
         }
     }
 
+    // Approved Wave A collection: real earned IDs only; the current profile
+    // does not store award timestamps, so never render the Figma sample dates.
+    // Badge detail navigation remains Wave B (no fake tappable destinations).
     private var achievementsSheet: some View {
-        NavigationStack {
+        let earned = Set(currentProfile?.unlockedBadgeIds ?? [])
+        let earnedBadges = PipoBadge.allCases.filter { earned.contains($0.rawValue) }
+        let lockedBadges = PipoBadge.allCases.filter { !earned.contains($0.rawValue) }
+        let nextMilestone = [PipoBadge.quarterWay, .halfway, .almostThere, .goalAchieved]
+            .first(where: { !earned.contains($0.rawValue) })
+        return NavigationStack {
             ScrollView {
-                LazyVStack(alignment: .leading, spacing: 12) {
+                LazyVStack(alignment: .leading, spacing: 20) {
+                    VStack(alignment: .leading, spacing: 7) {
+                        Text("YOUR STORY")
+                            .font(.caption2.bold())
+                            .foregroundStyle(PipoTheme.deepPink)
+                        Text("Achievements")
+                            .font(.largeTitle.bold())
+                            .foregroundStyle(PipoTheme.ink)
+                            .accessibilityAddTraits(.isHeader)
+                        Text("Small actions. Real recognition.")
+                            .font(.subheadline)
+                            .foregroundStyle(PipoTheme.muted)
+                    }
+                    TicketCard(style: .approvedCompact) {
+                        VStack(alignment: .leading, spacing: 14) {
+                            HStack {
+                                Text("YOUR COLLECTION")
+                                    .foregroundStyle(PipoTheme.deepPink)
+                                Spacer()
+                                Text("ALL TIME")
+                                    .foregroundStyle(PipoTheme.muted)
+                            }
+                            .font(.caption2.bold())
+                            Text("\(earnedBadges.count) earned badges")
+                                .font(.headline.bold())
+                                .foregroundStyle(PipoTheme.ink)
+                            if earnedBadges.isEmpty {
+                                Text("Your first badge is waiting for a recorded saving.")
+                                    .font(.subheadline)
+                                    .foregroundStyle(PipoTheme.muted)
+                                    .fixedSize(horizontal: false, vertical: true)
+                            } else {
+                                LazyVGrid(
+                                    columns: [GridItem(.adaptive(minimum: 125), spacing: 10)],
+                                    spacing: 10
+                                ) {
+                                    ForEach(earnedBadges) { badge in
+                                        VStack(spacing: 8) {
+                                            Image("PipoBadge_\(badge.rawValue)")
+                                                .resizable()
+                                                .scaledToFit()
+                                                .frame(height: 86)
+                                                .accessibilityHidden(true)
+                                            Text(badge.title)
+                                                .font(.subheadline.bold())
+                                                .foregroundStyle(PipoTheme.ink)
+                                            Text("Earned")
+                                                .font(.caption)
+                                                .foregroundStyle(PipoTheme.muted)
+                                        }
+                                        .frame(maxWidth: .infinity, minHeight: 140)
+                                        .padding(10)
+                                        .background(PipoTheme.palePink,
+                                                    in: RoundedRectangle(cornerRadius: 14))
+                                        .accessibilityElement(children: .ignore)
+                                        .accessibilityLabel("\(badge.title), earned. \(badge.description)")
+                                    }
+                                }
+                            }
+                            Text("These badges came from your recorded saving activity.")
+                                .font(.footnote)
+                                .foregroundStyle(PipoTheme.muted)
+                        }
+                    }
                     Text("\(earnedBadgeCount) of \(PipoBadge.allCases.count) badges collected")
                         .font(.subheadline)
                         .foregroundStyle(PipoTheme.muted)
                         .accessibilityIdentifier("pipo.achievements.count")
-                    ForEach(PipoBadge.allCases) { badge in
-                        let earned = currentProfile?.unlockedBadgeIds.contains(badge.rawValue) ?? false
-                        HStack(spacing: 12) {
-                            Image("PipoBadge_\(badge.rawValue)")
-                                .resizable()
-                                .scaledToFit()
-                                .frame(width: 76, height: 68)
-                                .opacity(earned ? 1 : 0.35)
-                                .accessibilityHidden(true)
-                            VStack(alignment: .leading, spacing: 5) {
-                                Text(badge.title)
-                                    .font(.subheadline.bold())
-                                    .foregroundStyle(PipoTheme.ink)
-                                Text(badge.description)
-                                    .font(.caption)
-                                    .foregroundStyle(PipoTheme.muted)
-                                    .fixedSize(horizontal: false, vertical: true)
-                                Text(earned ? "Earned" : (badge.isImplemented ? "Locked" : "Coming later"))
-                                    .font(.caption2.weight(.semibold))
-                                    .foregroundStyle(earned ? PipoTheme.deepPink : PipoTheme.muted)
-                            }
-                            Spacer(minLength: 0)
-                            Image(systemName: earned ? "checkmark.seal.fill" : "lock.fill")
-                                .foregroundStyle(earned ? PipoTheme.deepPink : PipoTheme.muted)
-                                .accessibilityHidden(true)
+                    if let milestone = nextMilestone {
+                        VStack(alignment: .leading, spacing: 12) {
+                            Text("NEXT MILESTONE")
+                                .font(.caption.bold())
+                                .foregroundStyle(PipoTheme.muted)
+                            Text(milestone.title)
+                                .font(.headline.bold())
+                                .foregroundStyle(PipoTheme.ink)
+                            Text("Not earned. Keep going in your own time.")
+                                .font(.subheadline)
+                                .foregroundStyle(PipoTheme.muted)
                         }
-                        .padding(12)
-                        .background(earned ? PipoTheme.palePink : PipoTheme.cream,
-                                    in: RoundedRectangle(cornerRadius: 16))
-                        .accessibilityElement(children: .combine)
-                        .accessibilityLabel("\(badge.title). \(earned ? "Earned" : badge.isImplemented ? "Locked" : "Coming later"). \(badge.description)")
+                        .accessibilityIdentifier("pipo.achievements.nextMilestone")
                     }
+                    if !lockedBadges.isEmpty {
+                        Text("MORE TO DISCOVER")
+                            .font(.caption.bold())
+                            .foregroundStyle(PipoTheme.muted)
+                        ForEach(lockedBadges) { badge in
+                            HStack(spacing: 12) {
+                                Image("PipoBadge_\(badge.rawValue)")
+                                    .resizable()
+                                    .scaledToFit()
+                                    .frame(width: 62, height: 62)
+                                    .opacity(0.3)
+                                    .accessibilityHidden(true)
+                                VStack(alignment: .leading, spacing: 5) {
+                                    Text(badge.title)
+                                        .font(.subheadline.bold())
+                                        .foregroundStyle(PipoTheme.ink)
+                                    Text(badge.description)
+                                        .font(.caption)
+                                        .foregroundStyle(PipoTheme.muted)
+                                        .fixedSize(horizontal: false, vertical: true)
+                                    Text(badge.isImplemented ? "Locked" : "Coming later")
+                                        .font(.caption2.weight(.semibold))
+                                        .foregroundStyle(PipoTheme.muted)
+                                }
+                                Spacer(minLength: 0)
+                                Image(systemName: "lock.fill")
+                                    .foregroundStyle(PipoTheme.muted)
+                                    .accessibilityHidden(true)
+                            }
+                            .padding(12)
+                            .background(PipoTheme.cream,
+                                        in: RoundedRectangle(cornerRadius: 16))
+                            .accessibilityElement(children: .combine)
+                            .accessibilityLabel("\(badge.title). \(badge.isImplemented ? "Locked" : "Coming later"). \(badge.description)")
+                        }
+                    }
+                    Text("Some badge designs belong to future features. No rewards are granted just by viewing this page.")
+                        .font(.footnote)
+                        .foregroundStyle(PipoTheme.muted)
                 }
                 .padding(20)
             }
-            .navigationTitle("Achievements")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .confirmationAction) {
