@@ -46,7 +46,9 @@ class FlexibleV2OfflineContract(unittest.TestCase):
     def test_flexible_goal_renders_true_fractional_progress_and_no_deadline_card(self):
         self.assertIn("fractionLength(0...2)", REVIEW)
         self.assertIn('pipo.flex.v2.goalPace', REVIEW)
-        self.assertIn("No saving days to miss.", REVIEW)
+        self.assertIn("Flexible · no saving days to miss", REVIEW)
+        self.assertIn("pipo.flex.v2.savingHistory", REVIEW)
+        self.assertIn("pipo.flex.v2.mascotPace", REVIEW)
         self.assertIn("ownedHistory(for: goal)", REVIEW)
         self.assertIn("AccountScope.owns(goal, userID: authStateManager.userID)", REVIEW)
         self.assertIn("PipoActivityHistoryDCard", REVIEW)
