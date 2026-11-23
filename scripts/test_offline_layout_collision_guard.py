@@ -100,7 +100,8 @@ class OfflineLayoutCollisionContract(unittest.TestCase):
             "github.event_name == 'workflow_dispatch' && inputs.validation_mode == 'visual-layout-qa'",
             IOS_CI
         )
-        self.assertNotIn("github.event.label.name == 'bug'", IOS_CI)
+        # PR #101's temporary label override is gone. Other retained
+        # steps may mention labels without being able to start a runner.
         self.assertNotIn("github.event.action == 'labeled'", IOS_CI)
         self.assertNotIn("github.event.pull_request.number == 101", IOS_CI)
         self.assertNotIn("EXACT_NATIVE_QA_HEAD=$EXPECTED_SHA", IOS_CI)
@@ -111,6 +112,8 @@ class OfflineLayoutCollisionContract(unittest.TestCase):
         self.assertNotIn("github.event.label", job_gate)
         legacy_gate = IOS_CI.split("  issue80-integrated-qa:", 1)[1].split("    runs-on: macos-15", 1)[0]
         self.assertIn("false # Owner-paused:", legacy_gate)
+        legacy_bridge_gate = IOS_CI.split("  issue80-legacy-bridge-native:", 1)[1].split("    runs-on: macos-15", 1)[0]
+        self.assertIn("false # Owner-paused:", legacy_bridge_gate)
         # The focused native suite is ready to run later, NOT executed by
         # this Linux static assertion or Draft PR CI.
         for method in (
