@@ -179,6 +179,12 @@ struct DashboardView: View {
             guard goalID != nil else { return }
             openPendingDepositRequest()
         }
+        .onChange(of: ownedGoals.map(\.id)) { _, _ in
+            // A newly committed goal may arrive after the navigation callback.
+            // Keep the pending request until SwiftData publishes this owner row.
+            guard navigationManager.pendingDepositGoalID != nil else { return }
+            openPendingDepositRequest()
+        }
         .onChange(of: authStateManager.userID) { _, _ in
             // A presented sheet or deferred milestone cannot survive account switches.
             isShowingSaveConfirmation = false
@@ -1351,7 +1357,9 @@ struct DashboardView: View {
                             .font(.system(size: 28, weight: .bold, design: .rounded))
                             .foregroundStyle(PipoTheme.ink)
                             .accessibilityAddTraits(.isHeader)
-                        Text("Already saved money? Let's log that progress.")
+                        Text(goalToRecord?.rhythm == .flexible
+                             ? "Log an amount whenever it works for you. No saving day is required."
+                             : "Already saved money? Let's log that progress.")
                             .font(.subheadline)
                             .foregroundStyle(PipoTheme.muted)
                     }
@@ -1397,6 +1405,13 @@ struct DashboardView: View {
                                 .padding(.horizontal, 16)
                                 .background(Color(.secondarySystemGroupedBackground),
                                             in: RoundedRectangle(cornerRadius: 14))
+                            if goalToRecord.rhythm == .flexible {
+                                Text("Flexible goal · no saving schedule or streak required.")
+                                    .font(.footnote)
+                                    .foregroundStyle(PipoTheme.muted)
+                                    .fixedSize(horizontal: false, vertical: true)
+                                    .accessibilityIdentifier("pipo.flex.v2.manualPace")
+                            }
                         }
                     }
 
@@ -1599,14 +1614,21 @@ struct DashboardView: View {
     }
 
     private func openPendingDepositRequest() {
-        guard let goalID = navigationManager.consumeDepositRequest() else { return }
-        guard let goal = ownedGoals.first(where: {
-            $0.id == goalID && !$0.isGroupGoal && $0.canRecordSaving
-        }) else {
+        guard let goalID = navigationManager.pendingDepositGoalID else { return }
+        guard let ownerID = authStateManager.userID else {
+            _ = navigationManager.consumeDepositRequest()
+            return
+        }
+        // Do not consume a freshly created goal request while SwiftData @Query
+        // is still updating. We retry on the ownedGoals ID change above.
+        guard let goal = ownedGoals.first(where: { $0.id == goalID }) else { return }
+        guard AccountScope.owns(goal, userID: ownerID),
+              !goal.isGroupGoal, goal.canRecordSaving else {
+            _ = navigationManager.consumeDepositRequest()
             saveErrorMessage = "That personal goal is no longer active."
             return
         }
-
+        _ = navigationManager.consumeDepositRequest()
         goalToRecord = goal
         savingAmount = ""
         savingInlineError = nil
