@@ -32,7 +32,7 @@ class FirstSparkOfflineContract(unittest.TestCase):
         self.assertLess(fragment.index("try modelContext.save()"),
                         fragment.index("let firstSparkEligible ="))
         self.assertLess(fragment.index("let firstSparkEligible ="),
-                        fragment.index("completedSavingReward ="))
+                        fragment.index("completedSavingReward = ("))
         self.assertIn("reward.firstSparkEligible", DASH)
         self.assertIn("firstSparkEligible: firstSparkEligible", ROOT_VIEW)
         self.assertIn("navigationManager.milestoneFirstSparkEligible", ROOT_VIEW)
