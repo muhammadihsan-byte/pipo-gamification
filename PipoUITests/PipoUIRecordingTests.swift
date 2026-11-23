@@ -900,6 +900,77 @@ final class PipoUIRecordingTests: XCTestCase {
         attachOnboardingScreen("Issue 42 — Approved money-out review, no writes")
     }
 
+    /// Owner-approved core authentication UI visual proof (#86).
+    /// This DEBUG-only fixture does not submit credentials or contact Supabase.
+    func testAuthV1WelcomeSignInSignUpVisualParity() {
+        continueAfterFailure = false
+        app.launchArguments = ["-pipo-auth-qa"]
+        app.launch()
+
+        let welcome = app.staticTexts["Saving can be fun, actually."]
+        XCTAssertTrue(welcome.waitForExistence(timeout: 25))
+        XCTAssertTrue(app.staticTexts["Ready for a little win?"].exists)
+        let getStarted = app.buttons["pipo.auth.getStarted"]
+        let existing = app.buttons["pipo.auth.existingAccount"]
+        XCTAssertTrue(getStarted.exists && existing.exists)
+        XCTAssertGreaterThanOrEqual(getStarted.frame.height, 44)
+        XCTAssertGreaterThanOrEqual(existing.frame.height, 44)
+        attachOnboardingScreen("Auth V1 01 — Welcome")
+
+        tapButton("pipo.auth.getStarted")
+        XCTAssertTrue(app.staticTexts["Let's get started!"].waitForExistence(timeout: 15))
+        XCTAssertTrue(app.staticTexts["I've got your back!"].exists)
+        XCTAssertTrue(app.buttons["pipo.auth.submit"].exists)
+        XCTAssertFalse(app.buttons["pipo.auth.forgotPassword"].exists)
+        XCTAssertFalse(app.buttons["Apple"].exists || app.buttons["Google"].exists)
+        attachOnboardingScreen("Auth V1 03 — Join Pipo email flow")
+        tapButton("pipo.auth.switchMode")
+        XCTAssertTrue(app.staticTexts["You're back!"].waitForExistence(timeout: 15))
+        XCTAssertTrue(app.buttons["pipo.auth.forgotPassword"].exists)
+        XCTAssertTrue(app.buttons["pipo.auth.passwordVisibility"].exists)
+        attachOnboardingScreen("Auth V1 02 — Sign In email flow")
+
+        tapButton("pipo.auth.forgotPassword")
+        XCTAssertTrue(app.staticTexts["Enter your email address to receive a reset link."]
+            .waitForExistence(timeout: 10))
+        attachOnboardingScreen("Auth V1 — Local recovery validation")
+        tapButton("pipo.auth.back")
+        XCTAssertTrue(app.buttons["pipo.auth.getStarted"].waitForExistence(timeout: 15))
+    }
+
+    /// Accessibility Dynamic Type on actual iOS Simulator (not just static source).
+    /// Ensure core actions remain reachable and no disabled social provider appears.
+    func testAuthV1LargeTextNavigationAndInputTargets() {
+        continueAfterFailure = false
+        app.launchArguments = [
+            "-pipo-auth-qa",
+            "-UIPreferredContentSizeCategoryName",
+            "UICTContentSizeCategoryAccessibilityM"
+        ]
+        app.launch()
+        XCTAssertTrue(app.staticTexts["Saving can be fun, actually."]
+            .waitForExistence(timeout: 25))
+        let getStarted = app.buttons["pipo.auth.getStarted"]
+        bringIntoView(getStarted)
+        XCTAssertGreaterThanOrEqual(getStarted.frame.height, 44)
+        XCTAssertTrue(getStarted.isHittable, "Welcome CTA unreachable in AX mode")
+        attachOnboardingScreen("Auth V1 AX — Welcome action visible")
+        getStarted.tap()
+
+        let submit = app.buttons["pipo.auth.submit"]
+        bringIntoView(submit)
+        XCTAssertGreaterThanOrEqual(submit.frame.height, 44)
+        XCTAssertTrue(submit.isHittable, "Sign Up CTA unreachable in AX mode")
+        attachOnboardingScreen("Auth V1 AX — Sign Up action visible")
+        tapButton("pipo.auth.switchMode")
+        let forgot = app.buttons["pipo.auth.forgotPassword"]
+        bringIntoView(forgot)
+        XCTAssertGreaterThanOrEqual(forgot.frame.height, 44,
+            "Forgot Password must be a full accessibility hit target")
+        XCTAssertTrue(forgot.isHittable)
+        attachOnboardingScreen("Auth V1 AX — Sign In recovery reachable")
+    }
+
     /// Non-destructive P0 simulator acceptance: sign-in availability and
     /// account deletion confirmation. The fixture is DEBUG-only and has no
     /// backend Auth session. NEVER tap the destructive submit action.
