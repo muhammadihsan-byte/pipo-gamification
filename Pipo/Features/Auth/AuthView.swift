@@ -250,7 +250,7 @@ struct AuthView: View {
                         .foregroundStyle(PipoTheme.ink)
                     Spacer()
                     if page == .signIn {
-                        Button("Forgot Password?") {
+                        Button {
                             let address = email.trimmingCharacters(in: .whitespacesAndNewlines)
                             guard address.contains("@"), !address.contains(" ") else {
                                 validationMessage = "Enter your email address to receive a reset link."
@@ -258,10 +258,17 @@ struct AuthView: View {
                             }
                             validationMessage = nil
                             onForgotPassword(address)
+                        } label: {
+                            // Put the 44pt minimum on the label, not only
+                            // the outer Button. XCTest measured only 26.3pt
+                            // for the earlier outer frame at accessibility M.
+                            Text("Forgot Password?")
+                                .font(.caption.weight(.medium))
+                                .foregroundStyle(PipoTheme.cardAccentReadable)
+                                .frame(minHeight: 44)
+                                .contentShape(Rectangle())
                         }
-                        .font(.caption.weight(.medium))
-                        .foregroundStyle(PipoTheme.cardAccentReadable)
-                        .frame(minHeight: 44)
+                        .buttonStyle(.plain)
                         .accessibilityIdentifier("pipo.auth.forgotPassword")
                     }
                 }
