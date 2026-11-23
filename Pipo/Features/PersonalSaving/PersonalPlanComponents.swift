@@ -36,7 +36,7 @@ enum PersonalPlanStyle {
     static let muted = Color(red: 100 / 255, green: 116 / 255, blue: 139 / 255)
     static let surface = Color(red: 245 / 255, green: 247 / 255, blue: 249 / 255)
     static let border = Color(red: 226 / 255, green: 232 / 255, blue: 240 / 255)
-    static let pink = Color(red: 1, green: 101 / 255, blue: 132 / 255)
+    static let pink = PipoTheme.approvedActionPink
     static let blush = Color(red: 1, green: 241 / 255, blue: 244 / 255)
     static let berry = Color(red: 176 / 255, green: 40 / 255, blue: 75 / 255)
     static let buttonEdge = Color(red: 205 / 255, green: 56 / 255, blue: 72 / 255)
