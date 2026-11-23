@@ -60,3 +60,7 @@ Current gate: **native visual QA FAIL on old commit; correction staged but NOT y
 - #102 replaces the old #101 label-gated macOS trigger with explicit workflow dispatch, removes `pull_request:labeled`, and permanently disables legacy draft #83/#85 macOS label jobs. It remains a **Draft** candidate, retargeted to `main` to execute combined Linux validation. Do not merge #101 and #102 independently.
 
 **Current release gate:** Native targeted regression QA **PASSED**; combined PR #102 Linux QA must pass for its final exact head. Full pixel-perfect Figma parity across all screens, the final Pipo V4 pose exports/motion rig, outstanding color and UX approvals, App Store/TestFlight signing, paid entitlements and production rollout are **not** established by these tests. Await owner's explicit final merge authorization.
+
+## Owner final merge authorization — 23 November 2026
+
+The product owner explicitly approved merging the unified PR #102 into `main`. This is a **merge authorization**, not authorization for production DB migrations, App Store/TestFlight publication, StoreKit billing activation, CAS cutover, or automatic release deployments. Respect all repository branch protection and required GitHub Actions checks; merge only when the required checks for the exact PR head have succeeded. No app code or SwiftUI behavior was changed for this approval record. Previous independent PRs #95–#101 are provenance only and must not be merged separately.
