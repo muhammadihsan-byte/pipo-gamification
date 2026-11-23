@@ -7,6 +7,364 @@ import XCTest
 
 final class PersonalGoalTests: XCTestCase {
 
+    #if PIPO_ISSUE80_BRIDGE
+    /// Native signed-bridge candidate recovery: this verifies iOS journal
+    /// persistence without issuing a Supabase request or rewriting SwiftData.
+    @MainActor
+    func testIssue80LegacyBridgeKeepsLocalSavingAndXPOnReopen() throws {
+        let schema = Schema([
+            PersonalGoal.self, SubItem.self, SavingTransaction.self, UserProfile.self
+        ])
+        let folder = FileManager.default.temporaryDirectory.appendingPathComponent(
+            "pipo-bridge-native-" + UUID().uuidString, isDirectory: true
+        )
+        try FileManager.default.createDirectory(
+            at: folder, withIntermediateDirectories: true
+        )
+        defer { try? FileManager.default.removeItem(at: folder) }
+        let config = ModelConfiguration(
+            schema: schema, url: folder.appendingPathComponent("goal.store")
+        )
+        let container = try ModelContainer(for: schema, configurations: [config])
+        let writer = ModelContext(container)
+        let owner = UUID(), otherAccount = UUID()
+        let start = Date(timeIntervalSince1970: 1_800_000_000)
+        let due = Date(timeIntervalSince1970: 1_810_000_000)
+        let goal = PersonalGoal(
+            title: "Camera", category: .gadget, targetAmount: 1,
+            currencyCode: "USD", targetMinorUnits: 100, recordedMinorUnits: 25,
+            startDate: start, targetDate: due, rhythm: .weekly,
+            preferredSavingDay: 3, ownerUserID: owner
+        )
+        let contribution = SavingTransaction(
+            goalId: goal.id, amount: 0.25, amountMinorUnits: 25,
+            currencyCode: "USD", xpEarned: 7, userID: owner
+        )
+        let profile = UserProfile(userID: owner, totalXP: 41)
+        writer.insert(goal)
+        writer.insert(contribution)
+        writer.insert(profile)
+        try writer.save()
+
+        let request = try SavingGoalCreateOnlyRequest(
+            goalID: goal.id, ownerID: owner, title: "Camera",
+            category: "gadget", customCategory: nil,
+            targetMinorUnits: 100, currencyCode: "USD",
+            startDate: start, targetDate: due, rhythm: "weekly",
+            preferredSavingDay: 3, plannedContributionMinorUnits: nil
+        )
+        let directory = folder.appendingPathComponent("legacy-journal")
+        let journal = LegacyGoalBridgeIntentJournal(directory: directory)
+        XCTAssertEqual(try journal.stage(request, ownerID: owner).state, .staged)
+        try journal.markAttempted(goalID: goal.id, ownerID: owner)
+        XCTAssertEqual(
+            try LegacyGoalBridgeIntentJournal(directory: directory)
+                .intent(goalID: goal.id, ownerID: owner)?.state, .attempted
+        )
+
+        // Keep original exact Decimal wire values; merely prepend server owner.
+        let wire = String(decoding: try JSONEncoder().encode(request), as: UTF8.self)
+        XCTAssertTrue(wire.hasPrefix("{"))
+        let serverBody = "{\"user_id\":\"\(owner.uuidString)\","
+            + String(wire.dropFirst())
+        let row = try JSONDecoder().decode(
+            LegacyGoalBridgeCloudRow.self, from: Data(serverBody.utf8)
+        )
+        try journal.recordVerifiedReadback(
+            row, goalID: goal.id, ownerID: owner, authenticatedOwnerID: owner
+        )
+        let reopened = LegacyGoalBridgeIntentJournal(directory: directory)
+        XCTAssertEqual(try reopened.intent(goalID: goal.id, ownerID: owner)?.state,
+                       .verified)
+        XCTAssertTrue(try reopened.all(for: otherAccount).isEmpty)
+        XCTAssertThrowsError(
+            try reopened.recordVerifiedReadback(
+                row, goalID: goal.id, ownerID: owner,
+                authenticatedOwnerID: otherAccount
+            )
+        )
+        // Journal readbacks never modify existing SwiftData goal, saving or XP.
+        let read = ModelContext(container)
+        let records = try read.fetch(FetchDescriptor<SavingTransaction>())
+        let profiles = try read.fetch(FetchDescriptor<UserProfile>())
+        let goals = try read.fetch(FetchDescriptor<PersonalGoal>())
+        XCTAssertEqual(records.count, 1)
+        XCTAssertEqual(records.first?.xpEarned, 7)
+        XCTAssertEqual(records.first?.amountMinorUnits, 25)
+        XCTAssertEqual(profiles.first?.totalXP, 41)
+        XCTAssertEqual(goals.first?.exactRecordedMinor, 25)
+    }
+    #endif
+
+
+    #if PIPO_ISSUE80_STAGING
+    /// Deferred native QA. Linux does not have SwiftData; run when the owner
+    /// re-enables Mac runner and the staging flag is intentionally activated.
+    @MainActor
+    func testIssue80PersistedFirstGoalReconcilesWithoutChangingSavingOrXP() throws {
+        let schema = Schema([
+            PersonalGoal.self, SubItem.self, SavingTransaction.self, UserProfile.self
+        ])
+        let folder = FileManager.default.temporaryDirectory.appendingPathComponent(
+            "pipo-issue80-native-" + UUID().uuidString, isDirectory: true
+        )
+        try FileManager.default.createDirectory(
+            at: folder, withIntermediateDirectories: true
+        )
+        defer { try? FileManager.default.removeItem(at: folder) }
+        let config = ModelConfiguration(
+            schema: schema, url: folder.appendingPathComponent("goal.store")
+        )
+        let container = try ModelContainer(for: schema, configurations: [config])
+        let writer = ModelContext(container)
+        let owner = UUID()
+        let start = Date(timeIntervalSince1970: 1_800_000_000)
+        let target = Date(timeIntervalSince1970: 1_810_000_000)
+
+        let safe = PersonalGoal(
+            title: "Camera", category: .gadget, targetAmount: 0.30,
+            currencyCode: "USD", targetMinorUnits: 30, recordedMinorUnits: 0,
+            startDate: start, targetDate: target, rhythm: .weekly,
+            preferredSavingDay: 2, ownerUserID: owner
+        )
+        let unsafe = PersonalGoal(
+            title: "Trip", category: .trip, targetAmount: 1,
+            currentAmount: 0.01, currencyCode: "USD",
+            targetMinorUnits: 100, recordedMinorUnits: 1,
+            startDate: start, targetDate: target, rhythm: .weekly,
+            preferredSavingDay: 2, ownerUserID: owner
+        )
+        unsafe.subItems = [
+            SubItem(title: "Hotel", amount: 1, amountMinorUnits: 100)
+        ]
+        let saving = SavingTransaction(
+            goalId: unsafe.id, amount: 0.01, amountMinorUnits: 1,
+            currencyCode: "USD", xpEarned: 7, userID: owner
+        )
+        let profile = UserProfile(userID: owner, totalXP: 41)
+        writer.insert(safe)
+        writer.insert(unsafe)
+        writer.insert(saving)
+        writer.insert(profile)
+        try writer.save()
+
+        let journal = SavingGoalCreateIntentJournal(
+            directory: folder.appendingPathComponent("pending")
+        )
+        func request(for goal: PersonalGoal, minor: Int64)
+            throws -> SavingGoalCreateOnlyRequest {
+            try SavingGoalCreateOnlyRequest(
+                goalID: goal.id, ownerID: owner, title: goal.title,
+                category: goal.category.rawValue, customCategory: nil,
+                targetMinorUnits: minor, currencyCode: "USD",
+                startDate: start, targetDate: target, rhythm: "weekly",
+                preferredSavingDay: 2, plannedContributionMinorUnits: nil
+            )
+        }
+        func verified(_ request: SavingGoalCreateOnlyRequest) throws {
+            try journal.stage(request, ownerID: owner)
+            // JSONSerialization bridges JSON decimals through NSNumber,
+            // potentially changing USD cents (0.30) into floating-point
+            // approximations on Apple Foundation. Inject only the simulated
+            // server-owned keys into the original exact JSONEncoder bytes.
+            let wire = String(decoding: try JSONEncoder().encode(request),
+                              as: UTF8.self)
+            XCTAssertTrue(wire.hasPrefix("{"))
+            let ownedRow = "{\"user_id\":\"\(owner.uuidString)\",\"plan_revision\":0,"
+                + String(wire.dropFirst())
+            let server = try JSONDecoder().decode(
+                SavingGoalAuthoritativeCloudRow.self,
+                from: Data(ownedRow.utf8)
+            )
+            XCTAssertEqual(server.targetAmount, request.targetAmount,
+                           "Exact currency Decimal should survive a wire round trip")
+            XCTAssertEqual(
+                try journal.recordReadback(
+                    server, goalID: request.goalID, ownerID: owner,
+                    authenticatedOwnerID: owner
+                ), .verified
+            )
+        }
+        try verified(request(for: safe, minor: 30))
+        try verified(request(for: unsafe, minor: 100))
+
+        XCTAssertEqual(
+            try SavingGoalCreateSwiftDataCommit.finalizePersistedGoal(
+                goalID: safe.id, authenticatedOwnerID: owner,
+                modelContainer: container, journal: journal
+            ), .reconciled
+        )
+        XCTAssertEqual(try journal.pending(for: owner).count, 1)
+        XCTAssertEqual(try journal.all(for: owner).count, 2)
+        XCTAssertEqual(
+            try SavingGoalCreateSwiftDataCommit.finalizePersistedGoal(
+                goalID: safe.id, authenticatedOwnerID: owner,
+                modelContainer: container, journal: journal
+            ), .reconciled // Identical relaunch/replay cannot duplicate anything.
+        )
+        XCTAssertThrowsError(
+            try SavingGoalCreateSwiftDataCommit.finalizePersistedGoal(
+                goalID: unsafe.id, authenticatedOwnerID: owner,
+                modelContainer: container, journal: journal
+            )
+        )
+
+        let reopened = ModelContext(container)
+        let persisted = try reopened.fetch(FetchDescriptor<PersonalGoal>())
+        let savings = try reopened.fetch(FetchDescriptor<SavingTransaction>())
+        let profiles = try reopened.fetch(FetchDescriptor<UserProfile>())
+        XCTAssertEqual(persisted.count, 2)
+        XCTAssertEqual(savings.count, 1)
+        XCTAssertEqual(savings[0].id, saving.id)
+        XCTAssertEqual(savings[0].xpEarned, 7)
+        XCTAssertEqual(profiles.first(where: { $0.userID == owner })?.totalXP, 41)
+        XCTAssertEqual(persisted.first(where: { $0.id == safe.id })?.targetMinorUnits, 30)
+        XCTAssertEqual(persisted.first(where: { $0.id == unsafe.id })?.recordedMinorUnits, 1)
+        XCTAssertEqual(persisted.first(where: { $0.id == unsafe.id })?.subItems.count, 1)
+    }
+    #endif
+
+
+    // These are intentionally dormant contract tests. They do not contact
+    // Supabase or enable Manage Plan Save, and require iOS XCTest later.
+    func testIssue80CASRequestUsesExactAmountsAndOnlyRPCParameters() throws {
+        let owner = UUID(), goal = UUID(), id = UUID()
+        let request = try SavingPlanCASRequest(
+            requestID: id, goalID: goal, expectedRevision: 3,
+            targetMinorUnits: 30, currencyCode: "USD",
+            targetDate: Date(timeIntervalSince1970: 1_800_000_000),
+            rhythm: "weekly", preferredSavingDay: 2,
+            plannedContributionMinorUnits: 10
+        )
+        XCTAssertEqual(request.targetAmount, Decimal(string: "0.30"))
+        XCTAssertEqual(request.plannedContributionOverride, Decimal(string: "0.10"))
+        let encoded = try JSONEncoder().encode(request)
+        let fields = try XCTUnwrap(
+            JSONSerialization.jsonObject(with: encoded) as? [String: Any]
+        )
+        XCTAssertEqual(Set(fields.keys), Set([
+            "p_request_id", "p_goal_id", "p_expected_revision",
+            "p_target_amount", "p_target_date", "p_rhythm",
+            "p_preferred_saving_day", "p_planned_contribution_override"
+        ]))
+        XCTAssertEqual(fields["p_goal_id"] as? String, goal.uuidString)
+        XCTAssertEqual(fields["p_request_id"] as? String, id.uuidString)
+        XCTAssertEqual(fields["p_expected_revision"] as? Int, 3)
+        XCTAssertNil(fields["p_user_id"])
+        XCTAssertNil(fields["p_currency_code"])
+        XCTAssertNil(fields["currency_code"])
+        _ = owner // Owner comes from auth.uid(), never app-submitted JSON.
+
+        let flexible = try SavingPlanCASRequest(
+            requestID: UUID(), goalID: goal, expectedRevision: 0,
+            targetMinorUnits: 6_000_000, currencyCode: "IDR",
+            targetDate: Date(timeIntervalSince1970: 1_800_000_000),
+            rhythm: "flexible", preferredSavingDay: nil,
+            plannedContributionMinorUnits: nil
+        )
+        let flexibleFields = try XCTUnwrap(
+            JSONSerialization.jsonObject(with: JSONEncoder().encode(flexible))
+                as? [String: Any]
+        )
+        XCTAssertTrue(flexibleFields["p_preferred_saving_day"] is NSNull)
+        XCTAssertTrue(flexibleFields["p_planned_contribution_override"] is NSNull)
+    }
+
+    func testIssue80CASRejectsInvalidInputBeforeAnyBackendCall() throws {
+        func request(revision: Int64 = 0, minor: Int64 = 6_000_000,
+                     currency: String = "IDR", rhythm: String = "weekly",
+                     day: Int? = 2, contribution: Int64? = nil) throws
+            -> SavingPlanCASRequest {
+            try SavingPlanCASRequest(
+                requestID: UUID(), goalID: UUID(), expectedRevision: revision,
+                targetMinorUnits: minor, currencyCode: currency,
+                targetDate: Date(timeIntervalSince1970: 1_800_000_000),
+                rhythm: rhythm, preferredSavingDay: day,
+                plannedContributionMinorUnits: contribution
+            )
+        }
+        XCTAssertThrowsError(try request(revision: -1))
+        XCTAssertThrowsError(try request(revision: Int64.max))
+        XCTAssertThrowsError(try request(minor: 0))
+        XCTAssertThrowsError(try request(minor: Int64.max))
+        XCTAssertThrowsError(try request(currency: "KWD"))
+        XCTAssertThrowsError(try request(rhythm: "unexpected"))
+        XCTAssertThrowsError(try request(rhythm: "weekly", day: 8))
+        XCTAssertThrowsError(try request(rhythm: "flexible", day: 2))
+        XCTAssertThrowsError(try request(rhythm: "flexible", day: nil, contribution: 20))
+        XCTAssertThrowsError(try request(contribution: -1))
+        XCTAssertNoThrow(try request(minor: 30, currency: "USD", contribution: 10))
+    }
+
+    func testIssue80CASReceiptVerifiesExactPayloadAndRejectsSpuriousSuccess() throws {
+        let requestID = UUID(), goalID = UUID()
+        let targetDate = Date(timeIntervalSince1970: 1_800_000_000)
+        let request = try SavingPlanCASRequest(
+            requestID: requestID, goalID: goalID, expectedRevision: 0,
+            targetMinorUnits: 30, currencyCode: "USD",
+            targetDate: targetDate, rhythm: "weekly", preferredSavingDay: 2,
+            plannedContributionMinorUnits: 10
+        )
+        func decode(_ raw: String) throws -> SavingPlanCASWireResponse {
+            try JSONDecoder().decode(
+                SavingPlanCASWireResponse.self, from: Data(raw.utf8)
+            )
+        }
+        let applied = """
+        {"status":"applied","request_id":"\(requestID.uuidString)",
+         "goal_id":"\(goalID.uuidString)","currency_code":"USD",
+         "accepted_revision":1,"target_amount":0.30,
+         "target_date":"\(request.targetDate)","rhythm":"weekly",
+         "preferred_saving_day":2,"planned_contribution_override":0.10}
+        """
+        XCTAssertEqual(
+            try SavingPlanCASReceiptValidator.verify(decode(applied), for: request),
+            .applied(requestID: requestID, acceptedRevision: 1)
+        )
+        // An idempotent replay reports the original receipt, not revision +2.
+        XCTAssertEqual(
+            try SavingPlanCASReceiptValidator.verify(decode(applied), for: request),
+            .applied(requestID: requestID, acceptedRevision: 1)
+        )
+        let conflict = """
+        {"status":"conflict","goal_id":"\(goalID.uuidString)",
+         "current_revision":2}
+        """
+        XCTAssertEqual(
+            try SavingPlanCASReceiptValidator.verify(decode(conflict), for: request),
+            .conflict(currentRevision: 2)
+        )
+        let tamperedCurrency = applied.replacingOccurrences(
+            of: "\"currency_code\":\"USD\"", with: "\"currency_code\":\"IDR\""
+        )
+        XCTAssertThrowsError(try SavingPlanCASReceiptValidator.verify(
+            decode(tamperedCurrency), for: request
+        ))
+        let tamperedAmount = applied.replacingOccurrences(
+            of: "\"target_amount\":0.30", with: "\"target_amount\":0.31"
+        )
+        XCTAssertThrowsError(try SavingPlanCASReceiptValidator.verify(
+            decode(tamperedAmount), for: request
+        ))
+        let tamperedID = applied.replacingOccurrences(
+            of: goalID.uuidString, with: UUID().uuidString
+        )
+        XCTAssertThrowsError(try SavingPlanCASReceiptValidator.verify(
+            decode(tamperedID), for: request
+        ))
+        let tamperedRevision = applied.replacingOccurrences(
+            of: "\"accepted_revision\":1", with: "\"accepted_revision\":99"
+        )
+        XCTAssertThrowsError(try SavingPlanCASReceiptValidator.verify(
+            decode(tamperedRevision), for: request
+        ))
+        XCTAssertThrowsError(try SavingPlanCASReceiptValidator.verify(
+            decode("{\"status\":\"applied\",\"goal_id\":\"\(goalID.uuidString)\"}"),
+            for: request
+        ))
+    }
+
+
     /// Guard the actual SwiftUI Color tokens used as filled backgrounds behind
     /// white CTA text. WCAG AA normal-text threshold is 4.5:1. Do not test
     /// a duplicated hex value that could drift from the production button.
@@ -783,6 +1141,34 @@ extension PersonalGoalTests {
 
         WidgetSharedData.activate(userID: nil, in: defaults)
         XCTAssertEqual(WidgetSharedData.load(from: defaults).totalXP, 0)
+        XCTAssertNil(defaults.dictionary(forKey: "pipo.widget.snapshot"),
+                     "Logout must physically purge even legacy ownerless snapshot data")
+
+        // A legacy caller cannot write another user's title, cadence,
+        // progress, or date to App Group storage without a verified owner.
+        let ownerlessTitle = WidgetSnapshot(
+            streakDays: 0, totalXP: 0, currentLevel: 1,
+            goalID: nil, goalTitle: "Private old title",
+            goalProgress: 0, nextDepositDate: nil
+        )
+        XCTAssertThrowsError(try WidgetSharedData.save(ownerlessTitle, in: defaults))
+        let ownerlessSchedule = WidgetSnapshot(
+            streakDays: 0, totalXP: 0, currentLevel: 1,
+            goalID: nil, goalTitle: nil,
+            goalProgress: 0, nextDepositDate: Date(),
+            consistencyUnit: "week", recordedCount: 1
+        )
+        XCTAssertThrowsError(try WidgetSharedData.save(ownerlessSchedule, in: defaults))
+        XCTAssertNil(defaults.dictionary(forKey: "pipo.widget.snapshot"))
+
+        WidgetSharedData.activate(userID: accountA, in: defaults)
+        try WidgetSharedData.save(snapshot, in: defaults)
+        XCTAssertEqual(WidgetSharedData.load(from: defaults).goalTitle, "Private savings")
+        // When no active account marker exists, logout must purge the
+        // persisted owner-tagged snapshot too, never only hide it in memory.
+        defaults.removeObject(forKey: "pipo.widget.active.account")
+        WidgetSharedData.activate(userID: nil, in: defaults)
+        XCTAssertNil(defaults.dictionary(forKey: "pipo.widget.snapshot"))
     }
 
     @MainActor

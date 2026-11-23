@@ -341,6 +341,2028 @@ struct SavingLedgerCloudAdjustment: Decodable, Sendable {
     }
 }
 
+// MARK: - #80: Inactive, server-revisioned Manage Plan contract
+//
+// Prepared for the staged CAS backend, but deliberately NOT wired to a
+// production Supabase RPC or to any Manage Plan Save button. Current
+// goal-first UPSERT is incompatible with the proposed revocation of UPDATE.
+// Do not activate until signed-old-client migration and backend review pass.
+
+enum SavingPlanCASContractError: Error, Equatable {
+    case invalidRevision
+    case invalidGoalAmount
+    case invalidSchedule
+    case invalidServerResponse
+}
+
+/// Owns a stable request UUID across offline retries. Encodes only the
+/// allowlisted p_* RPC parameters, never a user_id or currency override.
+/// Target and future contribution use exact Decimal major units, not Double.
+struct SavingPlanCASRequest: Encodable, Equatable, Sendable {
+    let requestID: UUID
+    let goalID: UUID
+    let expectedRevision: Int64
+    let targetAmount: Decimal
+    let targetDate: String
+    let rhythm: String
+    let preferredSavingDay: Int?
+    let plannedContributionOverride: Decimal?
+
+    // Local-only evidence used to validate the server's immutable goal code.
+    // This MUST NOT be sent to the RPC as a currency-setting argument.
+    let currencyCode: String
+
+    init(
+        requestID: UUID, goalID: UUID, expectedRevision: Int64,
+        targetMinorUnits: Int64, currencyCode: String, targetDate: Date,
+        rhythm: String, preferredSavingDay: Int?,
+        plannedContributionMinorUnits: Int64?
+    ) throws {
+        guard expectedRevision >= 0 && expectedRevision < Int64.max else {
+            throw SavingPlanCASContractError.invalidRevision
+        }
+        guard PipoGoalCurrency.isSupported(currencyCode) &&
+                currencyCode == currencyCode.uppercased(),
+              targetMinorUnits > 0
+        else { throw SavingPlanCASContractError.invalidGoalAmount }
+        let target = PipoGoalCurrency.decimal(targetMinorUnits, code: currencyCode)
+        guard PipoGoalCurrency.minorUnits(target, code: currencyCode) == targetMinorUnits
+        else { throw SavingPlanCASContractError.invalidGoalAmount }
+
+        let cadence = ["daily", "weekly", "biWeekly", "monthly", "flexible"]
+        guard cadence.contains(rhythm), targetDate.timeIntervalSince1970.isFinite,
+              (preferredSavingDay == nil || (1...31).contains(preferredSavingDay!)),
+              (rhythm != "daily" && rhythm != "flexible" || preferredSavingDay == nil),
+              (rhythm != "weekly" && rhythm != "biWeekly"
+                || preferredSavingDay == nil || preferredSavingDay! <= 7),
+              (rhythm != "flexible" || plannedContributionMinorUnits == nil)
+        else { throw SavingPlanCASContractError.invalidSchedule }
+
+        let contribution: Decimal?
+        if let plannedContributionMinorUnits {
+            guard plannedContributionMinorUnits > 0 else {
+                throw SavingPlanCASContractError.invalidGoalAmount
+            }
+            let amount = PipoGoalCurrency.decimal(
+                plannedContributionMinorUnits, code: currencyCode
+            )
+            guard PipoGoalCurrency.minorUnits(amount, code: currencyCode)
+                    == plannedContributionMinorUnits else {
+                throw SavingPlanCASContractError.invalidGoalAmount
+            }
+            contribution = amount
+        } else {
+            contribution = nil
+        }
+
+        self.requestID = requestID
+        self.goalID = goalID
+        self.expectedRevision = expectedRevision
+        self.targetAmount = target
+        self.targetDate = ISO8601DateFormatter().string(from: targetDate)
+        self.rhythm = rhythm
+        self.preferredSavingDay = preferredSavingDay
+        self.plannedContributionOverride = contribution
+        self.currencyCode = currencyCode
+    }
+
+    enum CodingKeys: String, CodingKey {
+        case requestID = "p_request_id"
+        case goalID = "p_goal_id"
+        case expectedRevision = "p_expected_revision"
+        case targetAmount = "p_target_amount"
+        case targetDate = "p_target_date"
+        case rhythm = "p_rhythm"
+        case preferredSavingDay = "p_preferred_saving_day"
+        case plannedContributionOverride = "p_planned_contribution_override"
+    }
+
+    func encode(to encoder: Encoder) throws {
+        var c = encoder.container(keyedBy: CodingKeys.self)
+        try c.encode(requestID, forKey: .requestID)
+        try c.encode(goalID, forKey: .goalID)
+        try c.encode(expectedRevision, forKey: .expectedRevision)
+        try c.encode(targetAmount, forKey: .targetAmount)
+        try c.encode(targetDate, forKey: .targetDate)
+        try c.encode(rhythm, forKey: .rhythm)
+        // The SQL function requires all nullable arguments to be present.
+        try c.encode(preferredSavingDay, forKey: .preferredSavingDay)
+        try c.encode(plannedContributionOverride, forKey: .plannedContributionOverride)
+    }
+}
+
+struct SavingPlanCASWireResponse: Decodable, Sendable {
+    let status: String
+    let goalID: UUID
+    let requestID: UUID?
+    let acceptedRevision: Int64?
+    let currentRevision: Int64?
+    let currencyCode: String?
+    let targetAmount: Decimal?
+    let targetDate: String?
+    let rhythm: String?
+    let preferredSavingDay: Int?
+    let plannedContributionOverride: Decimal?
+
+    enum CodingKeys: String, CodingKey {
+        case status, rhythm
+        case goalID = "goal_id"
+        case requestID = "request_id"
+        case acceptedRevision = "accepted_revision"
+        case currentRevision = "current_revision"
+        case currencyCode = "currency_code"
+        case targetAmount = "target_amount"
+        case targetDate = "target_date"
+        case preferredSavingDay = "preferred_saving_day"
+        case plannedContributionOverride = "planned_contribution_override"
+    }
+}
+
+/// This result NEVER writes SwiftData, XP, saving entries, or achievements.
+/// A verified applied receipt is not necessarily the most recent plan:
+/// a later successful edit may follow an idempotent replay of an older UUID.
+enum SavingPlanCASOutcome: Equatable, Sendable {
+    case applied(requestID: UUID, acceptedRevision: Int64)
+    case conflict(currentRevision: Int64)
+}
+
+enum SavingPlanCASReceiptValidator {
+    static func verify(
+        _ response: SavingPlanCASWireResponse,
+        for request: SavingPlanCASRequest
+    ) throws -> SavingPlanCASOutcome {
+        guard response.goalID == request.goalID else {
+            throw SavingPlanCASContractError.invalidServerResponse
+        }
+        if response.status == "conflict" {
+            guard let current = response.currentRevision,
+                  current >= 0 && current != request.expectedRevision,
+                  response.requestID == nil, response.acceptedRevision == nil,
+                  response.currencyCode == nil, response.targetAmount == nil,
+                  response.targetDate == nil
+            else { throw SavingPlanCASContractError.invalidServerResponse }
+            return .conflict(currentRevision: current)
+        }
+        guard response.status == "applied",
+              response.requestID == request.requestID,
+              response.currentRevision == nil,
+              response.acceptedRevision == request.expectedRevision + 1,
+              response.currencyCode == request.currencyCode,
+              response.targetAmount == request.targetAmount,
+              response.rhythm == request.rhythm,
+              response.preferredSavingDay == request.preferredSavingDay,
+              response.plannedContributionOverride == request.plannedContributionOverride,
+              let date = response.targetDate
+        else { throw SavingPlanCASContractError.invalidServerResponse }
+
+        // PostgreSQL JSON timestamps can have a timezone offset and/or
+        // fractional seconds. Compare the instant, not its textual timezone.
+        let whole = ISO8601DateFormatter()
+        let fractional = ISO8601DateFormatter()
+        fractional.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+        guard let reported = fractional.date(from: date) ?? whole.date(from: date),
+              let requested = whole.date(from: request.targetDate),
+              abs(reported.timeIntervalSince1970 - requested.timeIntervalSince1970) < 0.001
+        else { throw SavingPlanCASContractError.invalidServerResponse }
+
+        return .applied(
+            requestID: request.requestID,
+            acceptedRevision: request.expectedRevision + 1
+        )
+    }
+}
+
+// MARK: - #80: Dormant *atomic* target + budget CAS V2 wire contract
+//
+// V1 does not synchronize SwiftData SubItem. This V2 request is a distinct,
+// currently UNWIRED protocol: it replaces target, schedule and complete
+// ordered budget in one authenticated RPC transaction. It never sends user_id,
+// goal currency, ledger history or XP. No production call site uses this.
+
+enum SavingPlanBudgetV2ContractError: Error, Equatable {
+    case invalidPlan
+    case invalidBudget
+    case userReviewRequired
+    case invalidServerResponse
+}
+
+struct SavingPlanBudgetV2Item: Codable, Equatable, Sendable {
+    let id: UUID
+    let title: String
+    let amount: Decimal
+    let isCompleted: Bool
+
+    init(id: UUID, title: String, minorUnits: Int64,
+         currencyCode: String, isCompleted: Bool) throws {
+        let name = title.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !name.isEmpty, name.count <= 80, minorUnits > 0,
+              PipoGoalCurrency.isSupported(currencyCode),
+              PipoGoalCurrency.minorUnits(
+                PipoGoalCurrency.decimal(minorUnits, code: currencyCode),
+                code: currencyCode
+              ) == minorUnits
+        else { throw SavingPlanBudgetV2ContractError.invalidBudget }
+        self.id = id
+        self.title = name
+        amount = PipoGoalCurrency.decimal(minorUnits, code: currencyCode)
+        self.isCompleted = isCompleted
+    }
+
+    enum CodingKeys: String, CodingKey {
+        case id, title, amount
+        case isCompleted = "is_completed"
+    }
+}
+
+struct SavingPlanBudgetV2Request: Encodable, Equatable, Sendable {
+    let requestID: UUID
+    let goalID: UUID
+    let expectedRevision: Int64
+    let expectedOwnerID: UUID // local Auth guard only, NEVER transmitted.
+    let currencyCode: String  // immutable existing goal, NEVER transmitted.
+    let targetAmount: Decimal
+    let targetDate: String
+    let rhythm: String
+    let preferredSavingDay: Int?
+    let plannedContributionOverride: Decimal?
+    let items: [SavingPlanBudgetV2Item]
+    let budgetImportConfirmed: Bool
+
+    init(requestID: UUID, goalID: UUID, expectedRevision: Int64,
+         ownerID: UUID, currencyCode: String, targetMinorUnits: Int64,
+         targetDate: Date, rhythm: String, preferredSavingDay: Int?,
+         plannedContributionMinorUnits: Int64?,
+         items: [SavingPlanBudgetV2Item],
+         cloudBudgetNeedsReview: Bool, userReviewedBudget: Bool) throws {
+        guard expectedRevision >= 0 && expectedRevision < Int64.max,
+              currencyCode == currencyCode.uppercased(),
+              PipoGoalCurrency.isSupported(currencyCode),
+              targetMinorUnits > 0,
+              PipoGoalCurrency.minorUnits(
+                PipoGoalCurrency.decimal(targetMinorUnits, code: currencyCode),
+                code: currencyCode
+              ) == targetMinorUnits,
+              targetDate.timeIntervalSince1970.isFinite,
+              ["daily", "weekly", "biWeekly", "monthly", "flexible"].contains(rhythm),
+              preferredSavingDay == nil || (1...31).contains(preferredSavingDay!),
+              (rhythm != "daily" && rhythm != "flexible"
+                || preferredSavingDay == nil),
+              (rhythm != "weekly" && rhythm != "biWeekly"
+                || preferredSavingDay == nil || preferredSavingDay! <= 7),
+              (rhythm != "flexible" || plannedContributionMinorUnits == nil)
+        else { throw SavingPlanBudgetV2ContractError.invalidPlan }
+
+        if cloudBudgetNeedsReview && !userReviewedBudget {
+            throw SavingPlanBudgetV2ContractError.userReviewRequired
+        }
+        var future: Decimal?
+        if let plannedContributionMinorUnits {
+            guard plannedContributionMinorUnits > 0,
+                  PipoGoalCurrency.minorUnits(
+                    PipoGoalCurrency.decimal(
+                      plannedContributionMinorUnits, code: currencyCode),
+                    code: currencyCode
+                  ) == plannedContributionMinorUnits
+            else { throw SavingPlanBudgetV2ContractError.invalidPlan }
+            future = PipoGoalCurrency.decimal(
+                plannedContributionMinorUnits, code: currencyCode
+            )
+        }
+
+        guard items.count <= 64 else {
+            throw SavingPlanBudgetV2ContractError.invalidBudget
+        }
+        var ids = Set<UUID>()
+        var allocated: Int64 = 0
+        for item in items {
+            guard ids.insert(item.id).inserted,
+                  !item.title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
+                  item.title == item.title.trimmingCharacters(in: .whitespacesAndNewlines),
+                  item.title.count <= 80,
+                  let units = PipoGoalCurrency.minorUnits(
+                    item.amount, code: currencyCode
+                  ) else { throw SavingPlanBudgetV2ContractError.invalidBudget }
+            let (next, overflow) = allocated.addingReportingOverflow(units)
+            guard !overflow else { throw SavingPlanBudgetV2ContractError.invalidBudget }
+            allocated = next
+        }
+        guard items.isEmpty || allocated == targetMinorUnits else {
+            throw SavingPlanBudgetV2ContractError.invalidBudget
+        }
+        self.requestID = requestID
+        self.goalID = goalID
+        self.expectedRevision = expectedRevision
+        expectedOwnerID = ownerID
+        self.currencyCode = currencyCode
+        targetAmount = PipoGoalCurrency.decimal(
+            targetMinorUnits, code: currencyCode
+        )
+        self.targetDate = ISO8601DateFormatter().string(from: targetDate)
+        self.rhythm = rhythm
+        self.preferredSavingDay = preferredSavingDay
+        plannedContributionOverride = future
+        self.items = items
+        budgetImportConfirmed = userReviewedBudget
+    }
+
+    enum CodingKeys: String, CodingKey {
+        case requestID = "p_request_id"
+        case goalID = "p_goal_id"
+        case expectedRevision = "p_expected_revision"
+        case targetAmount = "p_target_amount"
+        case targetDate = "p_target_date"
+        case rhythm = "p_rhythm"
+        case preferredSavingDay = "p_preferred_saving_day"
+        case plannedContributionOverride = "p_planned_contribution_override"
+        case items = "p_items"
+        case budgetImportConfirmed = "p_budget_import_confirmed"
+    }
+
+    func encode(to encoder: Encoder) throws {
+        var c = encoder.container(keyedBy: CodingKeys.self)
+        try c.encode(requestID, forKey: .requestID)
+        try c.encode(goalID, forKey: .goalID)
+        try c.encode(expectedRevision, forKey: .expectedRevision)
+        try c.encode(targetAmount, forKey: .targetAmount)
+        try c.encode(targetDate, forKey: .targetDate)
+        try c.encode(rhythm, forKey: .rhythm)
+        try c.encode(preferredSavingDay, forKey: .preferredSavingDay)
+        try c.encode(plannedContributionOverride, forKey: .plannedContributionOverride)
+        try c.encode(items, forKey: .items)
+        try c.encode(budgetImportConfirmed, forKey: .budgetImportConfirmed)
+    }
+}
+
+struct SavingPlanBudgetV2WireResponse: Decodable, Sendable {
+    let status: String
+    let requestID: UUID?
+    let goalID: UUID?
+    let acceptedRevision: Int64?
+    let currentRevision: Int64?
+    let currencyCode: String?
+    let budgetSnapshotState: String?
+    let targetAmount: Decimal?
+    let targetDate: String?
+    let rhythm: String?
+    let preferredSavingDay: Int?
+    let plannedContributionOverride: Decimal?
+    let items: [SavingPlanBudgetV2Item]?
+
+    enum CodingKeys: String, CodingKey {
+        case status, rhythm, items
+        case requestID = "request_id"
+        case goalID = "goal_id"
+        case acceptedRevision = "accepted_revision"
+        case currentRevision = "current_revision"
+        case currencyCode = "currency_code"
+        case budgetSnapshotState = "budget_snapshot_state"
+        case targetAmount = "target_amount"
+        case targetDate = "target_date"
+        case preferredSavingDay = "preferred_saving_day"
+        case plannedContributionOverride = "planned_contribution_override"
+    }
+}
+
+enum SavingPlanBudgetV2Outcome: Equatable, Sendable {
+    case applied(requestID: UUID, revision: Int64)
+    case conflict(currentRevision: Int64)
+}
+
+enum SavingPlanBudgetV2ReceiptValidator {
+    private static func parseDate(_ raw: String) -> Date? {
+        let standard = ISO8601DateFormatter()
+        if let date = standard.date(from: raw) { return date }
+        let fractional = ISO8601DateFormatter()
+        fractional.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+        return fractional.date(from: raw)
+    }
+
+    /// A receipt alone is NOT proof the goal still matches after later
+    /// writes; a freshly authenticated, owner-filtered V2 readback and local
+    /// reconciliation are also required before marking this edit complete.
+    static func verify(_ response: SavingPlanBudgetV2WireResponse,
+                       for request: SavingPlanBudgetV2Request)
+        throws -> SavingPlanBudgetV2Outcome {
+        guard response.goalID == request.goalID else {
+            throw SavingPlanBudgetV2ContractError.invalidServerResponse
+        }
+        switch response.status {
+        case "conflict":
+            guard let revision = response.currentRevision,
+                  revision >= 0 && revision != request.expectedRevision,
+                  response.acceptedRevision == nil,
+                  response.items == nil else {
+                throw SavingPlanBudgetV2ContractError.invalidServerResponse
+            }
+            return .conflict(currentRevision: revision)
+        case "applied":
+            guard response.requestID == request.requestID,
+                  response.acceptedRevision == request.expectedRevision + 1,
+                  response.currentRevision == nil,
+                  response.currencyCode == request.currencyCode,
+                  response.budgetSnapshotState == "synced",
+                  response.targetAmount == request.targetAmount,
+                  response.rhythm == request.rhythm,
+                  response.preferredSavingDay == request.preferredSavingDay,
+                  response.plannedContributionOverride ==
+                    request.plannedContributionOverride,
+                  let serverDate = response.targetDate.flatMap(parseDate),
+                  let requestedDate = parseDate(request.targetDate),
+                  abs(serverDate.timeIntervalSince1970
+                        - requestedDate.timeIntervalSince1970) < 0.001,
+                  response.items == request.items else {
+                throw SavingPlanBudgetV2ContractError.invalidServerResponse
+            }
+            return .applied(requestID: request.requestID,
+                            revision: request.expectedRevision + 1)
+        default:
+            throw SavingPlanBudgetV2ContractError.invalidServerResponse
+        }
+    }
+}
+
+// MARK: - #80: Budget CAS V2 durable intent + owner-verified readback (DORMANT)
+//
+// Distinct from the old *target-only* V1 journal. No RPC or UI calls this
+// component. An acknowledged RPC is NOT sufficient to resolve a local draft.
+// There is intentionally no "finish" method: native SwiftData merge, release
+// bridge, authenticated network fetch and owner approval are still required.
+
+enum SavingPlanBudgetV2JournalError: Error, Equatable {
+    case invalidJournal
+    case accountChanged
+    case idempotencyConflict
+    case goalAlreadyPending
+    case tooManyIntents
+    case unknownIntent
+    case invalidTransition
+    case unverifiedReadback
+    case userDecisionRequired
+}
+
+struct SavingPlanBudgetV2CloudSnapshot: Decodable, Sendable {
+    let status: String
+    let goalID: UUID
+    let planRevision: Int64
+    let currencyCode: String
+    let budgetSnapshotState: String
+    let targetAmount: Decimal
+    let targetDate: String
+    let rhythm: String
+    let preferredSavingDay: Int?
+    let plannedContributionOverride: Decimal?
+    let items: [SavingPlanBudgetV2Item]
+
+    enum CodingKeys: String, CodingKey {
+        case status, rhythm, items
+        case goalID = "goal_id"
+        case planRevision = "plan_revision"
+        case currencyCode = "currency_code"
+        case budgetSnapshotState = "budget_snapshot_state"
+        case targetAmount = "target_amount"
+        case targetDate = "target_date"
+        case preferredSavingDay = "preferred_saving_day"
+        case plannedContributionOverride = "planned_contribution_override"
+    }
+}
+
+/// This verifies CONTENT only. Caller must first get the snapshot from a
+/// fresh authenticated pipo_read_plan_budget_v2 RPC, checking currentUser
+/// equals the expected owner both BEFORE and AFTER the awaited request.
+enum SavingPlanBudgetV2SnapshotVerifier {
+    static func matchesCurrent(
+        _ snapshot: SavingPlanBudgetV2CloudSnapshot,
+        request: SavingPlanBudgetV2Request,
+        authenticatedOwnerID: UUID
+    ) -> Bool {
+        let standard = ISO8601DateFormatter()
+        let fractional = ISO8601DateFormatter()
+        fractional.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+        guard let serverDate = fractional.date(from: snapshot.targetDate)
+                ?? standard.date(from: snapshot.targetDate),
+              let wantedDate = standard.date(from: request.targetDate)
+        else { return false }
+        return authenticatedOwnerID == request.expectedOwnerID
+            && snapshot.status == "snapshot"
+            && snapshot.goalID == request.goalID
+            && snapshot.planRevision == request.expectedRevision + 1
+            && snapshot.currencyCode == request.currencyCode
+            && snapshot.budgetSnapshotState == "synced"
+            && snapshot.targetAmount == request.targetAmount
+            && abs(serverDate.timeIntervalSince1970
+                   - wantedDate.timeIntervalSince1970) < 0.001
+            && snapshot.rhythm == request.rhythm
+            && snapshot.preferredSavingDay == request.preferredSavingDay
+            && snapshot.plannedContributionOverride
+                == request.plannedContributionOverride
+            && snapshot.items == request.items
+    }
+}
+
+struct PendingSavingPlanBudgetV2Intent: Codable, Equatable, Sendable {
+    struct StoredItem: Codable, Equatable, Sendable {
+        let id: UUID
+        let title: String
+        let minorUnits: Int64
+        let isCompleted: Bool
+    }
+
+    enum State: String, Codable, Sendable {
+        case staged          // Original request retained across timeout/relaunch
+        case acknowledged    // Receipt checked; still need FRESH cloud read
+        case verified        // Cloud read checked; local SwiftData NOT merged
+        case conflicted      // Must obtain explicit decision on stale edit
+        case discarded       // Durable terminal UUID tombstone after decision
+    }
+
+    let ownerID: UUID
+    let requestID: UUID
+    let goalID: UUID
+    let expectedRevision: Int64
+    let targetMinorUnits: Int64
+    let currencyCode: String
+    let targetDate: String
+    let rhythm: String
+    let preferredSavingDay: Int?
+    let plannedContributionMinorUnits: Int64?
+    let items: [StoredItem]
+    let budgetImportConfirmed: Bool
+    let createdAt: Date
+    var state: State
+    var responseRevision: Int64?
+
+    init(request: SavingPlanBudgetV2Request, ownerID: UUID,
+         createdAt: Date = .now) throws {
+        guard request.expectedOwnerID == ownerID,
+              let target = PipoGoalCurrency.minorUnits(
+                request.targetAmount, code: request.currencyCode),
+              target > 0, request.targetDate.count <= 40,
+              createdAt.timeIntervalSince1970.isFinite
+        else { throw SavingPlanBudgetV2JournalError.invalidJournal }
+        self.ownerID = ownerID
+        requestID = request.requestID
+        goalID = request.goalID
+        expectedRevision = request.expectedRevision
+        targetMinorUnits = target
+        currencyCode = request.currencyCode
+        targetDate = request.targetDate
+        rhythm = request.rhythm
+        preferredSavingDay = request.preferredSavingDay
+        plannedContributionMinorUnits = request.plannedContributionOverride.flatMap {
+            PipoGoalCurrency.minorUnits($0, code: request.currencyCode)
+        }
+        items = try request.items.map { item in
+            guard let minor = PipoGoalCurrency.minorUnits(
+                item.amount, code: request.currencyCode), minor > 0
+            else { throw SavingPlanBudgetV2JournalError.invalidJournal }
+            return StoredItem(id: item.id, title: item.title,
+                              minorUnits: minor, isCompleted: item.isCompleted)
+        }
+        budgetImportConfirmed = request.budgetImportConfirmed
+        self.createdAt = createdAt
+        state = .staged
+        responseRevision = nil
+    }
+
+    /// All JSON is UNTRUSTED on relaunch. Reconstruct the canonical V2 RPC
+    /// request rather than trusting decoded item totals/UUIDs/currency.
+    func checkedRequest(for expectedOwnerID: UUID) throws
+        -> SavingPlanBudgetV2Request {
+        guard ownerID == expectedOwnerID,
+              let date = ISO8601DateFormatter().date(from: targetDate),
+              createdAt.timeIntervalSince1970.isFinite
+        else { throw SavingPlanBudgetV2JournalError.invalidJournal }
+        do {
+            let budget = try items.map {
+                try SavingPlanBudgetV2Item(
+                    id: $0.id, title: $0.title, minorUnits: $0.minorUnits,
+                    currencyCode: currencyCode, isCompleted: $0.isCompleted
+                )
+            }
+            let reconstructed = try SavingPlanBudgetV2Request(
+                requestID: requestID, goalID: goalID,
+                expectedRevision: expectedRevision,
+                ownerID: expectedOwnerID, currencyCode: currencyCode,
+                targetMinorUnits: targetMinorUnits, targetDate: date,
+                rhythm: rhythm, preferredSavingDay: preferredSavingDay,
+                plannedContributionMinorUnits: plannedContributionMinorUnits,
+                items: budget,
+                cloudBudgetNeedsReview: budgetImportConfirmed,
+                userReviewedBudget: budgetImportConfirmed
+            )
+            guard reconstructed.targetDate == targetDate,
+                  reconstructed.items == budget,
+                  reconstructed.budgetImportConfirmed == budgetImportConfirmed
+            else { throw SavingPlanBudgetV2JournalError.invalidJournal }
+            switch state {
+            case .staged:
+                guard responseRevision == nil else {
+                    throw SavingPlanBudgetV2JournalError.invalidJournal
+                }
+            case .acknowledged, .verified:
+                guard responseRevision == expectedRevision + 1 else {
+                    throw SavingPlanBudgetV2JournalError.invalidJournal
+                }
+            case .conflicted, .discarded:
+                guard let responseRevision,
+                      responseRevision >= 0,
+                      responseRevision != expectedRevision else {
+                    throw SavingPlanBudgetV2JournalError.invalidJournal
+                }
+            }
+            return reconstructed
+        } catch {
+            throw SavingPlanBudgetV2JournalError.invalidJournal
+        }
+    }
+}
+
+/// No production call site. No automatic retry/rebase, no clearing of a
+/// verified V2 intent before separately reviewed SwiftData reconciliation.
+@MainActor
+final class SavingPlanBudgetV2IntentJournal {
+    private let directory: URL
+    private let files: FileManager
+    private let maximumEntries = 100 // no silent eviction/compaction
+
+    init(directory: URL, fileManager: FileManager = .default) {
+        self.directory = directory
+        files = fileManager
+    }
+
+    static func inApplicationSupport() throws -> SavingPlanBudgetV2IntentJournal {
+        let root = try FileManager.default.url(
+            for: .applicationSupportDirectory, in: .userDomainMask,
+            appropriateFor: nil, create: true
+        )
+        return SavingPlanBudgetV2IntentJournal(
+            directory: root.appendingPathComponent(
+                "PipoPendingBudgetCASV2", isDirectory: true
+            )
+        )
+    }
+
+    func all(for ownerID: UUID) throws -> [PendingSavingPlanBudgetV2Intent] {
+        let url = fileURL(for: ownerID)
+        guard files.fileExists(atPath: url.path) else { return [] }
+        let entries: [PendingSavingPlanBudgetV2Intent]
+        do {
+            entries = try JSONDecoder().decode(
+                [PendingSavingPlanBudgetV2Intent].self, from: Data(contentsOf: url)
+            )
+        } catch {
+            throw SavingPlanBudgetV2JournalError.invalidJournal
+        }
+        guard entries.count <= maximumEntries else {
+            throw SavingPlanBudgetV2JournalError.tooManyIntents
+        }
+        var ids = Set<UUID>(), activeGoals = Set<UUID>()
+        for entry in entries {
+            guard ids.insert(entry.requestID).inserted else {
+                throw SavingPlanBudgetV2JournalError.invalidJournal
+            }
+            if entry.state != .discarded {
+                guard activeGoals.insert(entry.goalID).inserted else {
+                    throw SavingPlanBudgetV2JournalError.invalidJournal
+                }
+            }
+            _ = try entry.checkedRequest(for: ownerID)
+        }
+        return entries
+    }
+
+    func pending(for ownerID: UUID) throws -> [PendingSavingPlanBudgetV2Intent] {
+        try all(for: ownerID).filter { $0.state != .discarded }
+    }
+
+    /// Staging must precede network I/O; an exact retry keeps the UUID and
+    /// immutable budget. A different payload with the same UUID fails.
+    @discardableResult
+    func stage(_ request: SavingPlanBudgetV2Request, ownerID: UUID) throws
+        -> PendingSavingPlanBudgetV2Intent {
+        guard request.expectedOwnerID == ownerID else {
+            throw SavingPlanBudgetV2JournalError.accountChanged
+        }
+        var entries = try all(for: ownerID)
+        if let previous = entries.first(where: { $0.requestID == request.requestID }) {
+            guard try previous.checkedRequest(for: ownerID) == request else {
+                throw SavingPlanBudgetV2JournalError.idempotencyConflict
+            }
+            return previous
+        }
+        guard !entries.contains(where: {
+            $0.goalID == request.goalID && $0.state != .discarded
+        }) else { throw SavingPlanBudgetV2JournalError.goalAlreadyPending }
+        guard entries.count < maximumEntries else {
+            throw SavingPlanBudgetV2JournalError.tooManyIntents
+        }
+        let pending = try PendingSavingPlanBudgetV2Intent(
+            request: request, ownerID: ownerID
+        )
+        entries.append(pending)
+        try persist(entries, for: ownerID)
+        return pending
+    }
+
+    /// Caller must validate Auth before AND after the awaited RPC, and pass
+    /// only the exact decoded response from the authenticated server.
+    func recordVerifiedResponse(
+        _ response: SavingPlanBudgetV2WireResponse,
+        requestID: UUID, ownerID: UUID, authenticatedOwnerID: UUID
+    ) throws {
+        guard ownerID == authenticatedOwnerID else {
+            throw SavingPlanBudgetV2JournalError.accountChanged
+        }
+        var entries = try all(for: ownerID)
+        guard let i = entries.firstIndex(where: { $0.requestID == requestID })
+        else { throw SavingPlanBudgetV2JournalError.unknownIntent }
+        let request = try entries[i].checkedRequest(for: ownerID)
+        let outcome = try SavingPlanBudgetV2ReceiptValidator.verify(
+            response, for: request
+        )
+        let next: PendingSavingPlanBudgetV2Intent.State
+        let revision: Int64
+        switch outcome {
+        case .applied(_, let accepted):
+            next = .acknowledged
+            revision = accepted
+        case .conflict(let current):
+            next = .conflicted
+            revision = current
+        }
+        if entries[i].state != .staged {
+            let isExactRepeat = entries[i].state == next
+                || (entries[i].state == .verified && next == .acknowledged)
+            guard isExactRepeat,
+                  entries[i].responseRevision == revision
+            else { throw SavingPlanBudgetV2JournalError.invalidTransition }
+            return
+        }
+        entries[i].state = next
+        entries[i].responseRevision = revision
+        try persist(entries, for: ownerID)
+    }
+
+    /// Never mark a receipt completed on response alone. This stage still
+    /// does NOT change any SwiftData, savings, XP, achievements or local items.
+    func recordAuthenticatedCurrentReadback(
+        _ snapshot: SavingPlanBudgetV2CloudSnapshot,
+        requestID: UUID, ownerID: UUID, authenticatedOwnerID: UUID
+    ) throws {
+        guard ownerID == authenticatedOwnerID else {
+            throw SavingPlanBudgetV2JournalError.accountChanged
+        }
+        var entries = try all(for: ownerID)
+        guard let i = entries.firstIndex(where: { $0.requestID == requestID })
+        else { throw SavingPlanBudgetV2JournalError.unknownIntent }
+        guard entries[i].state == .acknowledged || entries[i].state == .verified
+        else { throw SavingPlanBudgetV2JournalError.invalidTransition }
+        let request = try entries[i].checkedRequest(for: ownerID)
+        guard SavingPlanBudgetV2SnapshotVerifier.matchesCurrent(
+            snapshot, request: request, authenticatedOwnerID: authenticatedOwnerID
+        ) else { throw SavingPlanBudgetV2JournalError.unverifiedReadback }
+        if entries[i].state == .verified { return }
+        entries[i].state = .verified
+        try persist(entries, for: ownerID)
+    }
+
+    /// User chooses to DISCARD after a stale conflict; keep an immutable
+    /// tombstone to prevent accidental UUID reuse during later restarts.
+    func discardConflictedAfterUserDecision(
+        requestID: UUID, ownerID: UUID, userConfirmedDiscard: Bool
+    ) throws {
+        guard userConfirmedDiscard else {
+            throw SavingPlanBudgetV2JournalError.userDecisionRequired
+        }
+        var entries = try all(for: ownerID)
+        guard let i = entries.firstIndex(where: { $0.requestID == requestID })
+        else { throw SavingPlanBudgetV2JournalError.unknownIntent }
+        guard entries[i].state == .conflicted else {
+            throw SavingPlanBudgetV2JournalError.invalidTransition
+        }
+        entries[i].state = .discarded
+        try persist(entries, for: ownerID)
+    }
+
+    private func fileURL(for ownerID: UUID) -> URL {
+        directory.appendingPathComponent(
+            ownerID.uuidString.lowercased() + ".json", isDirectory: false
+        )
+    }
+
+    private func persist(
+        _ entries: [PendingSavingPlanBudgetV2Intent], for ownerID: UUID
+    ) throws {
+        try files.createDirectory(
+            at: directory, withIntermediateDirectories: true
+        )
+        let data = try JSONEncoder().encode(entries)
+        #if os(iOS)
+        try data.write(
+            to: fileURL(for: ownerID),
+            options: [.atomic, .completeFileProtectionUnlessOpen]
+        )
+        #else
+        try data.write(to: fileURL(for: ownerID), options: [.atomic])
+        #endif
+    }
+}
+
+// MARK: - #80: Dormant insert-only goal and authoritative readback contract
+//
+// This is an unconnected contract, NOT a network operation. The live app
+// continues its old goal UPSERT until the signed-client compatibility gate.
+// Never treat INSERT conflict/timeout as success without a verified SELECT.
+
+enum SavingGoalCreateContractError: Error, Equatable {
+    case invalidGoal
+    case invalidAmount
+    case invalidSchedule
+    case accountChanged
+    case missingOrInvisible
+    case mismatchedRemoteGoal
+    case remotelyRevised
+}
+
+/// INSERT-only payload: stable UUID and exact goal amounts. user_id is
+/// intentionally omitted so PostgreSQL defaults it to auth.uid() under RLS.
+/// The expected owner exists only in local verification, not the wire JSON.
+struct SavingGoalCreateOnlyRequest: Encodable, Equatable, Sendable {
+    let goalID: UUID
+    let expectedOwnerID: UUID
+    let title: String
+    let category: String
+    let customCategory: String?
+    let targetAmount: Decimal
+    let currencyCode: String
+    let startDate: String
+    let targetDate: String
+    let rhythm: String
+    let preferredSavingDay: Int?
+    let plannedContributionOverride: Decimal?
+
+    init(
+        goalID: UUID, ownerID: UUID, title: String, category: String,
+        customCategory: String?, targetMinorUnits: Int64,
+        currencyCode: String, startDate: Date, targetDate: Date,
+        rhythm: String, preferredSavingDay: Int?,
+        plannedContributionMinorUnits: Int64?
+    ) throws {
+        let normalizedTitle = title.trimmingCharacters(in: .whitespacesAndNewlines)
+        let normalizedCustom = customCategory?.trimmingCharacters(
+            in: .whitespacesAndNewlines
+        )
+        guard !normalizedTitle.isEmpty && normalizedTitle.count <= 120,
+              ["gadget", "trip", "gift", "debt", "automotive", "house", "other"]
+                .contains(category),
+              normalizedCustom == nil || (normalizedCustom!.count > 0
+                && normalizedCustom!.count <= 80)
+        else { throw SavingGoalCreateContractError.invalidGoal }
+
+        guard currencyCode == currencyCode.uppercased(),
+              PipoGoalCurrency.isSupported(currencyCode),
+              targetMinorUnits > 0,
+              PipoGoalCurrency.minorUnits(
+                PipoGoalCurrency.decimal(targetMinorUnits, code: currencyCode),
+                code: currencyCode
+              ) == targetMinorUnits
+        else { throw SavingGoalCreateContractError.invalidAmount }
+
+        var override: Decimal?
+        if let plannedContributionMinorUnits {
+            guard plannedContributionMinorUnits > 0,
+                  PipoGoalCurrency.minorUnits(
+                    PipoGoalCurrency.decimal(
+                        plannedContributionMinorUnits, code: currencyCode
+                    ), code: currencyCode
+                  ) == plannedContributionMinorUnits
+            else { throw SavingGoalCreateContractError.invalidAmount }
+            override = PipoGoalCurrency.decimal(
+                plannedContributionMinorUnits, code: currencyCode
+            )
+        }
+        guard startDate.timeIntervalSince1970.isFinite,
+              targetDate.timeIntervalSince1970.isFinite,
+              targetDate >= startDate,
+              ["daily", "weekly", "biWeekly", "monthly", "flexible"].contains(rhythm),
+              preferredSavingDay == nil || (1...31).contains(preferredSavingDay!),
+              (rhythm != "daily" && rhythm != "flexible"
+                || preferredSavingDay == nil),
+              (rhythm != "weekly" && rhythm != "biWeekly"
+                || preferredSavingDay == nil || preferredSavingDay! <= 7),
+              rhythm != "flexible" || override == nil
+        else { throw SavingGoalCreateContractError.invalidSchedule }
+
+        self.goalID = goalID
+        expectedOwnerID = ownerID
+        self.title = normalizedTitle
+        self.category = category
+        self.customCategory = normalizedCustom
+        targetAmount = PipoGoalCurrency.decimal(
+            targetMinorUnits, code: currencyCode
+        )
+        self.currencyCode = currencyCode
+        let timestamp = ISO8601DateFormatter()
+        self.startDate = timestamp.string(from: startDate)
+        self.targetDate = timestamp.string(from: targetDate)
+        self.rhythm = rhythm
+        self.preferredSavingDay = preferredSavingDay
+        plannedContributionOverride = override
+    }
+
+    enum CodingKeys: String, CodingKey {
+        case title, category, rhythm
+        case goalID = "id"
+        case customCategory = "custom_category"
+        case targetAmount = "target_amount"
+        case currencyCode = "currency_code"
+        case startDate = "start_date"
+        case targetDate = "target_date"
+        case preferredSavingDay = "preferred_saving_day"
+        case plannedContributionOverride = "planned_contribution_override"
+    }
+
+    func encode(to encoder: Encoder) throws {
+        var c = encoder.container(keyedBy: CodingKeys.self)
+        try c.encode(goalID, forKey: .goalID)
+        try c.encode(title, forKey: .title)
+        try c.encode(category, forKey: .category)
+        try c.encode(customCategory, forKey: .customCategory)
+        try c.encode(targetAmount, forKey: .targetAmount)
+        try c.encode(currencyCode, forKey: .currencyCode)
+        try c.encode(startDate, forKey: .startDate)
+        try c.encode(targetDate, forKey: .targetDate)
+        try c.encode(rhythm, forKey: .rhythm)
+        try c.encode(preferredSavingDay, forKey: .preferredSavingDay)
+        try c.encode(plannedContributionOverride, forKey: .plannedContributionOverride)
+    }
+}
+
+/// A *fresh* SELECT from the RLS-filtered goal table. This DTO is not
+/// itself proof the query was authenticated; verify the session before and
+/// after fetching and pass only rows from that confirmed owner-scoped read.
+struct SavingGoalAuthoritativeCloudRow: Decodable, Sendable {
+    let goalID: UUID
+    let ownerID: UUID
+    let title: String
+    let category: String
+    let customCategory: String?
+    let targetAmount: Decimal
+    let currencyCode: String
+    let startDate: String
+    let targetDate: String
+    let rhythm: String
+    let preferredSavingDay: Int?
+    let plannedContributionOverride: Decimal?
+    let planRevision: Int64
+
+    enum CodingKeys: String, CodingKey {
+        case title, category, rhythm
+        case goalID = "id"
+        case ownerID = "user_id"
+        case customCategory = "custom_category"
+        case targetAmount = "target_amount"
+        case currencyCode = "currency_code"
+        case startDate = "start_date"
+        case targetDate = "target_date"
+        case preferredSavingDay = "preferred_saving_day"
+        case plannedContributionOverride = "planned_contribution_override"
+        case planRevision = "plan_revision"
+    }
+}
+
+enum SavingGoalCreateReadbackVerifier {
+    private static func parseInstant(_ value: String) -> Date? {
+        let seconds = ISO8601DateFormatter()
+        if let instant = seconds.date(from: value) { return instant }
+        let fractional = ISO8601DateFormatter()
+        fractional.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+        return fractional.date(from: value)
+    }
+
+    /// Do NOT retry INSERT or mark the goal cloud-saved when readback is
+    /// nil, foreign, changed, malformed, or revision > 0. In particular,
+    /// a duplicate-key 409 is not evidence that the payload is identical.
+    static func verify(
+        _ row: SavingGoalAuthoritativeCloudRow?,
+        for request: SavingGoalCreateOnlyRequest,
+        authenticatedOwnerID: UUID
+    ) throws {
+        guard authenticatedOwnerID == request.expectedOwnerID else {
+            throw SavingGoalCreateContractError.accountChanged
+        }
+        guard let row else {
+            throw SavingGoalCreateContractError.missingOrInvisible
+        }
+        guard row.ownerID == authenticatedOwnerID,
+              row.goalID == request.goalID
+        else { throw SavingGoalCreateContractError.mismatchedRemoteGoal }
+        guard row.planRevision == 0 else {
+            throw SavingGoalCreateContractError.remotelyRevised
+        }
+        guard row.title == request.title,
+              row.category == request.category,
+              row.customCategory == request.customCategory,
+              row.targetAmount == request.targetAmount,
+              row.currencyCode == request.currencyCode,
+              row.rhythm == request.rhythm,
+              row.preferredSavingDay == request.preferredSavingDay,
+              row.plannedContributionOverride == request.plannedContributionOverride,
+              let start = parseInstant(row.startDate),
+              let target = parseInstant(row.targetDate),
+              let expectedStart = parseInstant(request.startDate),
+              let expectedTarget = parseInstant(request.targetDate),
+              start == expectedStart, target == expectedTarget
+        else { throw SavingGoalCreateContractError.mismatchedRemoteGoal }
+    }
+}
+
+// MARK: - #80: Durable first-goal create journal (inactive, NO network)
+//
+// Separate from the pending *plan-edit* journal. A goal's UUID itself is
+// the stable INSERT idempotency key, including across timeout and relaunch.
+// No automatic retries, live calls, SwiftData mutation, XP, or money movement.
+
+enum SavingGoalCreateJournalError: Error, Equatable {
+    case invalidJournal
+    case idempotencyConflict
+    case tooManyPendingGoals
+    case unknownGoal
+    case accountChanged
+    case untrustedReadback
+    case invalidTransition
+    case userDecisionRequired
+    case localNotReady
+}
+
+struct PendingSavingGoalCreateIntent: Codable, Equatable, Sendable {
+    enum State: String, Codable, Sendable {
+        case staged       // Persisted but no INSERT has been attempted.
+        case attempted    // INSERT may have committed; MUST read before retry.
+        case verified     // Exact owner/goal/revision-zero readback; local merge pending.
+        case conflicted   // Owned goal exists but differs; user decision required.
+        case reconciled   // Persisted local goal verified; durable terminal receipt.
+    }
+
+    let ownerID: UUID
+    let goalID: UUID
+    let title: String
+    let category: String
+    let customCategory: String?
+    let targetMinorUnits: Int64
+    let currencyCode: String
+    let startDate: String
+    let targetDate: String
+    let rhythm: String
+    let preferredSavingDay: Int?
+    let plannedContributionMinorUnits: Int64?
+    let createdAt: Date
+    var state: State
+    var observedRevision: Int64?
+
+    init(request: SavingGoalCreateOnlyRequest, createdAt: Date = .now) throws {
+        guard let amount = PipoGoalCurrency.minorUnits(
+                request.targetAmount, code: request.currencyCode),
+              createdAt.timeIntervalSince1970.isFinite,
+              (request.plannedContributionOverride == nil ||
+               PipoGoalCurrency.minorUnits(
+                 request.plannedContributionOverride!, code: request.currencyCode) != nil)
+        else { throw SavingGoalCreateJournalError.invalidJournal }
+
+        ownerID = request.expectedOwnerID
+        goalID = request.goalID
+        title = request.title
+        category = request.category
+        customCategory = request.customCategory
+        targetMinorUnits = amount
+        currencyCode = request.currencyCode
+        startDate = request.startDate
+        targetDate = request.targetDate
+        rhythm = request.rhythm
+        preferredSavingDay = request.preferredSavingDay
+        plannedContributionMinorUnits = request.plannedContributionOverride.flatMap {
+            PipoGoalCurrency.minorUnits($0, code: request.currencyCode)
+        }
+        self.createdAt = createdAt
+        state = .staged
+        observedRevision = nil
+    }
+
+    /// An on-disk JSON file is untrusted even when named after this user.
+    /// Reconstruct the canonical request and check every immutable field.
+    func checkedRequest(for ownerID: UUID) throws -> SavingGoalCreateOnlyRequest {
+        guard self.ownerID == ownerID,
+              createdAt.timeIntervalSince1970.isFinite,
+              startDate.count <= 40, targetDate.count <= 40,
+              let start = ISO8601DateFormatter().date(from: startDate),
+              let target = ISO8601DateFormatter().date(from: targetDate)
+        else { throw SavingGoalCreateJournalError.invalidJournal }
+        let canonical: SavingGoalCreateOnlyRequest
+        do {
+            canonical = try SavingGoalCreateOnlyRequest(
+                goalID: goalID, ownerID: ownerID,
+                title: title, category: category, customCategory: customCategory,
+                targetMinorUnits: targetMinorUnits, currencyCode: currencyCode,
+                startDate: start, targetDate: target, rhythm: rhythm,
+                preferredSavingDay: preferredSavingDay,
+                plannedContributionMinorUnits: plannedContributionMinorUnits
+            )
+        } catch {
+            throw SavingGoalCreateJournalError.invalidJournal
+        }
+        guard canonical.title == title,
+              canonical.customCategory == customCategory,
+              canonical.startDate == startDate, canonical.targetDate == targetDate
+        else { throw SavingGoalCreateJournalError.invalidJournal }
+        switch state {
+        case .staged, .attempted:
+            guard observedRevision == nil else {
+                throw SavingGoalCreateJournalError.invalidJournal
+            }
+        case .verified, .reconciled:
+            guard observedRevision == 0 else {
+                throw SavingGoalCreateJournalError.invalidJournal
+            }
+        case .conflicted:
+            guard let observedRevision, observedRevision >= 0 else {
+                throw SavingGoalCreateJournalError.invalidJournal
+            }
+        }
+        return canonical
+    }
+}
+
+/// The journal itself NEVER treats an INSERT success, HTTP 409 or timeout as
+/// a verified create. Only a FRESH, session-checked, owner-filtered SELECT
+/// may be passed to recordReadback. This trust boundary is caller-enforced.
+@MainActor
+final class SavingGoalCreateIntentJournal {
+    private let directory: URL
+    private let files: FileManager
+    private let maximumEntries = 100
+
+    init(directory: URL, fileManager: FileManager = .default) {
+        self.directory = directory
+        self.files = fileManager
+    }
+
+    static func inApplicationSupport() throws -> SavingGoalCreateIntentJournal {
+        let root = try FileManager.default.url(
+            for: .applicationSupportDirectory, in: .userDomainMask,
+            appropriateFor: nil, create: true
+        )
+        return SavingGoalCreateIntentJournal(
+            directory: root.appendingPathComponent(
+                "PipoPendingGoalCreates", isDirectory: true
+            )
+        )
+    }
+
+    func all(for ownerID: UUID) throws -> [PendingSavingGoalCreateIntent] {
+        let path = fileURL(for: ownerID)
+        guard files.fileExists(atPath: path.path) else { return [] }
+        let entries: [PendingSavingGoalCreateIntent]
+        do {
+            entries = try JSONDecoder().decode(
+                [PendingSavingGoalCreateIntent].self,
+                from: Data(contentsOf: path)
+            )
+        } catch {
+            throw SavingGoalCreateJournalError.invalidJournal
+        }
+        guard entries.count <= maximumEntries else {
+            throw SavingGoalCreateJournalError.tooManyPendingGoals
+        }
+        var ids = Set<UUID>()
+        for entry in entries {
+            guard ids.insert(entry.goalID).inserted else {
+                throw SavingGoalCreateJournalError.invalidJournal
+            }
+            _ = try entry.checkedRequest(for: ownerID)
+        }
+        return entries
+    }
+
+    /// Only unresolved entries are shown as pending; reconciled entries
+    /// remain as durable receipts so an app relaunch cannot re-create a goal.
+    func pending(for ownerID: UUID) throws -> [PendingSavingGoalCreateIntent] {
+        try all(for: ownerID).filter { $0.state != .reconciled }
+    }
+
+    /// Persist BEFORE attempting a future authenticated INSERT. Never
+    /// regenerate the goal UUID on relaunch or after an ambiguous timeout.
+    @discardableResult
+    func stage(_ request: SavingGoalCreateOnlyRequest, ownerID: UUID) throws
+        -> PendingSavingGoalCreateIntent {
+        guard request.expectedOwnerID == ownerID else {
+            throw SavingGoalCreateJournalError.accountChanged
+        }
+        var entries = try all(for: ownerID)
+        if let earlier = entries.first(where: { $0.goalID == request.goalID }) {
+            guard try earlier.checkedRequest(for: ownerID) == request else {
+                throw SavingGoalCreateJournalError.idempotencyConflict
+            }
+            return earlier
+        }
+        guard entries.count < maximumEntries else {
+            throw SavingGoalCreateJournalError.tooManyPendingGoals
+        }
+        let entry = try PendingSavingGoalCreateIntent(request: request)
+        entries.append(entry)
+        try persist(entries, for: ownerID)
+        return entry
+    }
+
+    /// Persist BEFORE the first network INSERT. On timeout or crash, read back
+    /// the original UUID instead of automatically issuing another INSERT.
+    @discardableResult
+    func markInsertAttempted(goalID: UUID, ownerID: UUID)
+        throws -> SavingGoalCreateOnlyRequest {
+        var entries = try all(for: ownerID)
+        guard let index = entries.firstIndex(where: { $0.goalID == goalID }) else {
+            throw SavingGoalCreateJournalError.unknownGoal
+        }
+        guard entries[index].state == .staged else {
+            throw SavingGoalCreateJournalError.invalidTransition
+        }
+        let request = try entries[index].checkedRequest(for: ownerID)
+        entries[index].state = .attempted
+        try persist(entries, for: ownerID)
+        return request
+    }
+
+    /// Nil/unauthorized readback never changes state. An owned mismatching
+    /// row becomes a CONFLICT rather than a new INSERT or an overwrite.
+    /// No state transition performs a network request or changes SwiftData.
+    @discardableResult
+    func recordReadback(
+        _ row: SavingGoalAuthoritativeCloudRow?,
+        goalID: UUID,
+        ownerID: UUID,
+        authenticatedOwnerID: UUID
+    ) throws -> PendingSavingGoalCreateIntent.State {
+        guard authenticatedOwnerID == ownerID else {
+            throw SavingGoalCreateJournalError.accountChanged
+        }
+        var entries = try all(for: ownerID)
+        guard let i = entries.firstIndex(where: { $0.goalID == goalID }) else {
+            throw SavingGoalCreateJournalError.unknownGoal
+        }
+        let request = try entries[i].checkedRequest(for: ownerID)
+
+        // Missing row means unknown/invisible, NOT a safe reason to create
+        // another UUID or drop the pending entry.
+        guard let row else {
+            throw SavingGoalCreateContractError.missingOrInvisible
+        }
+        guard row.ownerID == ownerID, row.goalID == goalID,
+              row.planRevision >= 0 else {
+            throw SavingGoalCreateJournalError.untrustedReadback
+        }
+        let next: PendingSavingGoalCreateIntent.State
+        do {
+            try SavingGoalCreateReadbackVerifier.verify(
+                row, for: request, authenticatedOwnerID: authenticatedOwnerID
+            )
+            next = .verified
+        } catch SavingGoalCreateContractError.remotelyRevised {
+            next = .conflicted
+        } catch SavingGoalCreateContractError.mismatchedRemoteGoal {
+            next = .conflicted
+        }
+        let observed = row.planRevision
+        if entries[i].state == .reconciled {
+            guard next == .verified, observed == 0 else {
+                throw SavingGoalCreateJournalError.invalidTransition
+            }
+            return .reconciled
+        }
+        if entries[i].state != .staged && entries[i].state != .attempted {
+            guard entries[i].state == next,
+                  entries[i].observedRevision == observed else {
+                throw SavingGoalCreateJournalError.invalidTransition
+            }
+            return next
+        }
+        entries[i].state = next
+        entries[i].observedRevision = observed
+        try persist(entries, for: ownerID)
+        return next
+    }
+
+    /// This method is not automatically called from app lifecycle. A future
+    /// staging-only SwiftData adapter must first read a FRESH persisted goal
+    /// from a separate ModelContext and prove that local records/budget/XP
+    /// have not been modified. This writes ONLY a durable terminal receipt
+    /// into the create journal: it never edits SwiftData, history, or XP.
+    @discardableResult
+    func markLocalCommitVerified(
+        goalID: UUID, ownerID: UUID, authenticatedOwnerID: UUID,
+        local: SavingGoalCreateLocalSnapshot
+    ) throws -> PendingSavingGoalCreateIntent.State {
+        guard ownerID == authenticatedOwnerID else {
+            throw SavingGoalCreateJournalError.accountChanged
+        }
+        var entries = try all(for: ownerID)
+        guard let index = entries.firstIndex(where: { $0.goalID == goalID }) else {
+            throw SavingGoalCreateJournalError.unknownGoal
+        }
+        let pending = entries[index]
+        let expected = try pending.checkedRequest(for: ownerID)
+        guard expected == local.request else {
+            throw SavingGoalCreateJournalError.localNotReady
+        }
+        // Repeat after an interrupted app cleanup is idempotent and never
+        // creates a second goal or changes the already recorded history.
+        if pending.state == .reconciled {
+            guard pending.observedRevision == 0,
+                  local.ownerID == ownerID, local.pendingSavingEventCount == 0,
+                  !local.hasLocalOnlyBudgetItems,
+                  !local.hasUnresolvedPlanChanges else {
+                throw SavingGoalCreateJournalError.localNotReady
+            }
+            return .reconciled
+        }
+        guard try SavingGoalCreateLocalReconciler.assess(
+            pending: pending, local: local,
+            authenticatedOwnerID: authenticatedOwnerID
+        ) == .eligibleForExplicitReconciliation else {
+            throw SavingGoalCreateJournalError.localNotReady
+        }
+        entries[index].state = .reconciled
+        // Atomic write is the commit. Crash before => verified can retry;
+        // crash after => reconciled survives and is hidden from pending().
+        try persist(entries, for: ownerID)
+        return .reconciled
+    }
+
+    func discardConflictedAfterUserDecision(
+        goalID: UUID, ownerID: UUID, userConfirmedDiscard: Bool
+    ) throws {
+        guard userConfirmedDiscard else {
+            throw SavingGoalCreateJournalError.userDecisionRequired
+        }
+        var entries = try all(for: ownerID)
+        guard let i = entries.firstIndex(where: { $0.goalID == goalID }) else {
+            throw SavingGoalCreateJournalError.unknownGoal
+        }
+        guard entries[i].state == .conflicted else {
+            throw SavingGoalCreateJournalError.invalidTransition
+        }
+        entries.remove(at: i)
+        try persist(entries, for: ownerID)
+    }
+
+    private func fileURL(for ownerID: UUID) -> URL {
+        directory.appendingPathComponent(
+            ownerID.uuidString.lowercased() + ".json", isDirectory: false
+        )
+    }
+
+    private func persist(
+        _ entries: [PendingSavingGoalCreateIntent], for ownerID: UUID
+    ) throws {
+        try files.createDirectory(
+            at: directory, withIntermediateDirectories: true
+        )
+        let data = try JSONEncoder().encode(entries)
+        #if os(iOS)
+        try data.write(
+            to: fileURL(for: ownerID),
+            options: [.atomic, .completeFileProtectionUnlessOpen]
+        )
+        #else
+        // Ephemeral, isolated Linux Swift harness only.
+        try data.write(to: fileURL(for: ownerID), options: [.atomic])
+        #endif
+    }
+}
+
+// MARK: - #80: Candidate legacy-schema signed bridge (REVIEW ONLY)
+//
+// Unlike CAS create readback, this intentionally omits plan_revision because
+// the currently deployed backend does not have that column. A legacy readback
+// never claims a verified server-owned revision. No old-client UPDATE/UPSERT
+// permission is changed and this bridge is NOT compiled into Release unless
+// a separately approved signed build defines PIPO_ISSUE80_BRIDGE.
+
+enum LegacyGoalBridgeError: Error, Equatable, LocalizedError {
+    case invalidJournal
+    case accountChanged
+    case pendingConfirmation
+    case cloudConflict
+    case untrustedReadback
+    case tooManyIntents
+
+    var errorDescription: String? {
+        switch self {
+        case .invalidJournal:
+            "Goal backup is paused because its local delivery record needs review."
+        case .accountChanged:
+            "The signed-in account changed. Goal backup was safely stopped."
+        case .pendingConfirmation:
+            "Goal backup is still unconfirmed. Your device keeps the original goal."
+        case .cloudConflict:
+            "Your device and cloud goal details differ. No cloud goal was overwritten."
+        case .untrustedReadback:
+            "The cloud goal could not be verified. Your local saving records remain unchanged."
+        case .tooManyIntents:
+            "Goal backup history needs review before more changes can be queued."
+        }
+    }
+}
+
+/// Legacy schema has NO plan_revision. The row MUST originate from a fresh,
+/// authenticated owner-filtered SELECT; a decoded struct alone is not proof.
+struct LegacyGoalBridgeCloudRow: Decodable, Sendable {
+    let goalID: UUID
+    let ownerID: UUID
+    let title: String
+    let category: String
+    let customCategory: String?
+    let targetAmount: Decimal
+    let currencyCode: String
+    let startDate: String
+    let targetDate: String
+    let rhythm: String
+    let preferredSavingDay: Int?
+    let plannedContributionOverride: Decimal?
+
+    enum CodingKeys: String, CodingKey {
+        case title, category, rhythm
+        case goalID = "id"
+        case ownerID = "user_id"
+        case customCategory = "custom_category"
+        case targetAmount = "target_amount"
+        case currencyCode = "currency_code"
+        case startDate = "start_date"
+        case targetDate = "target_date"
+        case preferredSavingDay = "preferred_saving_day"
+        case plannedContributionOverride = "planned_contribution_override"
+    }
+}
+
+enum LegacyGoalBridgeReadbackVerifier {
+    private static func date(_ value: String) -> Date? {
+        let whole = ISO8601DateFormatter()
+        let fractions = ISO8601DateFormatter()
+        fractions.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+        return fractions.date(from: value) ?? whole.date(from: value)
+    }
+
+    /// A match proves only current goal metadata equality, NEVER revision
+    /// protection or itemized-budget cloud backup on the legacy backend.
+    static func verify(_ row: LegacyGoalBridgeCloudRow?,
+                       request: SavingGoalCreateOnlyRequest,
+                       authenticatedOwnerID: UUID) throws {
+        guard request.expectedOwnerID == authenticatedOwnerID else {
+            throw LegacyGoalBridgeError.accountChanged
+        }
+        guard let row else { throw LegacyGoalBridgeError.pendingConfirmation }
+        guard row.goalID == request.goalID,
+              row.ownerID == authenticatedOwnerID else {
+            throw LegacyGoalBridgeError.untrustedReadback
+        }
+        guard row.title == request.title,
+              row.category == request.category,
+              row.customCategory == request.customCategory,
+              row.targetAmount == request.targetAmount,
+              row.currencyCode == request.currencyCode,
+              row.rhythm == request.rhythm,
+              row.preferredSavingDay == request.preferredSavingDay,
+              row.plannedContributionOverride == request.plannedContributionOverride,
+              let actualStart = date(row.startDate),
+              let actualTarget = date(row.targetDate),
+              let expectedStart = date(request.startDate),
+              let expectedTarget = date(request.targetDate),
+              actualStart == expectedStart, actualTarget == expectedTarget
+        else { throw LegacyGoalBridgeError.cloudConflict }
+    }
+}
+
+/// Reuse the rigorously checked create-only request storage, WITHOUT forging
+/// an unavailable plan_revision. Inner create intent always remains .staged;
+/// this independent state tracks the legacy schema bridge lifecycle.
+struct PendingLegacyGoalBridgeIntent: Codable, Equatable, Sendable {
+    enum State: String, Codable, Sendable {
+        case staged
+        case attempted     // Network may have committed; no automatic second INSERT
+        case verified      // Fresh legacy owner readback; never a CAS revision
+    }
+    let original: PendingSavingGoalCreateIntent
+    var state: State
+
+    init(request: SavingGoalCreateOnlyRequest) throws {
+        original = try PendingSavingGoalCreateIntent(request: request)
+        state = .staged
+    }
+
+    func checkedRequest(for ownerID: UUID) throws -> SavingGoalCreateOnlyRequest {
+        guard original.ownerID == ownerID,
+              original.state == .staged,
+              original.observedRevision == nil
+        else { throw LegacyGoalBridgeError.invalidJournal }
+        do {
+            return try original.checkedRequest(for: ownerID)
+        } catch {
+            throw LegacyGoalBridgeError.invalidJournal
+        }
+    }
+}
+
+/// No auto retry if INSERT timed out: a *known missing* SELECT could still
+/// race an in-flight request. A signed app will need explicit recovery UX.
+/// This journal never removes verified UUIDs automatically.
+@MainActor
+final class LegacyGoalBridgeIntentJournal {
+    private let directory: URL
+    private let files: FileManager
+    private let maximumEntries = 100
+
+    init(directory: URL, fileManager: FileManager = .default) {
+        self.directory = directory
+        files = fileManager
+    }
+
+    static func inApplicationSupport() throws -> LegacyGoalBridgeIntentJournal {
+        let root = try FileManager.default.url(
+            for: .applicationSupportDirectory, in: .userDomainMask,
+            appropriateFor: nil, create: true
+        )
+        return LegacyGoalBridgeIntentJournal(
+            directory: root.appendingPathComponent(
+                "PipoLegacyGoalBridge", isDirectory: true
+            )
+        )
+    }
+
+    func all(for ownerID: UUID) throws -> [PendingLegacyGoalBridgeIntent] {
+        let url = fileURL(for: ownerID)
+        guard files.fileExists(atPath: url.path) else { return [] }
+        let entries: [PendingLegacyGoalBridgeIntent]
+        do {
+            entries = try JSONDecoder().decode(
+                [PendingLegacyGoalBridgeIntent].self,
+                from: Data(contentsOf: url)
+            )
+        } catch { throw LegacyGoalBridgeError.invalidJournal }
+        guard entries.count <= maximumEntries else {
+            throw LegacyGoalBridgeError.tooManyIntents
+        }
+        var ids = Set<UUID>()
+        for entry in entries {
+            guard ids.insert(entry.original.goalID).inserted else {
+                throw LegacyGoalBridgeError.invalidJournal
+            }
+            _ = try entry.checkedRequest(for: ownerID)
+        }
+        return entries
+    }
+
+    func intent(goalID: UUID, ownerID: UUID) throws
+        -> PendingLegacyGoalBridgeIntent? {
+        try all(for: ownerID).first { $0.original.goalID == goalID }
+    }
+
+    @discardableResult
+    func stage(_ request: SavingGoalCreateOnlyRequest, ownerID: UUID) throws
+        -> PendingLegacyGoalBridgeIntent {
+        guard request.expectedOwnerID == ownerID else {
+            throw LegacyGoalBridgeError.accountChanged
+        }
+        var entries = try all(for: ownerID)
+        if let old = entries.first(where: { $0.original.goalID == request.goalID }) {
+            guard try old.checkedRequest(for: ownerID) == request else {
+                throw LegacyGoalBridgeError.cloudConflict
+            }
+            return old
+        }
+        guard entries.count < maximumEntries else {
+            throw LegacyGoalBridgeError.tooManyIntents
+        }
+        let item = try PendingLegacyGoalBridgeIntent(request: request)
+        entries.append(item)
+        try persist(entries, ownerID: ownerID)
+        return item
+    }
+
+    /// Persist BEFORE attempting the only INSERT. Once attempted, no second
+    /// request is sent automatically after a timeout or relaunch.
+    func markAttempted(goalID: UUID, ownerID: UUID) throws {
+        try transition(goalID: goalID, ownerID: ownerID,
+                       from: .staged, to: .attempted)
+    }
+
+    /// Call ONLY after matching a FRESH owner-scoped SELECT against the
+    /// original immutable create payload. It does not change local SwiftData.
+    func recordVerifiedReadback(_ row: LegacyGoalBridgeCloudRow,
+                                goalID: UUID, ownerID: UUID,
+                                authenticatedOwnerID: UUID) throws {
+        guard ownerID == authenticatedOwnerID else {
+            throw LegacyGoalBridgeError.accountChanged
+        }
+        var entries = try all(for: ownerID)
+        guard let index = entries.firstIndex(where: {
+            $0.original.goalID == goalID
+        }) else { throw LegacyGoalBridgeError.invalidJournal }
+        let request = try entries[index].checkedRequest(for: ownerID)
+        try LegacyGoalBridgeReadbackVerifier.verify(
+            row, request: request, authenticatedOwnerID: authenticatedOwnerID
+        )
+        guard entries[index].state == .attempted
+                || entries[index].state == .verified else {
+            throw LegacyGoalBridgeError.invalidJournal
+        }
+        if entries[index].state == .verified { return }
+        entries[index].state = .verified
+        try persist(entries, ownerID: ownerID)
+    }
+
+    private func transition(goalID: UUID, ownerID: UUID,
+                            from: PendingLegacyGoalBridgeIntent.State,
+                            to: PendingLegacyGoalBridgeIntent.State) throws {
+        var entries = try all(for: ownerID)
+        guard let index = entries.firstIndex(where: {
+            $0.original.goalID == goalID
+        }), entries[index].state == from else {
+            throw LegacyGoalBridgeError.pendingConfirmation
+        }
+        entries[index].state = to
+        try persist(entries, ownerID: ownerID)
+    }
+
+    private func fileURL(for ownerID: UUID) -> URL {
+        directory.appendingPathComponent(
+            ownerID.uuidString.lowercased() + ".json", isDirectory: false
+        )
+    }
+
+    private func persist(_ entries: [PendingLegacyGoalBridgeIntent],
+                         ownerID: UUID) throws {
+        try files.createDirectory(
+            at: directory, withIntermediateDirectories: true
+        )
+        let data = try JSONEncoder().encode(entries)
+        #if os(iOS)
+        try data.write(
+            to: fileURL(for: ownerID),
+            options: [.atomic, .completeFileProtectionUnlessOpen]
+        )
+        #else
+        try data.write(to: fileURL(for: ownerID), options: [.atomic])
+        #endif
+    }
+}
+
+// MARK: - #80: Pure local reconcile decision (NO SwiftData writes)
+//
+// A verified CREATE does not certify that saving events, XP, budget subitems
+// and device-local edits have been safely reconciled. This checker returns
+// *advice only*, never removes a journal row or rewrites any financial data.
+
+struct SavingGoalCreateLocalSnapshot: Sendable {
+    let ownerID: UUID
+    let request: SavingGoalCreateOnlyRequest
+    let pendingSavingEventCount: Int
+    let hasLocalOnlyBudgetItems: Bool
+    let hasUnresolvedPlanChanges: Bool
+}
+
+enum SavingGoalCreateReconcileDecision: Equatable, Sendable {
+    case holdForAuthenticatedReadback
+    case holdForLocalConflict
+    case goalVerifiedSavingEntriesPending
+    case goalVerifiedBudgetSyncPending
+    case eligibleForExplicitReconciliation
+}
+
+enum SavingGoalCreateLocalReconciler {
+    static func assess(
+        pending: PendingSavingGoalCreateIntent,
+        local: SavingGoalCreateLocalSnapshot,
+        authenticatedOwnerID: UUID
+    ) throws -> SavingGoalCreateReconcileDecision {
+        guard authenticatedOwnerID == pending.ownerID,
+              local.ownerID == authenticatedOwnerID,
+              local.request.expectedOwnerID == authenticatedOwnerID
+        else { throw SavingGoalCreateJournalError.accountChanged }
+        guard local.pendingSavingEventCount >= 0 else {
+            throw SavingGoalCreateJournalError.invalidJournal
+        }
+        // A conflict cannot be safely resolved by comparing only a saved
+        // stale snapshot. Require a fresh server fetch + explicit user input.
+        guard pending.state == .verified, pending.observedRevision == 0 else {
+            return .holdForAuthenticatedReadback
+        }
+        let expected = try pending.checkedRequest(for: authenticatedOwnerID)
+        guard expected == local.request,
+              !local.hasUnresolvedPlanChanges
+        else { return .holdForLocalConflict }
+
+        // The user's new goal can be known on cloud while saving events
+        // remain offline. Do not grant XP or copy balances during recovery.
+        if local.pendingSavingEventCount > 0 {
+            return .goalVerifiedSavingEntriesPending
+        }
+        if local.hasLocalOnlyBudgetItems {
+            return .goalVerifiedBudgetSyncPending
+        }
+        // This is a planning decision, NOT permission to automatically
+        // remove a verified journal. A separately reviewed app integration
+        // must commit local reconciliation and its receipt first.
+        return .eligibleForExplicitReconciliation
+    }
+}
+
+// MARK: - #80: Durable local plan-edit intent (inactive, NO network send)
+//
+// Stored separately per authenticated owner using an atomic write, without a
+// SwiftData schema migration. This is a delivery journal, not a second source
+// of financial truth. A staged/acknowledged entry NEVER updates goal totals,
+// XP, badges, currency or the current SwiftData plan. All transitions are
+// called explicitly; there is no automatic retry or background task.
+
+enum SavingPlanCASJournalError: Error, Equatable {
+    case invalidJournal
+    case idempotencyConflict
+    case goalAlreadyPending
+    case tooManyIntents
+    case unknownIntent
+    case invalidTransition
+    case unverifiedReadback
+    case userDecisionRequired
+}
+
+struct PendingSavingPlanCASIntent: Codable, Equatable, Sendable {
+    enum State: String, Codable, Sendable {
+        case staged       // Not confirmed: timeout and offline remain here.
+        case acknowledged // Exact RPC receipt verified, readback still needed.
+        case conflicted   // Latest server revision differs; user must decide.
+    }
+
+    let ownerID: UUID
+    let requestID: UUID
+    let goalID: UUID
+    let expectedRevision: Int64
+    let targetMinorUnits: Int64
+    let currencyCode: String
+    let targetDate: String
+    let rhythm: String
+    let preferredSavingDay: Int?
+    let plannedContributionMinorUnits: Int64?
+    let createdAt: Date
+    var state: State
+    var responseRevision: Int64?
+
+    init(request: SavingPlanCASRequest, ownerID: UUID, createdAt: Date = .now) throws {
+        guard let target = PipoGoalCurrency.minorUnits(
+                request.targetAmount, code: request.currencyCode),
+              request.targetDate.count <= 40,
+              (request.plannedContributionOverride == nil ||
+               PipoGoalCurrency.minorUnits(
+                 request.plannedContributionOverride!, code: request.currencyCode) != nil)
+        else { throw SavingPlanCASJournalError.invalidJournal }
+        self.ownerID = ownerID
+        requestID = request.requestID
+        goalID = request.goalID
+        expectedRevision = request.expectedRevision
+        targetMinorUnits = target
+        currencyCode = request.currencyCode
+        targetDate = request.targetDate
+        rhythm = request.rhythm
+        preferredSavingDay = request.preferredSavingDay
+        plannedContributionMinorUnits = request.plannedContributionOverride.flatMap {
+            PipoGoalCurrency.minorUnits($0, code: request.currencyCode)
+        }
+        self.createdAt = createdAt
+        state = .staged
+        responseRevision = nil
+    }
+
+    /// Treat every on-disk entry as untrusted after relaunch. A malformed
+    /// payload fails the whole journal closed, never silently drops edits.
+    func checkedRequest(for ownerID: UUID) throws -> SavingPlanCASRequest {
+        guard self.ownerID == ownerID,
+              expectedRevision >= 0 && expectedRevision < Int64.max,
+              let date = ISO8601DateFormatter().date(from: targetDate),
+              createdAt.timeIntervalSince1970.isFinite
+        else { throw SavingPlanCASJournalError.invalidJournal }
+        let canonical = try SavingPlanCASRequest(
+            requestID: requestID, goalID: goalID, expectedRevision: expectedRevision,
+            targetMinorUnits: targetMinorUnits, currencyCode: currencyCode,
+            targetDate: date, rhythm: rhythm,
+            preferredSavingDay: preferredSavingDay,
+            plannedContributionMinorUnits: plannedContributionMinorUnits
+        )
+        guard canonical.targetDate == targetDate else {
+            throw SavingPlanCASJournalError.invalidJournal
+        }
+        switch state {
+        case .staged:
+            guard responseRevision == nil else {
+                throw SavingPlanCASJournalError.invalidJournal
+            }
+        case .acknowledged:
+            guard responseRevision == expectedRevision + 1 else {
+                throw SavingPlanCASJournalError.invalidJournal
+            }
+        case .conflicted:
+            guard let responseRevision, responseRevision >= 0,
+                  responseRevision != expectedRevision else {
+                throw SavingPlanCASJournalError.invalidJournal
+            }
+        }
+        return canonical
+    }
+}
+
+/// Must be constructed ONLY from an authenticated, RLS-authorized server
+/// current-goal fetch; this structure alone does not prove authorization.
+struct SavingPlanCASGoalReadback: Equatable, Sendable {
+    let ownerID: UUID
+    let goalID: UUID
+    let revision: Int64
+    let targetMinorUnits: Int64
+    let currencyCode: String
+    let targetDate: Date
+    let rhythm: String
+    let preferredSavingDay: Int?
+    let plannedContributionMinorUnits: Int64?
+}
+
+/// No caller automatically drains this queue. No app production action is
+/// currently wired to stage, acknowledge, resolve, or finish an intent.
+@MainActor
+final class SavingPlanCASIntentJournal {
+    private let directory: URL
+    private let files: FileManager
+    private let maximumEntries = 100
+
+    init(directory: URL, fileManager: FileManager = .default) {
+        self.directory = directory
+        files = fileManager
+    }
+
+    static func inApplicationSupport() throws -> SavingPlanCASIntentJournal {
+        let root = try FileManager.default.url(
+            for: .applicationSupportDirectory, in: .userDomainMask,
+            appropriateFor: nil, create: true
+        )
+        return SavingPlanCASIntentJournal(
+            directory: root.appendingPathComponent(
+                "PipoPendingPlanCAS", isDirectory: true
+            )
+        )
+    }
+
+    func all(for ownerID: UUID) throws -> [PendingSavingPlanCASIntent] {
+        let url = fileURL(for: ownerID)
+        guard files.fileExists(atPath: url.path) else { return [] }
+        let entries: [PendingSavingPlanCASIntent]
+        do {
+            entries = try JSONDecoder().decode(
+                [PendingSavingPlanCASIntent].self, from: Data(contentsOf: url)
+            )
+        } catch {
+            throw SavingPlanCASJournalError.invalidJournal
+        }
+        guard entries.count <= maximumEntries else {
+            throw SavingPlanCASJournalError.tooManyIntents
+        }
+        var ids = Set<UUID>(), goals = Set<UUID>()
+        for entry in entries {
+            guard ids.insert(entry.requestID).inserted,
+                  goals.insert(entry.goalID).inserted
+            else { throw SavingPlanCASJournalError.invalidJournal }
+            do { _ = try entry.checkedRequest(for: ownerID) }
+            catch { throw SavingPlanCASJournalError.invalidJournal }
+        }
+        return entries
+    }
+
+    /// Must run BEFORE any attempted RPC, with one stable UUID. Blocks a
+    /// second unresolved edit to the same goal (including a conflict).
+    @discardableResult
+    func stage(_ request: SavingPlanCASRequest, ownerID: UUID) throws
+        -> PendingSavingPlanCASIntent {
+        var entries = try all(for: ownerID)
+        if let previous = entries.first(where: { $0.requestID == request.requestID }) {
+            guard try previous.checkedRequest(for: ownerID) == request else {
+                throw SavingPlanCASJournalError.idempotencyConflict
+            }
+            return previous
+        }
+        guard !entries.contains(where: { $0.goalID == request.goalID }) else {
+            throw SavingPlanCASJournalError.goalAlreadyPending
+        }
+        guard entries.count < maximumEntries else {
+            throw SavingPlanCASJournalError.tooManyIntents
+        }
+        let intent = try PendingSavingPlanCASIntent(request: request, ownerID: ownerID)
+        entries.append(intent)
+        try persist(entries, for: ownerID)
+        return intent
+    }
+
+    /// Accept no success or conflict merely from HTTP 200. The receipt
+    /// validator compares exact goal/UUID/amount/date/currency/revision.
+    func recordVerifiedResponse(
+        _ response: SavingPlanCASWireResponse, requestID: UUID, ownerID: UUID
+    ) throws {
+        var entries = try all(for: ownerID)
+        guard let index = entries.firstIndex(where: { $0.requestID == requestID })
+        else { throw SavingPlanCASJournalError.unknownIntent }
+        let expected = try entries[index].checkedRequest(for: ownerID)
+        let result = try SavingPlanCASReceiptValidator.verify(response, for: expected)
+        let nextState: PendingSavingPlanCASIntent.State
+        let revision: Int64
+        switch result {
+        case .applied(_, let accepted):
+            nextState = .acknowledged
+            revision = accepted
+        case .conflict(let current):
+            nextState = .conflicted
+            revision = current
+        }
+        if entries[index].state != .staged {
+            guard entries[index].state == nextState,
+                  entries[index].responseRevision == revision
+            else { throw SavingPlanCASJournalError.invalidTransition }
+            return
+        }
+        entries[index].state = nextState
+        entries[index].responseRevision = revision
+        try persist(entries, for: ownerID)
+    }
+
+    /// Receipt alone is insufficient: a replayed receipt might refer to an
+    /// older state. Only remove after a fresh, owner-scoped CURRENT server
+    /// readback matches the entire original amendment and exact revision.
+    func finishVerifiedCurrentReadback(
+        requestID: UUID, ownerID: UUID, current: SavingPlanCASGoalReadback
+    ) throws {
+        var entries = try all(for: ownerID)
+        guard let index = entries.firstIndex(where: { $0.requestID == requestID })
+        else { throw SavingPlanCASJournalError.unknownIntent }
+        let item = entries[index]
+        guard item.state == .acknowledged,
+              item.ownerID == ownerID, current.ownerID == ownerID,
+              current.goalID == item.goalID,
+              current.revision == item.responseRevision,
+              current.targetMinorUnits == item.targetMinorUnits,
+              current.currencyCode == item.currencyCode,
+              ISO8601DateFormatter().string(from: current.targetDate) == item.targetDate,
+              current.rhythm == item.rhythm,
+              current.preferredSavingDay == item.preferredSavingDay,
+              current.plannedContributionMinorUnits == item.plannedContributionMinorUnits
+        else { throw SavingPlanCASJournalError.unverifiedReadback }
+        entries.remove(at: index)
+        try persist(entries, for: ownerID)
+    }
+
+    /// No silent last-write-wins. A conflict stays until the user explicitly
+    /// discards/rebases the draft in a future reviewed UI.
+    func discardConflictedAfterUserDecision(
+        requestID: UUID, ownerID: UUID, userConfirmedDiscard: Bool
+    ) throws {
+        guard userConfirmedDiscard else {
+            throw SavingPlanCASJournalError.userDecisionRequired
+        }
+        var entries = try all(for: ownerID)
+        guard let index = entries.firstIndex(where: { $0.requestID == requestID })
+        else { throw SavingPlanCASJournalError.unknownIntent }
+        guard entries[index].state == .conflicted else {
+            throw SavingPlanCASJournalError.invalidTransition
+        }
+        entries.remove(at: index)
+        try persist(entries, for: ownerID)
+    }
+
+    private func fileURL(for ownerID: UUID) -> URL {
+        directory.appendingPathComponent(
+            ownerID.uuidString.lowercased() + ".json", isDirectory: false
+        )
+    }
+
+    private func persist(
+        _ entries: [PendingSavingPlanCASIntent], for ownerID: UUID
+    ) throws {
+        try files.createDirectory(
+            at: directory, withIntermediateDirectories: true
+        )
+        let bytes = try JSONEncoder().encode(entries)
+        #if os(iOS)
+        // Protected while the device is locked; use a strong iOS data-
+        // protection class rather than writing an unprotected JSON queue.
+        try bytes.write(to: fileURL(for: ownerID),
+                        options: [.atomic, .completeFileProtectionUnlessOpen])
+        #else
+        // Linux-only isolated contract harness, never an app delivery path.
+        try bytes.write(to: fileURL(for: ownerID), options: [.atomic])
+        #endif
+    }
+}
+
 enum SavingMoneyOutRequestError: Error, Equatable {
     case invalidAmount
     case invalidNote
@@ -899,13 +2921,148 @@ final class SupabaseService {
         )
         guard !batch.goals.isEmpty else { return }
         // The composite FK requires goals before their saving entries.
+        // The reviewed signed bridge has no direct UPDATE/UPSERT path.
+        // Normal Release remains unchanged until rollout is approved.
+        #if PIPO_ISSUE80_BRIDGE
+        try await issue80BridgeLegacyGoals(goals, authenticatedUserID: authenticatedUserID)
+        #else
         try await upsertGoalPayloads(batch.goals)
+        #endif
         guard client.auth.currentUser?.id == authenticatedUserID else {
             throw SupabaseServiceError.notAuthenticated
         }
         guard !batch.transactions.isEmpty else { return }
         try await upsertTransactionPayloads(batch.transactions)
     }
+
+    #if PIPO_ISSUE80_BRIDGE
+    // REVIEW-ONLY candidate for the old installed-version migration window.
+    // Compiled only when the signed bridge target explicitly opts in. No
+    // production pbxproj sets this flag and it never enables Manage Plan Save.
+    private func issue80BridgeLegacyGoals(
+        _ goals: [PersonalGoal], authenticatedUserID: UUID
+    ) async throws {
+        let journal = try LegacyGoalBridgeIntentJournal.inApplicationSupport()
+        // Freeze every goal into a canonical immutable request BEFORE any
+        // await. SwiftData models may change while a network request runs.
+        let requests: [SavingGoalCreateOnlyRequest] = try goals.map { goal in
+            guard let minor = goal.exactTargetMinor else {
+                throw SupabaseServiceError.invalidSavingGoal
+            }
+            return try SavingGoalCreateOnlyRequest(
+                goalID: goal.id, ownerID: authenticatedUserID,
+                title: goal.title, category: goal.category.rawValue,
+                customCategory: goal.customCategory,
+                targetMinorUnits: minor, currencyCode: goal.effectiveCurrencyCode,
+                startDate: goal.startDate, targetDate: goal.targetDate,
+                rhythm: goal.rhythm.rawValue,
+                preferredSavingDay: goal.preferredSavingDay,
+                plannedContributionMinorUnits: goal.plannedContributionOverride.map(Int64.init)
+            )
+        }
+        for request in requests {
+            guard client.auth.currentUser?.id == authenticatedUserID else {
+                throw LegacyGoalBridgeError.accountChanged
+            }
+            // READ FIRST on every retry, app relaunch and existing goal. This
+            // legacy SELECT deliberately does not require plan_revision.
+            var rows = try await issue80BridgeFetchOwnedLegacyGoal(
+                goalID: request.goalID, ownerID: authenticatedUserID
+            )
+            guard client.auth.currentUser?.id == authenticatedUserID else {
+                throw LegacyGoalBridgeError.accountChanged
+            }
+            guard rows.count <= 1 else {
+                throw LegacyGoalBridgeError.untrustedReadback
+            }
+            if let existing = rows.first {
+                try LegacyGoalBridgeReadbackVerifier.verify(
+                    existing, request: request, authenticatedOwnerID: authenticatedUserID
+                )
+                if let local = try journal.intent(
+                    goalID: request.goalID, ownerID: authenticatedUserID
+                ) {
+                    guard try local.checkedRequest(for: authenticatedUserID)
+                            == request else { throw LegacyGoalBridgeError.cloudConflict }
+                    if local.state == .staged {
+                        // A second client may have created this UUID. The
+                        // exact authenticated row is already equal; no INSERT.
+                        try journal.markAttempted(
+                            goalID: request.goalID, ownerID: authenticatedUserID
+                        )
+                    }
+                    try journal.recordVerifiedReadback(
+                        existing, goalID: request.goalID, ownerID: authenticatedUserID,
+                        authenticatedOwnerID: authenticatedUserID
+                    )
+                }
+                continue
+            }
+
+            // Unknown/missing row: persist the stable create payload before
+            // the FIRST INSERT. Never blindly UPDATE an existing plan.
+            let intent = try journal.stage(request, ownerID: authenticatedUserID)
+            guard intent.state == .staged else {
+                // An earlier insert may still be in flight or hidden by RLS:
+                // never claim success and never regenerate a new goal UUID.
+                throw LegacyGoalBridgeError.pendingConfirmation
+            }
+            try journal.markAttempted(
+                goalID: request.goalID, ownerID: authenticatedUserID
+            )
+            guard client.auth.currentUser?.id == authenticatedUserID else {
+                throw LegacyGoalBridgeError.accountChanged
+            }
+            do {
+                try await issue80BridgeInsertGoalOnly(request)
+            } catch is CancellationError {
+                throw CancellationError()
+            } catch {
+                guard client.auth.currentUser?.id == authenticatedUserID else {
+                    throw LegacyGoalBridgeError.accountChanged
+                }
+                // HTTP failure can arrive AFTER INSERT committed. A fresh
+                // RLS-filtered SELECT must confirm the unchanged goal.
+            }
+            rows = try await issue80BridgeFetchOwnedLegacyGoal(
+                goalID: request.goalID, ownerID: authenticatedUserID
+            )
+            guard client.auth.currentUser?.id == authenticatedUserID else {
+                throw LegacyGoalBridgeError.accountChanged
+            }
+            guard rows.count == 1, let row = rows.first else {
+                throw LegacyGoalBridgeError.pendingConfirmation
+            }
+            try LegacyGoalBridgeReadbackVerifier.verify(
+                row, request: request, authenticatedOwnerID: authenticatedUserID
+            )
+            try journal.recordVerifiedReadback(
+                row, goalID: request.goalID, ownerID: authenticatedUserID,
+                authenticatedOwnerID: authenticatedUserID
+            )
+        }
+    }
+
+    private nonisolated func issue80BridgeInsertGoalOnly(
+        _ request: SavingGoalCreateOnlyRequest
+    ) async throws {
+        try await client.from("saving_goals")
+            .insert(request)
+            .execute()
+    }
+
+    private nonisolated func issue80BridgeFetchOwnedLegacyGoal(
+        goalID: UUID, ownerID: UUID
+    ) async throws -> [LegacyGoalBridgeCloudRow] {
+        try await client.from("saving_goals")
+            .select("id,user_id,title,category,custom_category,target_amount,currency_code,start_date,target_date,rhythm,preferred_saving_day,planned_contribution_override")
+            .eq("id", value: goalID.uuidString)
+            .eq("user_id", value: ownerID.uuidString)
+            .limit(2)
+            .execute()
+            .value
+    }
+    #endif
 
     // The Supabase SDK's PostgrestResponse<Void> is not Sendable in Swift 6.
     // Keep that response fully inside nonisolated async helpers returning Void,
@@ -987,6 +3144,96 @@ final class SupabaseService {
             params: ["p_goal_id": goalID.uuidString]
         ).execute().value
     }
+
+    // ISSUE #80 STAGING ONLY. The project does not define this compilation
+    // flag. Neither method exists in the production app build. A later signed
+    // client + audited server migration MUST approve any activation.
+    #if PIPO_ISSUE80_STAGING
+    /// First attempt is persisted BEFORE the authenticated INSERT. If the
+    /// request was previously attempted, this method refuses a second INSERT.
+    /// Ambiguous insert errors always reconcile by authoritative SELECT.
+    func issue80StageOnlySubmitInitialGoal(
+        goalID: UUID, authenticatedUserID: UUID,
+        journal: SavingGoalCreateIntentJournal
+    ) async throws -> PendingSavingGoalCreateIntent.State {
+        guard client.auth.currentUser?.id == authenticatedUserID else {
+            throw SavingGoalCreateJournalError.accountChanged
+        }
+        let request = try journal.markInsertAttempted(
+            goalID: goalID, ownerID: authenticatedUserID
+        )
+        guard client.auth.currentUser?.id == authenticatedUserID else {
+            throw SavingGoalCreateJournalError.accountChanged
+        }
+
+        // A timeout, PostgREST 409, or dropped socket can occur AFTER the
+        // INSERT committed. Never create a fresh UUID or issue an UPSERT.
+        // Even on error, proceed to owner-filtered readback; a read error
+        // propagates as UNKNOWN while the journal stays attempted.
+        do {
+            try await issue80InsertGoalOnly(request)
+        } catch {
+            guard client.auth.currentUser?.id == authenticatedUserID else {
+                throw SavingGoalCreateJournalError.accountChanged
+            }
+            // Intentionally retain exact request and reconcile by SELECT.
+        }
+        return try await issue80StageOnlyRecoverInitialGoal(
+            goalID: goalID, authenticatedUserID: authenticatedUserID,
+            journal: journal
+        )
+    }
+
+    /// After a timeout or relaunch, READ FIRST; never repeat the INSERT.
+    /// The caller must not treat a thrown error as cloud-saved.
+    func issue80StageOnlyRecoverInitialGoal(
+        goalID: UUID, authenticatedUserID: UUID,
+        journal: SavingGoalCreateIntentJournal
+    ) async throws -> PendingSavingGoalCreateIntent.State {
+        guard client.auth.currentUser?.id == authenticatedUserID else {
+            throw SavingGoalCreateJournalError.accountChanged
+        }
+        guard try journal.all(for: authenticatedUserID).contains(where: {
+            $0.goalID == goalID
+        }) else { throw SavingGoalCreateJournalError.unknownGoal }
+
+        let rows = try await issue80FetchOwnedCreateGoal(
+            goalID: goalID, ownerID: authenticatedUserID
+        )
+        guard client.auth.currentUser?.id == authenticatedUserID else {
+            throw SavingGoalCreateJournalError.accountChanged
+        }
+        guard rows.count <= 1 else {
+            throw SavingGoalCreateJournalError.untrustedReadback
+        }
+        return try journal.recordReadback(
+            rows.first, goalID: goalID, ownerID: authenticatedUserID,
+            authenticatedOwnerID: authenticatedUserID
+        )
+    }
+
+    private nonisolated func issue80InsertGoalOnly(
+        _ request: SavingGoalCreateOnlyRequest
+    ) async throws {
+        try await client.from("saving_goals")
+            .insert(request)
+            .execute()
+    }
+
+    private nonisolated func issue80FetchOwnedCreateGoal(
+        goalID: UUID, ownerID: UUID
+    ) async throws -> [SavingGoalAuthoritativeCloudRow] {
+        // Decode an array, not single()/maybeSingle(), to distinguish 0
+        // matching rows from unexpected duplicates without 406 semantics.
+        try await client.from("saving_goals")
+            .select("id,user_id,title,category,custom_category,target_amount,currency_code,start_date,target_date,rhythm,preferred_saving_day,planned_contribution_override,plan_revision")
+            .eq("id", value: goalID.uuidString)
+            .eq("user_id", value: ownerID.uuidString)
+            .limit(2)
+            .execute()
+            .value
+    }
+    #endif
 
     // Purchased slot counts are authoritative server state. In particular,
     // the iOS app must never UPSERT public.user_profiles or inflate counters.

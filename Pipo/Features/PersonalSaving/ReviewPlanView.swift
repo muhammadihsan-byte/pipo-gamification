@@ -723,7 +723,10 @@ struct PersonalGoalDetailView: View {
                     .font(.subheadline.bold())
                     .foregroundStyle(PipoTheme.deepPink)
                     .frame(maxWidth: .infinity, minHeight: 44)
+                    .contentShape(Rectangle())
+                    .buttonStyle(.plain)
                     .accessibilityIdentifier("pipo.goal.moneyOutPreview")
+                    .accessibilityHint("Opens a review-only preview; no money is moved")
                 } else {
                     Label {
                         Text("Money Out preview isn’t available in " + goal.effectiveCurrencyCode

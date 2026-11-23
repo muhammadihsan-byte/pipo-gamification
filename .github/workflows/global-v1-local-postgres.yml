@@ -8,6 +8,16 @@ on:
       - "scripts/local_authenticated_global_v1_qa.py"
       - "supabase/proposals/global_v1_goal_currency_immutable_REVIEW_ONLY.sql"
       - "supabase/proposals/issue_42_money_out_ledger_REVIEW_ONLY.sql"
+      - "supabase/proposals/issue_29_immutable_contribution_acl_REVIEW_ONLY.sql"
+      - "supabase/proposals/issue_80_plan_revision_cas_REVIEW_ONLY.sql"
+      - "supabase/proposals/issue_80_budget_cas_v2_REVIEW_ONLY.sql"
+      - "supabase/local_qa/test_issue80_budget_cas_v2_STAGING_ONLY.sql"
+      - "scripts/local_authenticated_issue80_cas_qa.py"
+      - "scripts/local_authenticated_issue80_budget_v2_qa.py"
+      - "scripts/test_issue80_concurrent_sessions.py"
+      - "Pipo/Widget/WidgetSharedData.swift"
+      - "Pipo/Features/Dashboard/ContentView.swift"
+      - "scripts/test_issue80_final_account_safety.py"
       - ".github/workflows/global-v1-local-postgres.yml"
   workflow_dispatch:
 
@@ -97,13 +107,49 @@ jobs:
           set -euo pipefail
           psql -X -v ON_ERROR_STOP=1 -f supabase/local_qa/test_issue29_ledger_acl.sql
 
+      - name: Apply Issue 80 CAS proposal in disposable PostgreSQL ONLY
+        shell: bash
+        run: |
+          set -euo pipefail
+          psql -X -v ON_ERROR_STOP=1 -f supabase/proposals/issue_80_plan_revision_cas_REVIEW_ONLY.sql
+
+      - name: Validate Issue 80 revisions, retries, authorization and synthetic erasure (ROLLBACK)
+        shell: bash
+        env:
+          PGOPTIONS: "-c pipo.allow_synthetic_auth_qa=staging-only"
+        run: |
+          set -euo pipefail
+          psql -X -v ON_ERROR_STOP=1 -f supabase/local_qa/test_issue80_plan_revision_STAGING_ONLY.sql
+
+      - name: Real two-session concurrent CAS with independent committed PostgreSQL connections
+        shell: bash
+        env:
+          PGOPTIONS: "-c pipo.allow_synthetic_auth_qa=staging-only"
+        run: |
+          set -euo pipefail
+          python3 scripts/test_issue80_concurrent_sessions.py
+
+      - name: Install review-only Issue 80 atomic budget CAS V2 on disposable PostgreSQL ONLY
+        shell: bash
+        run: |
+          set -euo pipefail
+          psql -X -v ON_ERROR_STOP=1 -f supabase/proposals/issue_80_budget_cas_v2_REVIEW_ONLY.sql
+
+      - name: Validate atomic goal-budget revision, rollback, auth and historical XP
+        shell: bash
+        env:
+          PGOPTIONS: "-c pipo.allow_synthetic_auth_qa=staging-only"
+        run: |
+          set -euo pipefail
+          psql -X -v ON_ERROR_STOP=1 -f supabase/local_qa/test_issue80_budget_cas_v2_STAGING_ONLY.sql
+
       - name: Explicitly report test scope
         if: always()
         shell: bash
         run: |
           echo "LOCAL QA: disposable postgres:17 service on an ephemeral GitHub Linux runner."
           echo "NO Supabase project, database branch, production Auth users, secrets, or billing change."
-          echo "Verified by SQL: initial schema, currency guard, RLS, FK, #42 contribution guard, #29 client ACL and Auth deletion cascade."
+          echo "Verified by SQL: initial schema, currency guard, RLS, FK, #42 contribution guard, #29 client ACL, #80 plan CAS and Auth deletion cascade."
           echo "NOT VERIFIED: real Auth JWT signing / PostgREST request routing / live Supabase 2-user roundtrip."
 
   local-auth-postgrest:
@@ -140,6 +186,18 @@ jobs:
             sudo apt-get install -y postgresql-client
           fi
           python3 scripts/local_authenticated_global_v1_qa.py
+
+      - name: Signed local Auth A/B CAS, RLS, immutable ledger and retry E2E
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 scripts/local_authenticated_issue80_cas_qa.py
+
+      - name: Signed Auth A/B atomic Budget CAS V2 and legacy UPSERT denial on LOCAL ONLY
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 scripts/local_authenticated_issue80_budget_v2_qa.py
 
       - name: Explicitly report independent local E2E scope
         if: always()

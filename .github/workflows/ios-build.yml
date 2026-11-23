@@ -10,6 +10,7 @@ on:
       - ready_for_review
       - reopened
       - synchronize
+      - labeled
   workflow_dispatch:
     inputs:
       validation_mode:
@@ -256,7 +257,9 @@ jobs:
         id: manage_plan
         if: >-
           (github.event_name == 'workflow_dispatch' && inputs.validation_mode == 'manage-plan-qa') ||
-          (github.event_name == 'pull_request' && github.head_ref == 'feat/pipo-manage-plan-v2-option-b')
+          (github.event_name == 'pull_request' &&
+           (github.head_ref == 'feat/pipo-manage-plan-v2-option-b' ||
+            github.head_ref == 'polish/pipo-dev2-manage-global-v1'))
         shell: bash
         run: |
           set -euo pipefail
@@ -276,6 +279,7 @@ jobs:
             -resultBundlePath "$RUNNER_TEMP/PipoManagePlanV2QA.xcresult" \
             -only-testing:PipoUITests/PipoUIRecordingTests/testManagePlanV2OverviewFlexibleImpactReviewAndMoneyOutSafety \
             -only-testing:PipoUITests/PipoUIRecordingTests/testManagePlanV2TargetAndDateEditorsAreFocusedAndNonMutating \
+            -only-testing:PipoUITests/PipoUIRecordingTests/testGlobalExperienceUSDGoalCurrencySelectionAndReopen \
             CODE_SIGNING_ALLOWED=NO \
             CODE_SIGNING_REQUIRED=NO \
             test 2>&1 | tee validation/pipo-manage-v2-qa.log
@@ -293,7 +297,9 @@ jobs:
         id: global_v1
         if: >-
           (github.event_name == 'workflow_dispatch' && inputs.validation_mode == 'global-experience-qa') ||
-          (github.event_name == 'pull_request' && github.head_ref == 'feat/pipo-global-experience-v1-currency')
+          (github.event_name == 'pull_request' &&
+           (github.head_ref == 'feat/pipo-global-experience-v1-currency' ||
+            github.head_ref == 'integration/issue80-final-stability-qa-review'))
         shell: bash
         run: |
           set -euo pipefail
@@ -596,4 +602,341 @@ jobs:
             echo ''
             echo 'A skipped focused suite was not executed, and does not count as QA evidence.'
             echo 'Manual focused QA is supplemental; required PR checks still apply before merge.'
+          } >> "$GITHUB_STEP_SUMMARY"
+
+  # Gate an explicitly authorized one-time macOS QA on PR #83's DRAFT
+  # integration snapshot. Must be applied by human-visible label event;
+  # never starts macOS simply because a draft branch is synchronized.
+  issue80-integrated-qa:
+    name: "Issue #80: controlled native QA (draft #83 only)"
+    if: >-
+      github.event_name == 'pull_request' &&
+      github.event.action == 'labeled' &&
+      (github.event.label.name == 'enhancement' || github.event.label.name == 'bug') &&
+      github.event.pull_request.number == 83 &&
+      github.event.pull_request.draft == true &&
+      github.event.pull_request.head.ref == 'integration/issue80-79-81-82-linux-qa'
+    runs-on: macos-15
+    timeout-minutes: 45
+    steps:
+      - name: Checkout exact PR head (not synthetic merge commit)
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+          persist-credentials: false
+
+      - name: Pin QA SHA and available Xcode, never change project Release flags
+        shell: bash
+        env:
+          EXPECTED_SHA: ${{ github.event.pull_request.head.sha }}
+        run: |
+          set -euo pipefail
+          mkdir -p validation
+          test "$(git rev-parse HEAD)" = "$EXPECTED_SHA"
+          printf 'PR #83 exact native QA SHA: %s\n' "$EXPECTED_SHA" | tee validation/issue80-native-head.txt
+          if test -d /Applications/Xcode.app/Contents/Developer; then
+            sudo xcode-select -s /Applications/Xcode.app/Contents/Developer
+          fi
+          xcodebuild -version | tee validation/issue80-xcode-version.txt
+          bash scripts/check-p0-release-config.sh
+          test -d Pipo.xcodeproj
+          test -d PipoTests
+          test -f PipoUITests/PipoUIRecordingTests.swift
+          # CI defines this flag in a single Debug command below, never in
+          # project.pbxproj or product build configurations.
+          ! grep -q 'PIPO_ISSUE80_STAGING' Pipo.xcodeproj/project.pbxproj
+
+      - name: Select an already installed iPhone simulator (no runtime downloads)
+        shell: bash
+        run: |
+          set -euo pipefail
+          xcrun simctl list runtimes available -j > validation/issue80-runtimes.json
+          xcrun simctl list devices available -j > validation/issue80-devices.json
+          python3 - <<'PY'
+          import json, os
+          runtime_ids = {r['identifier'] for r in
+                         json.load(open('validation/issue80-runtimes.json'))['runtimes']
+                         if r.get('isAvailable') and r.get('name','').startswith('iOS ')}
+          all_devices = json.load(open('validation/issue80-devices.json'))['devices']
+          candidates = [(0 if d['name'] in ('iPhone 15','iPhone 16','iPhone 14') else 1,
+                         d['name'], d['udid'])
+                        for runtime, devices in all_devices.items()
+                        if runtime in runtime_ids for d in devices
+                        if d.get('isAvailable') and d['name'].startswith('iPhone')]
+          if not candidates:
+              raise SystemExit('No installed iOS/iPhone simulator, fail closed')
+          _, name, udid = sorted(candidates)[0]
+          print(f'Native QA simulator: {name} ({udid})')
+          with open(os.environ['GITHUB_ENV'],'a') as f:
+              f.write('PIPO_IOS_QA_UDID='+udid+'\n')
+          PY
+
+      - name: SwiftData + native unit tests (Debug-only staging contract compilation)
+        id: issue80_native
+        if: github.event.label.name == 'enhancement'
+        shell: bash
+        run: |
+          set -euo pipefail
+          # Do NOT pass SWIFT_ACTIVE_COMPILATION_CONDITIONS on the xcodebuild
+          # command line: that pollutes swift-crypto's SPM targets and caused
+          # a CCryptoBoringSSL module-not-found failure in the first run.
+          # Scope the QA define only to THIS Xcode project's Debug config in
+          # this ephemeral runner. Both the repository and Release remain
+          # unchanged; undo the patch before normal Debug UI tests.
+          python3 - <<'PY'
+          from pathlib import Path
+          path = Path("Pipo.xcodeproj/project.pbxproj")
+          body = path.read_text()
+          original = 'SWIFT_ACTIVE_COMPILATION_CONDITIONS = "DEBUG $(inherited)";'
+          assert body.count(original) == 1, "Expected exactly one Debug project config"
+          scoped = 'SWIFT_ACTIVE_COMPILATION_CONDITIONS = "DEBUG PIPO_ISSUE80_STAGING $(inherited)";'
+          path.write_text(body.replace(original, scoped, 1))
+          PY
+          trap 'git checkout -- Pipo.xcodeproj/project.pbxproj' EXIT
+          xcodebuild \
+            -project Pipo.xcodeproj \
+            -scheme Pipo \
+            -configuration Debug \
+            -destination "id=$PIPO_IOS_QA_UDID" \
+            -derivedDataPath "$RUNNER_TEMP/PipoIssue80DerivedData" \
+            -resultBundlePath "$RUNNER_TEMP/PipoIssue80Native.xcresult" \
+            -parallel-testing-enabled NO \
+            -only-testing:PipoTests \
+            CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO \
+            test 2>&1 | tee validation/issue80-native-unit.log
+          # Native test must be present; a green no-tests run is invalid.
+          grep -q 'testIssue80PersistedFirstGoalReconcilesWithoutChangingSavingOrXP' \
+            validation/issue80-native-unit.log || {
+              echo 'Issue 80 native SwiftData test did not execute' >&2
+              exit 1
+            }
+
+      - name: Integrated UI review-only regression + MP4 (normal Debug, staging OFF)
+        id: issue80_ui
+        if: github.event.label.name == 'enhancement'
+        shell: bash
+        run: |
+          set -euo pipefail
+          xcrun simctl boot "$PIPO_IOS_QA_UDID" || true
+          xcrun simctl bootstatus "$PIPO_IOS_QA_UDID" -b
+          xcrun simctl io "$PIPO_IOS_QA_UDID" recordVideo --codec=h264 \
+            validation/issue80-integrated-ui.mp4 > validation/issue80-video.log 2>&1 &
+          VIDEO_PID=$!
+          cleanup() {
+            kill -INT "$VIDEO_PID" 2>/dev/null || true
+            wait "$VIDEO_PID" 2>/dev/null || true
+          }
+          trap cleanup EXIT
+          set +e
+          xcodebuild \
+            -project Pipo.xcodeproj \
+            -scheme Pipo \
+            -configuration Debug \
+            -destination "id=$PIPO_IOS_QA_UDID" \
+            -derivedDataPath "$RUNNER_TEMP/PipoIssue80DerivedData" \
+            -resultBundlePath "$RUNNER_TEMP/PipoIssue80UI.xcresult" \
+            -parallel-testing-enabled NO \
+            -only-testing:PipoUITests/PipoUIRecordingTests/testManagePlanV2OverviewFlexibleImpactReviewAndMoneyOutSafety \
+            -only-testing:PipoUITests/PipoUIRecordingTests/testManagePlanV2TargetAndDateEditorsAreFocusedAndNonMutating \
+            -only-testing:PipoUITests/PipoUIRecordingTests/testGlobalExperienceUSDGoalCurrencySelectionAndReopen \
+            -only-testing:PipoUITests/PipoUIRecordingTests/testGlobalV1AccessibilityLabelsAndTargetsAtLargeText \
+            -only-testing:PipoUITests/PipoUIRecordingTests/testIssue42PlanAndMoneyOutRemainReviewOnly \
+            CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO \
+            test 2>&1 | tee validation/issue80-integrated-ui.log
+          STATUS=${PIPESTATUS[0]}
+          set -e
+          cleanup
+          trap - EXIT
+          test -s validation/issue80-integrated-ui.mp4 || {
+            echo 'Integrated simulator recording is empty/missing' >&2
+            exit 1
+          }
+          exit "$STATUS"
+
+      - name: Retest only the pinned-footer Money Out UI regression + MP4
+        id: issue80_ui_retest
+        if: github.event.label.name == 'bug'
+        shell: bash
+        run: |
+          set -euo pipefail
+          xcrun simctl boot "$PIPO_IOS_QA_UDID" || true
+          xcrun simctl bootstatus "$PIPO_IOS_QA_UDID" -b
+          xcrun simctl io "$PIPO_IOS_QA_UDID" recordVideo --codec=h264 \
+            validation/issue80-money-out-retest.mp4 > validation/issue80-money-out-video.log 2>&1 &
+          VIDEO_PID=$!
+          cleanup() {
+            kill -INT "$VIDEO_PID" 2>/dev/null || true
+            wait "$VIDEO_PID" 2>/dev/null || true
+          }
+          trap cleanup EXIT
+          set +e
+          xcodebuild \
+            -project Pipo.xcodeproj \
+            -scheme Pipo \
+            -configuration Debug \
+            -destination "id=$PIPO_IOS_QA_UDID" \
+            -derivedDataPath "$RUNNER_TEMP/PipoIssue80DerivedData" \
+            -resultBundlePath "$RUNNER_TEMP/PipoIssue80MoneyOutRetest.xcresult" \
+            -parallel-testing-enabled NO \
+            -only-testing:PipoUITests/PipoUIRecordingTests/testIssue42PlanAndMoneyOutRemainReviewOnly \
+            CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO \
+            test 2>&1 | tee validation/issue80-money-out-retest.log
+          STATUS=${PIPESTATUS[0]}
+          set -e
+          cleanup
+          trap - EXIT
+          test -s validation/issue80-money-out-retest.mp4 || {
+            echo 'Focused Money Out simulator recording is empty/missing' >&2
+            exit 1
+          }
+          exit "$STATUS"
+
+      - name: Export screenshots/attachments from native XCTest results
+        if: always()
+        shell: bash
+        run: |
+          set -euo pipefail
+          for name in PipoIssue80Native PipoIssue80UI PipoIssue80MoneyOutRetest; do
+            bundle="$RUNNER_TEMP/$name.xcresult"
+            if test -d "$bundle"; then
+              mkdir -p "validation/issue80-attachments/$name"
+              xcrun xcresulttool export attachments --path "$bundle" \
+                --output-path "validation/issue80-attachments/$name" || true
+            fi
+          done
+
+      - name: Upload native QA evidence (7 day retention)
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: issue80-pr83-native-qa-${{ github.run_id }}
+          path: |
+            validation/
+            ${{ runner.temp }}/PipoIssue80Native.xcresult
+            ${{ runner.temp }}/PipoIssue80UI.xcresult
+            ${{ runner.temp }}/PipoIssue80MoneyOutRetest.xcresult
+          if-no-files-found: warn
+          retention-days: 7
+
+      - name: Publish exact-head native gate summary
+        if: always()
+        shell: bash
+        env:
+          QA_SHA: ${{ github.event.pull_request.head.sha }}
+          NATIVE: ${{ steps.issue80_native.outcome }}
+          UI: ${{ steps.issue80_ui.outcome }}
+          UI_RETEST: ${{ steps.issue80_ui_retest.outcome }}
+        run: |
+          {
+            echo '## Pipo PR #83 one-time macOS native QA'
+            echo "- Exact SHA: $QA_SHA"
+            echo "- Debug-only staging native XCTest: $NATIVE"
+            echo "- Production-like Debug UI review-only regression: $UI"
+            echo "- Focused Money Out UI retry: $UI_RETEST"
+            echo '- No live Supabase schema changes, no merge, no Release staging flag.'
+            echo '- Skipped or failed tests never count as acceptance.'
+          } >> "$GITHUB_STEP_SUMMARY"
+
+  # Explicit owner-authorized single native QA. Synchronize on draft does not
+  # start Mac minutes; Release settings are never changed in the repository.
+  issue80-legacy-bridge-native:
+    name: "Issue #80: native legacy bridge QA (draft #85 only)"
+    if: >-
+      github.event_name == 'pull_request' &&
+      github.event.action == 'labeled' &&
+      github.event.label.name == 'enhancement' &&
+      github.event.pull_request.number == 85 &&
+      github.event.pull_request.draft == true &&
+      github.event.pull_request.head.ref == 'feat/issue80-signed-legacy-client-bridge-review'
+    runs-on: macos-15
+    timeout-minutes: 45
+    steps:
+      - name: Checkout pinned source
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+
+      - name: Pin SHA and Xcode + select installed simulator
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p validation
+          test "$(git rev-parse HEAD)" = "${{ github.event.pull_request.head.sha }}"
+          test -d Pipo.xcodeproj
+          ! grep -q 'PIPO_ISSUE80_BRIDGE' Pipo.xcodeproj/project.pbxproj
+          if test -d /Applications/Xcode.app/Contents/Developer; then
+            sudo xcode-select -s /Applications/Xcode.app/Contents/Developer
+          fi
+          xcodebuild -version | tee validation/issue80-bridge-xcode-version.txt
+          bash scripts/check-p0-release-config.sh
+          xcrun simctl list runtimes available -j > validation/bridge-runtimes.json
+          xcrun simctl list devices available -j > validation/bridge-devices.json
+          python3 - <<'PY'
+          import json, os
+          rt=json.load(open('validation/bridge-runtimes.json'))['runtimes']
+          valid={r['identifier'] for r in rt
+                 if r.get('isAvailable') and r.get('name','').startswith('iOS ')}
+          all_devices=json.load(open('validation/bridge-devices.json'))['devices']
+          found=[(0 if d['name'] in ('iPhone 15','iPhone 16') else 1,d['udid'])
+                 for runtime,devices in all_devices.items() if runtime in valid
+                 for d in devices
+                 if d.get('isAvailable') and d.get('name','').startswith('iPhone')]
+          if not found: raise SystemExit('No installed simulator. Refusing download.')
+          sim=sorted(found)[0][1]
+          with open(os.environ['GITHUB_ENV'],'a') as f:
+              f.write('PIPO_BRIDGE_UDID='+sim+'\n')
+          print('Pinned simulator '+sim)
+          PY
+
+      - name: Native bridge build + XCTest (Debug flag isolated to app)
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+          p=Path('Pipo.xcodeproj/project.pbxproj')
+          body=p.read_text()
+          needle='SWIFT_ACTIVE_COMPILATION_CONDITIONS = "DEBUG $(inherited)";'
+          assert body.count(needle)==1, 'Unexpected project Debug configuration'
+          p.write_text(body.replace(
+              needle,
+              'SWIFT_ACTIVE_COMPILATION_CONDITIONS = "DEBUG PIPO_ISSUE80_BRIDGE $(inherited)";',1))
+          PY
+          trap 'git checkout -- Pipo.xcodeproj/project.pbxproj' EXIT
+          xcodebuild \
+            -project Pipo.xcodeproj -scheme Pipo -configuration Debug \
+            -destination "id=$PIPO_BRIDGE_UDID" \
+            -derivedDataPath "$RUNNER_TEMP/PipoBridgeDerived" \
+            -resultBundlePath "$RUNNER_TEMP/PipoBridgeNative.xcresult" \
+            -parallel-testing-enabled NO \
+            -only-testing:PipoTests \
+            CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO \
+            test 2>&1 | tee validation/issue80-bridge-native.log
+          grep -q 'testIssue80LegacyBridgeKeepsLocalSavingAndXPOnReopen' \
+            validation/issue80-bridge-native.log || {
+              echo 'Bridge native SwiftData/XCTest case was not executed' >&2
+              exit 1
+            }
+          grep -Eq 'Test Suite|Executed [1-9][0-9]* tests?' \
+            validation/issue80-bridge-native.log
+
+      - name: Preserve QA logs and xcresult (7 days)
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: issue80-pr85-bridge-native-${{ github.run_id }}
+          path: |
+            validation/
+            ${{ runner.temp }}/PipoBridgeNative.xcresult
+          if-no-files-found: warn
+          retention-days: 7
+
+      - name: Report pinned native gate
+        if: always()
+        run: |
+          {
+            echo '## Review-only bridge Xcode QA'
+            echo '- Exact SHA: ${{ github.event.pull_request.head.sha }}'
+            echo '- Debug-only bridge flag; no Release, signing, database or merge change'
+            echo '- Native QA job status: ${{ job.status }}'
           } >> "$GITHUB_STEP_SUMMARY"
