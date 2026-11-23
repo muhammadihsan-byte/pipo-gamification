@@ -649,6 +649,17 @@ struct RootView: View {
                     if let userID = authStateManager.userID {
                         enqueuePersonalSavingsSync(for: userID)
                     }
+                },
+                onRecordFirst: { goalID in
+                    // The goal has already been committed by ReviewPlanView.
+                    // Route to the existing manual saving sheet; never log a
+                    // contribution, transfer money or grant XP from this CTA.
+                    guard authStateManager.authState == .authenticated,
+                          authStateManager.userID != nil else { return }
+                    navigationManager.requestDeposit(goalID: goalID)
+                    if let userID = authStateManager.userID {
+                        enqueuePersonalSavingsSync(for: userID)
+                    }
                 }
             )
         case .personalGoal(let goalID):
