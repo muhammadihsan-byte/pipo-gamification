@@ -63,6 +63,15 @@ jobs:
       - name: Guard all SwiftUI pages against child-button identifier masking (static)
         run: python3 -m unittest -v scripts/test_accessibility_action_targets.py
 
+      - name: Audit approved Spark period-history UI contract (Linux only)
+        run: python3 -m unittest -v scripts/test_issue70_ui_slicing_contract.py
+
+      - name: Check First Spark one-shot source and Reduce Motion contract (Linux only)
+        run: python3 -m unittest -v scripts/test_issue72_first_spark_contract.py
+
+      - name: Assert approved Flexible Saving V2 UI routing and source contract (Linux only)
+        run: python3 -m unittest -v scripts/test_flexible_v2_ui_contract.py
+
       - name: Compile isolated QA scripts (syntax only)
         run: |
           python3 -m py_compile \
