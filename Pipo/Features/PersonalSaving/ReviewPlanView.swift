@@ -210,7 +210,7 @@ struct ReviewPlanView: View {
                 VStack(alignment: .leading, spacing: 8) {
                     Text("Have you already set money aside?")
                         .font(.headline)
-                    Text("You can record it now, or come back whenever you want.")
+                    Text("You can record it now, or come back anytime. Creating your plan does not count as saving money.")
                         .font(.subheadline)
                         .foregroundStyle(PersonalPlanStyle.muted)
                         .fixedSize(horizontal: false, vertical: true)
@@ -227,7 +227,7 @@ struct ReviewPlanView: View {
         }
         .safeAreaInset(edge: .bottom, spacing: 0) {
             VStack(spacing: 8) {
-                Button("Record first saving") { onRecordFirst(goalID) }
+                Button("Record a saving") { onRecordFirst(goalID) }
                     .buttonStyle(PersonalPlanPrimaryStyle())
                     .accessibilityIdentifier("pipo.flex.v2.recordFirst")
                 Button("Not now, view my goal") { onCreated(goalID) }
