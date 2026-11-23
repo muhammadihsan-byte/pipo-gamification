@@ -434,19 +434,40 @@ struct PipoManagePlanV2Sheet: View {
                     // A safeAreaInset on the nested ScrollView pushed the
                     // footer beyond the 320pt snapshot host's lower edge.
                     ScrollView {
-                        VStack(alignment: .leading, spacing: 20) {
-                            VStack(alignment: .leading, spacing: 8) {
+                        VStack(alignment: .leading,
+                               spacing: dynamicTypeSize.isAccessibilitySize ? 16 : 20) {
+                            VStack(alignment: .leading,
+                                   spacing: dynamicTypeSize.isAccessibilitySize ? 6 : 8) {
                                 Text(heading)
-                                    .font(.title2.bold())
+                                    // One semantic step smaller at AX sizes keeps the
+                                    // heading distinct without consuming the whole screen.
+                                    .font(dynamicTypeSize.isAccessibilitySize
+                                          ? .title3.bold() : .title2.bold())
                                     .foregroundStyle(PipoTheme.cardInk)
                                     .fixedSize(horizontal: false, vertical: true)
                                     .accessibilityAddTraits(.isHeader)
-                                Text(subtitle)
-                                    .font(.subheadline)
-                                    .foregroundStyle(PipoTheme.cardMuted)
-                                    .fixedSize(horizontal: false, vertical: true)
+                                if step == .overview && dynamicTypeSize.isAccessibilitySize {
+                                    // Keep user-entered goal title and the prompt separate.
+                                    // Combining them into one AX3 subheadline caused 5+
+                                    // oversized lines before any editable choices.
+                                    Text(original.title)
+                                        .font(.footnote.weight(.semibold))
+                                        .foregroundStyle(PipoTheme.cardMuted)
+                                        .fixedSize(horizontal: false, vertical: true)
+                                        .accessibilityLabel("Goal: " + original.title)
+                                    Text("What do you want to adjust?")
+                                        .font(.footnote)
+                                        .foregroundStyle(PipoTheme.cardMuted)
+                                        .fixedSize(horizontal: false, vertical: true)
+                                } else {
+                                    Text(subtitle)
+                                        .font(dynamicTypeSize.isAccessibilitySize
+                                              ? .footnote : .subheadline)
+                                        .foregroundStyle(PipoTheme.cardMuted)
+                                        .fixedSize(horizontal: false, vertical: true)
+                                }
                             }
-                            .padding(.top, 15)
+                            .padding(.top, dynamicTypeSize.isAccessibilitySize ? 10 : 15)
                             content
                             Text(step == .review
                                  ? "Prototype only · No changes saved"
@@ -593,7 +614,8 @@ struct PipoManagePlanV2Sheet: View {
         VStack(alignment: .leading, spacing: 4) {
             sectionTitle("ALREADY RECORDED")
             Text(money(original.recorded))
-                .font(.title2.bold())
+                .font(dynamicTypeSize.isAccessibilitySize
+                      ? .title3.bold() : .title2.bold())
                 .foregroundStyle(PipoTheme.cardInk)
                 .fixedSize(horizontal: false, vertical: true)
         }
@@ -601,13 +623,15 @@ struct PipoManagePlanV2Sheet: View {
 
     private var progressPercent: some View {
         Text(progressText)
-            .font(.headline.bold())
+            .font(dynamicTypeSize.isAccessibilitySize
+                  ? .subheadline.bold() : .headline.bold())
             .foregroundStyle(PipoTheme.cardAccentReadable)
             .accessibilityIdentifier("pipo.plan.v2.progress")
     }
 
     private var overview: some View {
-        VStack(alignment: .leading, spacing: 22) {
+        VStack(alignment: .leading,
+               spacing: dynamicTypeSize.isAccessibilitySize ? 16 : 22) {
             VStack(alignment: .leading, spacing: 8) {
                 // Keep monetary totals readable at AX sizes rather than forcing
                 // two growing text blocks to compete for a 320pt row.
@@ -629,7 +653,7 @@ struct PipoManagePlanV2Sheet: View {
             }
             // The progress story is the visual anchor, not another form field.
             // Keep the only progress rail and the existing manual-record semantics.
-            .padding(17)
+            .padding(dynamicTypeSize.isAccessibilitySize ? 14 : 17)
             .frame(maxWidth: .infinity, alignment: .leading)
             .background(PipoTheme.palePink, in: RoundedRectangle(cornerRadius: 20))
             .overlay {
@@ -677,9 +701,12 @@ struct PipoManagePlanV2Sheet: View {
     private var progressText: String { "\(Int((progress * 100).rounded()))%" }
 
     private func sectionTitle(_ value: String) -> some View {
-        Text(value)
-            .font(.caption.weight(.bold))
+        Text(dynamicTypeSize.isAccessibilitySize && value == "ALREADY RECORDED"
+             ? "RECORDED" : value)
+            .font(dynamicTypeSize.isAccessibilitySize
+                  ? .caption2.bold() : .caption.bold())
             .foregroundStyle(PipoTheme.cardMuted)
+            .accessibilityLabel(value)
             .accessibilityAddTraits(.isHeader)
     }
 
@@ -1065,8 +1092,12 @@ struct PipoManagePlanV2Sheet: View {
     private func footer(horizontal: CGFloat) -> some View {
         VStack(alignment: .leading, spacing: 8) {
             Button(action: continueForward) {
-                Text(actionLabel)
-                    .font(.subheadline.bold())
+                Text(step == .overview && dynamicTypeSize.isAccessibilitySize
+                     ? "Choose an edit" : actionLabel)
+                    .font(dynamicTypeSize.isAccessibilitySize
+                          ? .footnote.bold() : .subheadline.bold())
+                    .lineLimit(step == .overview ? 1 : nil)
+                    .minimumScaleFactor(step == .overview ? 0.9 : 1)
                     .frame(maxWidth: .infinity, minHeight: 48)
                     .foregroundStyle(actionAllowed ? .white : PipoTheme.cardMuted)
                     // Accessible pink: white action text reaches >= 4.5:1 contrast.
@@ -1075,6 +1106,7 @@ struct PipoManagePlanV2Sheet: View {
             }
             .buttonStyle(.plain)
             .disabled(!actionAllowed)
+            .accessibilityLabel(actionLabel)
             .accessibilityIdentifier("pipo.plan.v2.primary")
             .accessibilityHint(step == .review
                 ? "Secure saving isn't enabled. Your draft will not be recorded."
