@@ -31,10 +31,13 @@ class OfflineLayoutCollisionContract(unittest.TestCase):
         self.assertIn("if dynamicTypeSize.isAccessibilitySize {", CARDS)
         self.assertIn("multilineTextAlignment(.center)", DASH)
 
-    def test_one_shot_owner_authorized_pr_visual_qa_is_branch_scoped(self):
-        self.assertIn("github.head_ref == 'fix/pipo-ax-typography-qa-20261124'", IOS_CI)
-        self.assertIn("github.event.pull_request.draft == false", IOS_CI)
+    def test_one_shot_native_visual_qa_gate_is_retired_before_merge(self):
         self.assertIn("id: visual_layout", IOS_CI)
+        self.assertIn(
+            "github.event_name == 'workflow_dispatch' && inputs.validation_mode == 'visual-layout-qa'",
+            IOS_CI
+        )
+        self.assertNotIn("github.head_ref == 'fix/pipo-ax-typography-qa-20261124'", IOS_CI)
 
     def test_ax3_manage_plan_preserves_semantics_with_compact_typography(self):
         self.assertIn("if step == .overview && dynamicTypeSize.isAccessibilitySize", MANAGE)
