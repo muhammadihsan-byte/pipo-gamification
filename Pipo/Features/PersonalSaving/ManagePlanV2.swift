@@ -413,9 +413,12 @@ struct PipoManagePlanV2Sheet: View {
     private var canPreview: Bool { draft.isDirty && draft.validationError == nil }
 
     var body: some View {
-        NavigationStack {
-            GeometryReader { geometry in
-                let horizontal: CGFloat = geometry.size.width <= 350 ? 16 : 20
+        // Measure the hosting viewport before constructing NavigationStack.
+        // The previous inner GeometryReader inherited an inflated vertical
+        // region from the navigation container in a constrained 320pt host.
+        GeometryReader { geometry in
+            let horizontal: CGFloat = geometry.size.width <= 350 ? 16 : 20
+            NavigationStack {
                 VStack(spacing: 0) {
                     topBar
                         .padding(.horizontal, horizontal)
@@ -463,9 +466,8 @@ struct PipoManagePlanV2Sheet: View {
                         .padding(.bottom, 12)
                         .background(.white)
                 }
-                // The snapshot host may be smaller than the physical iPhone.
-                // Constrain *both* dimensions rather than asking an
-                // unbounded maxHeight frame to guess the modal's height.
+                // The measured outer host sets both dimensions; the scroll
+                // region yields to the intrinsic dynamic-height footer.
                 .frame(width: geometry.size.width,
                        height: geometry.size.height, alignment: .top)
                 .background(.white)
@@ -487,7 +489,17 @@ struct PipoManagePlanV2Sheet: View {
             } message: {
                 Text("Your recorded savings, XP, badges and history remain unchanged.")
             }
-    
+            .frame(width: geometry.size.width,
+                   height: geometry.size.height, alignment: .top)
+            #if DEBUG
+            .onAppear {
+                if horizontal <= 16 {
+                    let host = geometry.frame(in: .global)
+                    print("PIPO_320_HOST originY=\(host.minY) sizeH=\(geometry.size.height) " +
+                          "safeTop=\(geometry.safeAreaInsets.top) safeBottom=\(geometry.safeAreaInsets.bottom)")
+                }
+            }
+            #endif
         }
         .preferredColorScheme(.light)
     }
