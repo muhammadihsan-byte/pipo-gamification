@@ -864,7 +864,7 @@ struct PipoJourneyWaveAView: View {
                 journeyOverview
             }
         }
-        .accessibilityIdentifier("pipo.journey.waveA")
+
         .onChange(of: ownerID) { _, _ in
             showingFullTimeline = false
             selectedPeriod = .month
@@ -964,7 +964,7 @@ struct PipoJourneyWaveAView: View {
                                 .font(.subheadline.weight(.semibold))
                             }
                         }
-                        .accessibilityIdentifier("pipo.journey.multiCurrencyTotals")
+                
                     } else {
                         Text("No single amount to total this month.")
                             .font(.caption)
@@ -1073,7 +1073,7 @@ struct PipoJourneyWaveAView: View {
                     }
                 }
                 .padding(.vertical, 24)
-                .accessibilityIdentifier("pipo.journey.periodEmpty")
+        
             } else {
                 LazyVStack(alignment: .leading, spacing: 15) {
                     ForEach(PipoJourneyProjection.months(entries, calendar: calendar)) {
@@ -1100,7 +1100,7 @@ struct PipoJourneyWaveAView: View {
                 .fixedSize(horizontal: false, vertical: true)
                 .accessibilityIdentifier("pipo.journey.manualDisclosure")
         }
-        .accessibilityIdentifier("pipo.journey.fullTimeline")
+
     }
 
     private func entryRow(_ entry: PipoJourneyEntry) -> some View {
@@ -1196,7 +1196,7 @@ struct PipoJourneyWaveAView: View {
                 .foregroundStyle(PipoTheme.muted)
             footerNote("One goal at a time. Easy.")
         }
-        .accessibilityIdentifier("pipo.journey.empty.noGoals")
+
     }
 
     private var noRecordsState: some View {
@@ -1243,7 +1243,7 @@ struct PipoJourneyWaveAView: View {
                 .foregroundStyle(PipoTheme.muted)
             footerNote("Start small. I'll be right here.")
         }
-        .accessibilityIdentifier("pipo.journey.empty.noRecords")
+
     }
 
     private func invitationCard(
