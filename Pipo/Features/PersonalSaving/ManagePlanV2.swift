@@ -466,10 +466,11 @@ struct PipoManagePlanV2Sheet: View {
                         .padding(.bottom, 12)
                         .background(.white)
                 }
-                // The measured outer host sets both dimensions; the scroll
-                // region yields to the intrinsic dynamic-height footer.
-                .frame(width: geometry.size.width,
-                       height: geometry.size.height, alignment: .top)
+                // Do not force the child to the full outer host height:
+                // NavigationStack reserves its own safe-area region first.
+                // A fixed inner height extends the footer below the host.
+                // The bounded outer NavigationStack owns the exact viewport.
+                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
                 .background(.white)
             }
             .navigationBarHidden(true)
