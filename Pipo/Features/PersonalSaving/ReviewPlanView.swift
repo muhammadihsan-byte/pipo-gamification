@@ -786,7 +786,7 @@ struct PersonalGoalDetailView: View {
                 ProgressView(value: goal.progress)
                     .tint(PipoTheme.pink)
                     .accessibilityLabel("Manually recorded saving progress")
-                    .accessibilityValue("\(Int(goal.progress * 100)) percent")
+                    .accessibilityValue("\((goal.progress * 100).formatted(.number.precision(.fractionLength(0...2)))) percent")
                     .accessibilityIdentifier("pipo.goal.progress")
                 Text("Pipo doesn't hold or move your money.")
                     .font(.caption)
@@ -794,48 +794,27 @@ struct PersonalGoalDetailView: View {
             }
             .accessibilityIdentifier("pipo.goal.summary")
 
-            if goal.canRecordSaving && !goal.isGroupGoal {
-                if goal.rhythm == .flexible {
-                    VStack(alignment: .leading, spacing: 6) {
-                        Text("YOUR PACE")
-                            .font(.caption2.bold())
-                            .foregroundStyle(PipoTheme.deepPink)
-                        Text("Flexible · save when you can")
-                            .font(.subheadline.weight(.semibold))
-                            .foregroundStyle(PipoTheme.ink)
-                        Text("No saving days to miss. Your manually recorded progress is what counts.")
-                            .font(.footnote)
-                            .foregroundStyle(PipoTheme.muted)
-                            .fixedSize(horizontal: false, vertical: true)
-                    }
-                    .padding(15)
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                    .background(PipoTheme.palePink,
-                                in: RoundedRectangle(cornerRadius: 16))
-                    .accessibilityElement(children: .contain)
-                    .accessibilityIdentifier("pipo.flex.v2.goalPace")
-                } else {
-                    TimelineView(.periodic(from: .now, by: 15 * 60)) { context in
-                        if let presentation = PipoSparkGoalStatus.presentation(
-                            for: goal, transactions: ownedHistory(for: goal),
-                            userID: authStateManager.userID, asOf: context.date
-                        ) {
-                            VStack(alignment: .leading, spacing: 10) {
-                                Text("YOUR SAVING RHYTHM")
-                                    .font(.caption2.bold())
-                                    .tracking(0.5)
-                                    .foregroundStyle(PipoTheme.muted)
-                                    .accessibilityAddTraits(.isHeader)
-                                PipoSparkChip(presentation: presentation)
-                                Text("Only your recorded saving periods count toward this goal.")
-                                    .font(.footnote)
-                                    .foregroundStyle(PipoTheme.muted)
-                                    .fixedSize(horizontal: false, vertical: true)
-                            }
-                            .frame(maxWidth: .infinity, alignment: .leading)
-                            .accessibilityElement(children: .contain)
-                            .accessibilityIdentifier("pipo.goal.sparkSummary")
+            if goal.canRecordSaving && !goal.isGroupGoal && goal.rhythm != .flexible {
+                TimelineView(.periodic(from: .now, by: 15 * 60)) { context in
+                    if let presentation = PipoSparkGoalStatus.presentation(
+                        for: goal, transactions: ownedHistory(for: goal),
+                        userID: authStateManager.userID, asOf: context.date
+                    ) {
+                        VStack(alignment: .leading, spacing: 10) {
+                            Text("YOUR SAVING RHYTHM")
+                                .font(.caption2.bold())
+                                .tracking(0.5)
+                                .foregroundStyle(PipoTheme.muted)
+                                .accessibilityAddTraits(.isHeader)
+                            PipoSparkChip(presentation: presentation)
+                            Text("Only your recorded saving periods count toward this goal.")
+                                .font(.footnote)
+                                .foregroundStyle(PipoTheme.muted)
+                                .fixedSize(horizontal: false, vertical: true)
                         }
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .accessibilityElement(children: .contain)
+                        .accessibilityIdentifier("pipo.goal.sparkSummary")
                     }
                 }
             }
@@ -849,6 +828,58 @@ struct PersonalGoalDetailView: View {
                     onBack()
                 }
             )
+
+            if goal.rhythm == .flexible && !goal.isGroupGoal {
+                VStack(spacing: 0) {
+                    Button {
+                        planRevisionPreview = PlanRevisionPreview(
+                            original: PipoPlanV2Original(goal: goal)
+                        )
+                    } label: {
+                        flexibleGoalActionRow(
+                            title: "Saving rhythm",
+                            subtitle: "Flexible · whenever you can"
+                        )
+                    }
+                    .buttonStyle(.plain)
+                    .accessibilityIdentifier("pipo.flex.v2.goalPace")
+                    .accessibilityHint("Review-only Manage Plan; no saving date is required")
+                    Divider()
+                    Button { showingSavingJournal = true } label: {
+                        flexibleGoalActionRow(
+                            title: "Saving history",
+                            subtitle: ownedHistory(for: goal).first.map {
+                                "Latest +" + money($0.amount, goal: goal) + " · View history"
+                            } ?? "Review what you've logged"
+                        )
+                    }
+                    .buttonStyle(.plain)
+                    .accessibilityIdentifier("pipo.flex.v2.savingHistory")
+                }
+                .padding(.horizontal, 6)
+
+                HStack(alignment: .center, spacing: 12) {
+                    Text(UserProfile.existing(
+                        for: authStateManager.userID, in: profiles
+                    )?.unlockedBadgeIds.contains(PipoBadge.quarterWay.rawValue) == true
+                        ? "A quarter of the way there!" : "Your goal. Your pace.")
+                        .font(.subheadline.weight(.semibold))
+                        .foregroundStyle(PipoTheme.ink)
+                        .fixedSize(horizontal: false, vertical: true)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                    PipoV4HeadCrop()
+                        .accessibilityHidden(true)
+                }
+                .padding(.horizontal, 14)
+                .padding(.vertical, 10)
+                .background(PipoTheme.palePink,
+                            in: RoundedRectangle(cornerRadius: 22))
+                .accessibilityIdentifier("pipo.flex.v2.mascotPace")
+                Text("MORE GOAL OPTIONS")
+                    .font(.caption2.bold())
+                    .foregroundStyle(PipoTheme.muted)
+                    .padding(.top, 4)
+            }
 
             if goal.goalPhoto != nil {
                 Button("Remove goal photo") { removingPhoto = true }
@@ -936,20 +967,20 @@ struct PersonalGoalDetailView: View {
                 }
             }
 
-            HStack(alignment: .bottom, spacing: 12) {
-                Text("Pipo's here, cheering for every little save.")
-                    .font(.subheadline.weight(.medium))
-                    .foregroundStyle(PipoTheme.ink)
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                PipoV4HeadCrop()
-                    .accessibilityHidden(true)
+            if goal.rhythm != .flexible || goal.isGroupGoal {
+                HStack(alignment: .bottom, spacing: 12) {
+                    Text("Pipo's here, cheering for every little save.")
+                        .font(.subheadline.weight(.medium))
+                        .foregroundStyle(PipoTheme.ink)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                    PipoV4HeadCrop()
+                        .accessibilityHidden(true)
+                }
+                .padding(.horizontal, 14)
+                .padding(.vertical, 10)
+                .background(PipoTheme.palePink,
+                            in: RoundedRectangle(cornerRadius: 22))
             }
-            .padding(.horizontal, 14)
-            .padding(.vertical, 10)
-            .background(
-                Color(red: 1, green: 241.0 / 255, blue: 244.0 / 255),
-                in: RoundedRectangle(cornerRadius: 22)
-            )
 
             if goal.canRecordSaving {
                 Button("Pause this goal") {
@@ -983,6 +1014,28 @@ struct PersonalGoalDetailView: View {
                     .foregroundStyle(PipoTheme.green)
             }
         }
+    }
+
+    private func flexibleGoalActionRow(title: String, subtitle: String) -> some View {
+        HStack(alignment: .center, spacing: 10) {
+            VStack(alignment: .leading, spacing: 5) {
+                Text(title)
+                    .font(.subheadline.bold())
+                    .foregroundStyle(PipoTheme.ink)
+                Text(subtitle)
+                    .font(.footnote)
+                    .foregroundStyle(PipoTheme.muted)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+            Spacer(minLength: 4)
+            Image(systemName: "chevron.right")
+                .font(.subheadline.weight(.semibold))
+                .foregroundStyle(PipoTheme.muted)
+                .accessibilityHidden(true)
+        }
+        .frame(maxWidth: .infinity, minHeight: 64, alignment: .leading)
+        .contentShape(Rectangle())
+        .accessibilityElement(children: .combine)
     }
 
     private func ownedHistory(for goal: PersonalGoal) -> [SavingTransaction] {
