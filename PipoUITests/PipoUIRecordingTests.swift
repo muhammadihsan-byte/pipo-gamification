@@ -33,6 +33,85 @@ final class PipoUIRecordingTests: XCTestCase {
         XCTAssertTrue(app.staticTexts["Pipo QA Personal Trip"].waitForExistence(timeout: 20))
     }
 
+    /// #93 approved Journey Wave A: on-device zero states, real recorded
+    /// history, month/all-time navigation, record detail and badge collection.
+    /// Only synthetic Debug Auth + an isolated on-disk SwiftData account are used.
+    func testJourneyWaveAEmptyStatesAndRealHistory() {
+        continueAfterFailure = false
+        app.launchArguments = ["-pipo-global-currency-qa", "-pipo-global-currency-qa-reset"]
+        app.launch()
+
+        tapButton("pipo.dashboard.tab.journey")
+        XCTAssertTrue(app.buttons["pipo.journey.createGoal"].waitForExistence(timeout: 20))
+        XCTAssertTrue(app.staticTexts["Start small."].exists)
+        attachOnboardingScreen("Journey A 01 — approved no-goals state")
+        tapButton("pipo.journey.createGoal")
+
+        tapButton("Personal saving")
+        typeText("Goal name", value: "Journey QA Holiday")
+        tapButton("Continue")
+        tapButton("pipo.goal.currency.choose")
+        let search = app.textFields["pipo.goal.currency.search"].firstMatch
+        XCTAssertTrue(search.waitForExistence(timeout: 15))
+        search.tap()
+        search.typeText("IDR")
+        tapButton("pipo.goal.currency.IDR")
+        typeText("pipo.goal.currency.amount", value: "5000000")
+        tapButton("Continue")
+        interactWithCalendar()
+        tapButton("Continue")
+        tapButton("Continue")
+        XCTAssertTrue(app.staticTexts["Review your saving plan"].waitForExistence(timeout: 15))
+        tapButton("Start saving plan")
+        tapButton("pipo.firstSave.later")
+
+        tapButton("pipo.dashboard.tab.journey")
+        XCTAssertTrue(app.buttons["pipo.journey.viewGoal"].waitForExistence(timeout: 20),
+            "An owned goal with zero saving records needs its own working CTA")
+        XCTAssertTrue(app.staticTexts["Your first save."].exists)
+        XCTAssertFalse(app.buttons["pipo.journey.seeAll"].exists)
+        attachOnboardingScreen("Journey A 05 — real owned goal with zero records")
+
+        tapButton("pipo.dashboard.tab.home")
+        tapButton("pipo.dashboard.recordSaving")
+        typeText("Amount in IDR", value: "250000")
+        tapButton("Save")
+        XCTAssertTrue(app.staticTexts["pipo.firstSave.badge"].waitForExistence(timeout: 20))
+        // Actual process relaunch proves stored SwiftData, not an in-memory mock.
+        app.terminate()
+        app.launchArguments = ["-pipo-global-currency-qa"]
+        app.launch()
+
+        tapButton("pipo.dashboard.tab.journey")
+        XCTAssertTrue(app.staticTexts["pipo.journey.monthCount"].waitForExistence(timeout: 20))
+        XCTAssertTrue(app.buttons["pipo.journey.seeAll"].exists,
+            "A real saved record must be present in Journey")
+        XCTAssertTrue(app.staticTexts["pipo.journey.manualDisclosure"].exists)
+        attachOnboardingScreen("Journey A 01 — real monthly story and saving timeline")
+
+        tapButton("pipo.journey.seeAll")
+        XCTAssertTrue(app.buttons["pipo.journey.filter.allTime"].waitForExistence(timeout: 12))
+        attachOnboardingScreen("Journey A 09 — real all-time timeline")
+        tapButton("pipo.journey.filter.month")
+        attachOnboardingScreen("Journey A 02 — local calendar month filter")
+
+        let record = app.buttons.matching(
+            NSPredicate(format: "identifier BEGINSWITH %@", "pipo.journey.record.")
+        ).firstMatch
+        XCTAssertTrue(record.waitForExistence(timeout: 15))
+        bringIntoView(record)
+        record.tap()
+        XCTAssertTrue(app.staticTexts["pipo.journey.recordDetail.amount"]
+            .waitForExistence(timeout: 15),
+            "Each real saved event must open its own read-only detail")
+        attachOnboardingScreen("Journey A — saved record detail, no financial mutation")
+        tapButton("pipo.journey.recordDetail.done")
+        tapButton("pipo.journey.back")
+        tapButton("pipo.journey.openAchievements")
+        XCTAssertTrue(app.staticTexts["pipo.achievements.count"].waitForExistence(timeout: 15))
+        attachOnboardingScreen("Journey A 03 — real earned and locked badge collection")
+    }
+
     /// Global V1 Option B: currency selection belongs to Create Goal and
     /// clears any amount entered under a different code. No network or live user.
     func testGlobalExperienceUSDGoalCurrencySelectionAndReopen() {
