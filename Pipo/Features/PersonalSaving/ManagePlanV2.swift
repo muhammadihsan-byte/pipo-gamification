@@ -419,10 +419,11 @@ struct PipoManagePlanV2Sheet: View {
                 VStack(spacing: 0) {
                     topBar
                         .padding(.horizontal, horizontal)
-                    // The editor owns its scrolling viewport. The bottom
-                    // action participates in SwiftUI's safe-area layout,
-                    // rather than sitting in an independent fixed-height
-                    // geometry container that can cover target/date rows.
+                    // A bounded VStack gives the scroll view exactly the
+                    // space remaining after the header and its *actual*
+                    // dynamic-height footer, including accessibility text.
+                    // A safeAreaInset on the nested ScrollView pushed the
+                    // footer beyond the 320pt snapshot host's lower edge.
                     ScrollView {
                         VStack(alignment: .leading, spacing: 20) {
                             VStack(alignment: .leading, spacing: 8) {
@@ -458,11 +459,15 @@ struct PipoManagePlanV2Sheet: View {
                     }
                     .scrollDismissesKeyboard(.interactively)
                     .scrollBounceBehavior(.basedOnSize)
-                    .safeAreaInset(edge: .bottom, spacing: 0) {
-                        footer(horizontal: horizontal)
-                    }
+                    footer(horizontal: horizontal)
+                        .padding(.bottom, 12)
+                        .background(.white)
                 }
-                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
+                // The snapshot host may be smaller than the physical iPhone.
+                // Constrain *both* dimensions rather than asking an
+                // unbounded maxHeight frame to guess the modal's height.
+                .frame(width: geometry.size.width,
+                       height: geometry.size.height, alignment: .top)
                 .background(.white)
             }
             .navigationBarHidden(true)
