@@ -703,8 +703,7 @@ jobs:
   # never starts macOS simply because a draft branch is synchronized.
   issue80-integrated-qa:
     name: "Issue #80: controlled native QA (draft #83 only)"
-    if: >-
-      false # Owner-paused: legacy label-triggered paid macOS QA is disabled
+    if: false # Owner-paused: legacy label-triggered paid macOS QA is disabled
     runs-on: macos-15
     timeout-minutes: 45
     steps:
