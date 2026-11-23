@@ -450,7 +450,8 @@ final class PipoUIRecordingTests: XCTestCase {
         XCTAssertTrue(focusButton.label.contains("personal saving goal"), focusButton.label)
         XCTAssertTrue(focusButton.label.contains("recorded"), focusButton.label)
         XCTAssertTrue(focusButton.label.contains("percent complete"), focusButton.label)
-        XCTAssertTrue(focusButton.label.contains("active"), focusButton.label)
+        // Lifecycle state is read aloud as “In progress”, not the obsolete “active”.
+        XCTAssertTrue(focusButton.label.contains("In progress"), focusButton.label)
         XCTAssertTrue(app.buttons["pipo.dashboard.recordSaving"].waitForExistence(timeout: 12),
                       "Record a saving must remain a separately accessible action")
         XCTAssertTrue(app.staticTexts["60% complete"].exists)
