@@ -2038,4 +2038,50 @@ extension PersonalGoalTests {
         XCTAssertFalse(draft.isDirty)
         XCTAssertEqual(goal.currentAmount, 3_600_000)
     }
+    // Approved Flexible Saving V2: 23.75% is a factual goal ratio, not a
+    // decorative 23% and never a schedule/streak obligation.
+    @MainActor
+    func testFlexibleV2ReturningGoalPreservesFractionalManualProgress() {
+        let owner = UUID()
+        let goal = PersonalGoal(
+            title: "Bali holiday", category: .trip,
+            targetAmount: 6_000_000, currentAmount: 1_425_000,
+            startDate: Calendar.current.date(byAdding: .month, value: -1, to: .now)!,
+            targetDate: Calendar.current.date(byAdding: .month, value: 9, to: .now)!,
+            rhythm: .flexible, ownerUserID: owner
+        )
+        XCTAssertEqual(goal.progress, 0.2375, accuracy: 0.0000001)
+        XCTAssertNil(goal.preferredSavingDay)
+        XCTAssertNil(SavingConsistency.periodIndex(
+            for: .now, rhythm: goal.rhythm, startDate: goal.startDate
+        ), "Flexible never creates a due saving period")
+        XCTAssertTrue(goal.canRecordSaving)
+    }
+
+    @MainActor
+    func testFlexibleV2OneManualContributionReachesQuarterWithoutStreak() throws {
+        let owner = UUID()
+        let startDate = Calendar.current.date(byAdding: .month, value: -1, to: .now)!
+        let goal = PersonalGoal(
+            title: "Bali holiday", category: .trip,
+            targetAmount: 6_000_000, currentAmount: 1_425_000,
+            startDate: startDate,
+            targetDate: Calendar.current.date(byAdding: .month, value: 9, to: .now)!,
+            rhythm: .flexible, ownerUserID: owner
+        )
+        let profile = UserProfile(userID: owner)
+        // Goal creation alone has not recorded a saving or earned XP.
+        XCTAssertEqual(profile.totalXP, 0)
+        XCTAssertEqual(profile.streakDays, 0)
+        let transaction = try GamificationManager().recordSaving(
+            amount: 75_000, goal: goal, profile: profile, date: .now
+        )
+        XCTAssertEqual(transaction.amount, 75_000)
+        XCTAssertEqual(goal.currentAmount, 1_500_000, accuracy: 0.0000001)
+        XCTAssertEqual(goal.progress, 0.25, accuracy: 0.0000001)
+        XCTAssertEqual(profile.streakDays, 0, "Flexible must not grant a streak")
+        XCTAssertEqual(profile.totalXP, GamificationManager.xpPerSaving)
+        XCTAssertNil(goal.preferredSavingDay)
+    }
+
 }
