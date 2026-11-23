@@ -40,6 +40,9 @@ class FlexibleV2OfflineContract(unittest.TestCase):
         self.assertIn("onRecordFirst: onRecordFirst", CREATE)
         self.assertIn("onRecordFirst: { goalID in", ROOTVIEW)
         self.assertIn("navigationManager.requestDeposit(goalID: goalID)", ROOTVIEW)
+        self.assertIn("ownedGoals.map(\\.id)", DASH)
+        self.assertIn("navigationManager.pendingDepositGoalID", DASH)
+        self.assertIn("AccountScope.owns(goal, userID: ownerID)", DASH)
         self.assertIn("try modelContext.save()", REVIEW)
         self.assertIn("createdGoalID = goal.id", REVIEW)
 
@@ -49,6 +52,7 @@ class FlexibleV2OfflineContract(unittest.TestCase):
         self.assertIn("Flexible · no saving days to miss", REVIEW)
         self.assertIn("pipo.flex.v2.savingHistory", REVIEW)
         self.assertIn("pipo.flex.v2.mascotPace", REVIEW)
+        self.assertIn("goal.progress >= 0.25", REVIEW)
         self.assertIn("ownedHistory(for: goal)", REVIEW)
         self.assertIn("AccountScope.owns(goal, userID: authStateManager.userID)", REVIEW)
         self.assertIn("PipoActivityHistoryDCard", REVIEW)
