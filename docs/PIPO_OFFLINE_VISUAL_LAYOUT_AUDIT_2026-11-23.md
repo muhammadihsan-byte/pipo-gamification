@@ -48,3 +48,11 @@ This branch is layered on #100's complete #95–#99 feature combination, **not**
 - **Important:** these changes remain pending fresh native evidence. We did **not** trigger a second paid macOS run. After owner authorizes the follow-up batch, rerun the exact new head and check all 157 native unit tests then five UI visual tests plus MP4.
 
 Current gate: **native visual QA FAIL on old commit; correction staged but NOT yet verified. PR remains Draft/unmerged.**
+
+
+## PR #101 accessibility typography follow-up — 24 November 2026
+
+- User-reported oversized Dynamic Type layout was addressed on the draft branch in Manage Plan, Journey overview, Journey timeline filters/record rows, and Achievements. Values and descriptions remain readable; accessible content is not intentionally hidden or truncated.
+- [Native QA #45230774978](https://github.com/muhammadihsan-byte/pipo-gamification/actions/runs/45230774978) was manually dispatched on head `d85aac9da2083c80f877bfc3f29bdf143cef06fe`. It **failed at compilation**, before running any tests or producing valid visual screenshots: `PipoApprovedCards.swift:1054`, conditional branches `VStackLayout` vs. `HStackLayout` in an `AnyLayout` constructor had incompatible types.
+- Commit `5a0ebc3c89107218214171aae4e1ce32ed28816a` explicitly type-erases each conditional branch with `AnyLayout(...)`. **This fix has not yet passed Xcode or simulator validation.**
+- Do not merge until a new macOS `visual-layout-qa` on that exact or subsequent head passes compilation, focused XCTest UI regressions, and screenshot review at 320pt, 393pt and accessibility sizes. If this branch stays draft, select the branch in manual `workflow_dispatch` with `validation_mode=visual-layout-qa` to run native QA; do not interpret the 2026-11-23 older green run as validating these commits.
