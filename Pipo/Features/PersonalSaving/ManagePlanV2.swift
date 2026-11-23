@@ -491,15 +491,15 @@ struct PipoManagePlanV2Sheet: View {
             }
             .frame(width: geometry.size.width,
                    height: geometry.size.height, alignment: .top)
-            #if DEBUG
             .onAppear {
+                #if DEBUG
                 if horizontal <= 16 {
                     let host = geometry.frame(in: .global)
                     print("PIPO_320_HOST originY=\(host.minY) sizeH=\(geometry.size.height) " +
                           "safeTop=\(geometry.safeAreaInsets.top) safeBottom=\(geometry.safeAreaInsets.bottom)")
                 }
+                #endif
             }
-            #endif
         }
         .preferredColorScheme(.light)
     }
