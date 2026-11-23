@@ -1136,7 +1136,9 @@ struct PipoJourneyWaveAView: View {
             .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
-        .accessibilityElement(children: .ignore)
+        // Keep accessibility modifiers on the actual Button. Applying
+        // .accessibilityElement(children: .ignore) here exposes an Other
+        // wrapper instead and hides its identifier from XCUI Button queries.
         .accessibilityLabel(
             "\(entry.goal.title), saved \(entry.amountText), " +
             "\(entry.transaction.date.formatted(date: .abbreviated, time: .omitted))"
