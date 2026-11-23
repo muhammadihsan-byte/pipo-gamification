@@ -57,6 +57,9 @@ jobs:
       - name: Assert owner isolation and physically clear Widget App Group private data (Swift Linux)
         run: python3 -m unittest -v scripts/test_issue80_final_account_safety.py
 
+      - name: Block unsafe legacy-client and CAS production cutover without signed release evidence
+        run: python3 -m unittest -v scripts/test_issue80_cutover_readiness.py
+
       - name: Compile isolated QA scripts (syntax only)
         run: |
           python3 -m py_compile \
