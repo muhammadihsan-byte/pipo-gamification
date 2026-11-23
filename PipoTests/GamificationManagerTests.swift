@@ -839,6 +839,105 @@ final class GamificationManagerTests: XCTestCase {
         XCTAssertEqual(futureOnly?.state, .notStarted)
     }
 
+    // #72: animation eligibility is a view event only, never a new reward.
+    @MainActor
+    func testFirstSparkOnlyAfterFirstOwnedScheduledContribution() {
+        let owner = UUID()
+        let goal = PersonalGoal(
+            title: "Holiday", category: .trip, targetAmount: 1_000,
+            startDate: makeDate(day: 1), targetDate: makeDate(day: 31),
+            rhythm: .weekly, ownerUserID: owner
+        )
+        let first = SavingTransaction(
+            goalId: goal.id, amount: 100, xpEarned: 300,
+            date: makeDate(day: 1), userID: owner
+        )
+        let second = SavingTransaction(
+            goalId: goal.id, amount: 100, xpEarned: 300,
+            date: makeDate(day: 1).addingTimeInterval(60), userID: owner
+        )
+        let later = SavingTransaction(
+            goalId: goal.id, amount: 100, xpEarned: 300,
+            date: makeDate(day: 15), userID: owner
+        )
+        let asOf = makeDate(day: 22)
+        XCTAssertTrue(PipoFirstSparkEligibility.forCommittedFirstPeriod(
+            first, goal: goal, ownerID: owner, priorTransactions: [], asOf: asOf
+        ))
+        XCTAssertFalse(PipoFirstSparkEligibility.forCommittedFirstPeriod(
+            second, goal: goal, ownerID: owner,
+            priorTransactions: [first], asOf: asOf
+        ))
+        XCTAssertFalse(PipoFirstSparkEligibility.forCommittedFirstPeriod(
+            later, goal: goal, ownerID: owner,
+            priorTransactions: [first], asOf: asOf
+        ))
+        XCTAssertFalse(PipoFirstSparkEligibility.forCommittedFirstPeriod(
+            first, goal: goal, ownerID: owner,
+            priorTransactions: [first], asOf: asOf
+        ), "Replayed UUID must never create a second celebration")
+    }
+
+    @MainActor
+    func testFirstSparkRejectsCrossAccountFlexibleGroupInvalidAndFutureEntries() {
+        let owner = UUID()
+        let goal = PersonalGoal(
+            title: "Study", category: .house, targetAmount: 1_000,
+            startDate: makeDate(day: 1), targetDate: makeDate(day: 31),
+            rhythm: .weekly, ownerUserID: owner
+        )
+        let valid = SavingTransaction(
+            goalId: goal.id, amount: 50, date: makeDate(day: 8), userID: owner
+        )
+        let checkAt = makeDate(day: 15)
+        let foreign = SavingTransaction(
+            goalId: goal.id, amount: 50, date: makeDate(day: 8), userID: UUID()
+        )
+        XCTAssertFalse(PipoFirstSparkEligibility.forCommittedFirstPeriod(
+            foreign, goal: goal, ownerID: owner, priorTransactions: [], asOf: checkAt
+        ))
+        XCTAssertFalse(PipoFirstSparkEligibility.forCommittedFirstPeriod(
+            valid, goal: goal, ownerID: UUID(), priorTransactions: [], asOf: checkAt
+        ))
+        let future = SavingTransaction(
+            goalId: goal.id, amount: 50, date: makeDate(day: 31), userID: owner
+        )
+        XCTAssertFalse(PipoFirstSparkEligibility.forCommittedFirstPeriod(
+            future, goal: goal, ownerID: owner, priorTransactions: [], asOf: checkAt
+        ))
+        let zero = SavingTransaction(
+            goalId: goal.id, amount: 0, date: makeDate(day: 8), userID: owner
+        )
+        XCTAssertFalse(PipoFirstSparkEligibility.forCommittedFirstPeriod(
+            zero, goal: goal, ownerID: owner, priorTransactions: [], asOf: checkAt
+        ))
+        goal.rhythm = .flexible
+        XCTAssertFalse(PipoFirstSparkEligibility.forCommittedFirstPeriod(
+            valid, goal: goal, ownerID: owner, priorTransactions: [], asOf: checkAt
+        ))
+        goal.rhythm = .weekly
+        goal.isGroupGoal = true
+        XCTAssertFalse(PipoFirstSparkEligibility.forCommittedFirstPeriod(
+            valid, goal: goal, ownerID: owner, priorTransactions: [], asOf: checkAt
+        ))
+    }
+
+    @MainActor
+    func testFirstSparkPresentationStateClearsOnAccountSwitch() {
+        let navigation = NavigationManager()
+        navigation.transactionDidComplete(
+            xpEarned: 300, streakDays: 1, firstSparkEligible: true
+        )
+        XCTAssertTrue(navigation.milestoneFirstSparkEligible)
+        navigation.resetAccountContext()
+        XCTAssertFalse(navigation.milestoneFirstSparkEligible)
+        XCTAssertFalse(navigation.isMilestonePresented)
+        navigation.transactionDidComplete(
+            xpEarned: 300, streakDays: 2, firstSparkEligible: false
+        )
+        XCTAssertFalse(navigation.milestoneFirstSparkEligible)
+    }
+
     @MainActor
     private func makeGoal() -> PersonalGoal {
         PersonalGoal(
