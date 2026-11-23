@@ -13,6 +13,7 @@ def source(path):
 
 MANAGE = source("Pipo/Features/PersonalSaving/ManagePlanV2.swift")
 DASH = source("Pipo/Features/Dashboard/ContentView.swift")
+CARDS = source("Pipo/Core/DesignSystem/PipoApprovedCards.swift")
 GOAL = source("Pipo/Features/PersonalSaving/ReviewPlanView.swift")
 PLAN = source("Pipo/Features/PersonalSaving/PersonalPlanComponents.swift")
 MILESTONE = source("Pipo/Features/Gamification/ConsistencyMilestoneView.swift")
@@ -21,6 +22,15 @@ IOS_CI = source(".github/workflows/ios-build.yml")
 
 
 class OfflineLayoutCollisionContract(unittest.TestCase):
+    def test_accessibility_filters_use_type_erased_swiftui_layouts(self):
+        # Swift does not unify VStackLayout and HStackLayout in a conditional.
+        # PR #101's first native run caught this compile error only after checkout.
+        self.assertIn("AnyLayout(dynamicTypeSize.isAccessibilitySize", CARDS)
+        self.assertIn("AnyLayout(VStackLayout(alignment: .leading, spacing: 8))", CARDS)
+        self.assertIn("AnyLayout(HStackLayout(spacing: 8))", CARDS)
+        self.assertIn("if dynamicTypeSize.isAccessibilitySize {", CARDS)
+        self.assertIn("monthCountSummary(monthly.count, vertical:", CARDS)
+
     def test_manage_plan_footer_is_bounded_by_compact_viewport(self):
         part = MANAGE.split("struct PipoManagePlanV2Sheet: View {", 1)[1]
         body = part.split("    private var topBar:", 1)[0]
