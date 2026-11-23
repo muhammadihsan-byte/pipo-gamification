@@ -112,6 +112,15 @@ final class PipoUIRecordingTests: XCTestCase {
         tapButton("pipo.journey.back")
         tapButton("pipo.journey.openAchievements")
         XCTAssertTrue(app.staticTexts["pipo.achievements.count"].waitForExistence(timeout: 15))
+        let nextMilestone = app.descendants(matching: .any).matching(
+            identifier: "pipo.achievements.nextMilestone"
+        ).firstMatch
+        XCTAssertTrue(nextMilestone.waitForExistence(timeout: 12))
+        assertScrollableElementClearsBottomEdge(nextMilestone,
+            scroll: app.scrollViews.firstMatch,
+            bottomBoundary: app.scrollViews.firstMatch.frame.maxY,
+            description: "Achievements next milestone",
+            isButton: false)
         attachOnboardingScreen("Journey A 03 — real earned and locked badge collection")
     }
 
@@ -768,6 +777,15 @@ final class PipoUIRecordingTests: XCTestCase {
         tapButton("pipo.plan.v2.editTarget")
         XCTAssertTrue(app.staticTexts["Change the target."].waitForExistence(timeout: 10))
         XCTAssertTrue(app.textFields["pipo.plan.v2.targetAmount"].exists)
+        let budgetAction = app.buttons["pipo.plan.v2.editBudget"].firstMatch
+        let editorScroll = app.scrollViews.containing(.button,
+            identifier: "pipo.plan.v2.editBudget").firstMatch
+        let manageFooter = app.buttons["pipo.plan.v2.primary"].firstMatch
+        assertScrollableElementClearsBottomEdge(budgetAction,
+            scroll: editorScroll,
+            bottomBoundary: manageFooter.frame.minY,
+            description: "Manage Plan target budget row",
+            isButton: true)
         attachOnboardingScreen("Manage Plan V2 B02 — Focused target")
         // Keyboard can be shown without hiding target context or forcing a save.
         let field = app.textFields["pipo.plan.v2.targetAmount"]
@@ -781,6 +799,12 @@ final class PipoUIRecordingTests: XCTestCase {
         XCTAssertTrue(app.datePickers["pipo.plan.v2.finishDate"].exists ||
                       app.buttons["pipo.plan.v2.finishDate"].exists,
                       "The native date picker must remain VoiceOver discoverable")
+        let dateWarning = app.staticTexts["Your amount stays the same"].firstMatch
+        assertScrollableElementClearsBottomEdge(dateWarning,
+            scroll: app.scrollViews.firstMatch,
+            bottomBoundary: app.buttons["pipo.plan.v2.primary"].frame.minY,
+            description: "Manage Plan date impact warning",
+            isButton: false)
         attachOnboardingScreen("Manage Plan V2 B13 — Finish date")
         XCTAssertFalse(app.buttons["pipo.plan.v2.primary"].isEnabled)
     }
@@ -984,6 +1008,45 @@ final class PipoUIRecordingTests: XCTestCase {
         bringIntoView(button)
         XCTAssertTrue(button.isEnabled, "Disabled button: \(label)")
         button.tap()
+    }
+
+    /// Native visual-layout regression: the element must be entirely within
+    /// the scroll viewport and ABOVE a pinned footer, not merely "exists" or
+    /// "isHittable" (both passed while text was visually covered).
+    /// Runs only when the product owner re-enables native iOS QA.
+    private func assertScrollableElementClearsBottomEdge(
+        _ element: XCUIElement,
+        scroll: XCUIElement,
+        bottomBoundary: CGFloat,
+        description: String,
+        isButton: Bool
+    ) {
+        XCTAssertTrue(scroll.waitForExistence(timeout: 15),
+            "\(description): expected a scrollable content region")
+        XCTAssertTrue(element.waitForExistence(timeout: 15),
+            "\(description): content is missing from accessibility tree")
+        for _ in 0..<10 {
+            let top = scroll.frame.minY + 8
+            let bottom = bottomBoundary - 10
+            if element.isHittable && element.frame.minY >= top
+                && element.frame.maxY <= bottom { break }
+            if element.frame.minY < top {
+                scroll.swipeDown()
+            } else {
+                scroll.swipeUp()
+            }
+        }
+        let visible = element.isHittable
+            && element.frame.minY >= scroll.frame.minY + 8
+            && element.frame.maxY <= bottomBoundary - 10
+        XCTAssertTrue(visible,
+            "\(description) is clipped or covered by a footer. "
+            + "Content=\(element.frame), scroll=\(scroll.frame), bottom=\(bottomBoundary). "
+            + app.debugDescription)
+        if isButton {
+            XCTAssertGreaterThanOrEqual(element.frame.height, 44,
+                "\(description) actionable hit target must be at least 44pt")
+        }
     }
 
     /// XCUIElement.isHittable can be true even when a button's tap center
