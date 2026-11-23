@@ -27,4 +27,24 @@
 
 ## Lifecycle / integration
 
-This branch is layered on #100's complete #95–#99 feature combination, **not** a standalone patch on main. A subsequent combined candidate PR targeting main will include #100 plus this polish; **never merge both integrated PRs independently**. Keep original #95–#99 for source/provenance. All remain open/unmerged, no Supabase production SQL, Apple purchase/entitlement activation, or TestFlight.
+This branch is layered on #100's complete #95–#99 feature combination, **not** a standalone patch on main. A subsequent combined candidate PR targeting main will include #100 plus this polish; **never merge both integrated PRs independently**. Keep original #95–#99 for source/provenance. All remain open/unmerged, no Supabase production SQL, Apple purchase/entitlement activation, or TestFlight. 
+
+## Native QA checkpoint — 2026-11-23 (owner authorized, single batch)
+
+**Execution:** [GitHub Actions run #45136246961](https://github.com/muhammadihsan-byte/pipo-gamification/actions/runs/45136246961), exact commit `246684c112f8f8cfcf2131b8773a387db9258728`, iPhone 16 / iOS 18.5 simulator, Xcode 16.4. The temporary one-shot PR label was removed after start and the labeled event workflow exception has been retired. **Do not infer a pass from the older source-only review.**
+
+**Verified facts:**
+- Xcode compiled the integrated source and executed **157 XCTest units: 155 passed, 2 failed**.
+- Both failures are pre-existing *strong* real-image assertions in `PipoTests/SavingTimelineSnapshotTests.swift`, rather than a compiler error:
+  - `testManagePlanV2OverviewAt393And320PointWidths` — `Manage-Plan-V2-B01-320pt clips the footer action at the bottom edge`.
+  - `testManagePlanV2AccessibilityTextAt320And393KeepsFooterVisible` — `Manage-Plan-AX3-320pt clips the primary action under accessibility text`.
+- Screenshots extracted in the workflow artifact `ios-validation-45136246961` (artifact ID `14800725750`) corroborate that at 320pt the CTA extends below the 760pt host viewport. At 393pt it is visible.
+- Because base XCTest failed, the later **cross-screen interactive UI/MP4 step did not run**, so the screenshot evidence does not prove Achievements, target/date editors, or full navigation are fixed.
+- Root cause indicated by the code/snapshots: applying `.safeAreaInset` to the **nested ScrollView** inside an unconstrained max-height `VStack` failed to ensure the footer stayed inside the compact fixed-size host. Adding arbitrary content padding or deleting the screenshot assertion would conceal the defect, not fix it.
+
+**Isolated follow-up, after that QA run (not native-verified):**
+- Replaced the nested-scroll `.safeAreaInset` with a direct *measured-height VStack footer*, 12pt bottom clearance, and an explicit `geometry.size.width/height` outer frame so the scroll viewport yields space to the footer at both regular and accessibility text sizes.
+- Updated the Linux source guard to enforce the bounded layout, without changing the screenshot pixel assertion. Removed temporary one-shot label trigger, restoring the original manual-only native workflow. No backend or saving-state logic was touched.
+- **Important:** these changes remain pending fresh native evidence. We did **not** trigger a second paid macOS run. After owner authorizes the follow-up batch, rerun the exact new head and check all 157 native unit tests then five UI visual tests plus MP4.
+
+Current gate: **native visual QA FAIL on old commit; correction staged but NOT yet verified. PR remains Draft/unmerged.**
