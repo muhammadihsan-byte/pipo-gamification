@@ -155,5 +155,17 @@ class Issue80FinalAccountSafety(unittest.TestCase):
         self.assertIn("Saving unavailable", ui)
         self.assertNotIn("PIPO_ISSUE80_STAGING = YES", (ROOT / "Pipo.xcodeproj/project.pbxproj").read_text())
 
+    def test_ax3_320_nav_header_remains_single_line_and_accessible(self):
+        ui = MANAGE.read_text()
+        bar = ui.split("    private var topBar: some View {", 1)[1].split(
+            "    @ViewBuilder", 1)[0]
+        self.assertIn("dynamicTypeSize.isAccessibilitySize", bar)
+        self.assertIn('Image(systemName: "chevron.left")', bar)
+        self.assertIn('.accessibilityLabel("Back")', bar)
+        self.assertIn('.accessibilityLabel("Manage plan")', bar)
+        self.assertIn('.lineLimit(1)', bar)
+        self.assertIn('.minimumScaleFactor(0.65)', bar)
+        self.assertIn('.frame(minWidth: 58, minHeight: 48', bar)
+
 if __name__ == "__main__":
     unittest.main()
