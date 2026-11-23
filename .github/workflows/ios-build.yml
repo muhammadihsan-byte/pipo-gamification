@@ -930,13 +930,7 @@ jobs:
   # start Mac minutes; Release settings are never changed in the repository.
   issue80-legacy-bridge-native:
     name: "Issue #80: native legacy bridge QA (draft #85 only)"
-    if: >-
-      github.event_name == 'pull_request' &&
-      github.event.action == 'labeled' &&
-      github.event.label.name == 'enhancement' &&
-      github.event.pull_request.number == 85 &&
-      github.event.pull_request.draft == true &&
-      github.event.pull_request.head.ref == 'feat/issue80-signed-legacy-client-bridge-review'
+    if: false # Owner-paused: legacy draft #85 macOS label-triggered QA is disabled
     runs-on: macos-15
     timeout-minutes: 45
     steps:
