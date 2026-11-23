@@ -10,6 +10,7 @@ struct ReviewPlanView: View {
     let onEdit: (PersonalPlanStep) -> Void
     let onCreated: (UUID) -> Void
     let onLater: (UUID) -> Void
+    let onRecordFirst: (UUID) -> Void
 
     @Environment(\.modelContext) private var modelContext
     @Environment(SubscriptionManager.self) private var subscriptionManager
@@ -24,19 +25,38 @@ struct ReviewPlanView: View {
 
     var body: some View {
         PersonalPlanPage(step: .review, onBack: onBack) {
-            PersonalPlanIntro(step: .review, title: "Review your saving plan", subtitle: "Check the details for \(plan.title).")
-            goalCard
-            if !plan.breakdown.isEmpty {
-                budgetBreakdownCard
+            if plan.rhythm == .flexible {
+                flexibleReview
+            } else {
+                PersonalPlanIntro(step: .review, title: "Review your saving plan", subtitle: "Check the details for \(plan.title).")
+                goalCard
+                if !plan.breakdown.isEmpty {
+                    budgetBreakdownCard
+                }
+                timelineCard
+                rhythmCard
+                Text("This plan is an estimate. Pipo doesn’t move money or set up automatic payments.")
+                    .font(.caption)
+                    .foregroundStyle(PersonalPlanStyle.muted)
             }
-            timelineCard
-            rhythmCard
-            Text("This plan is an estimate. Pipo doesn’t move money or set up automatic payments.")
-                .font(.caption)
-                .foregroundStyle(PersonalPlanStyle.muted)
         } footer: {
-            PersonalPlanActions(back: onBack, title: saving ? "Saving…" : "Start saving plan",
-                                dimmed: saving, action: { saving = true })
+            if plan.rhythm == .flexible {
+                VStack(spacing: 6) {
+                    Button(saving ? "Saving…" : "Create my plan") { saving = true }
+                        .buttonStyle(PersonalPlanPrimaryStyle(dimmed: saving))
+                        .disabled(saving)
+                        .accessibilityIdentifier("pipo.flex.v2.createPlan")
+                    Button("Edit my plan") { onEdit(.rhythm) }
+                        .font(.subheadline.weight(.semibold))
+                        .foregroundStyle(PersonalPlanStyle.berry)
+                        .frame(maxWidth: .infinity, minHeight: 44)
+                        .disabled(saving)
+                        .accessibilityIdentifier("pipo.flex.v2.editPlan")
+                }
+            } else {
+                PersonalPlanActions(back: onBack, title: saving ? "Saving…" : "Start saving plan",
+                                    dimmed: saving, action: { saving = true })
+            }
         }
         .disabled(saving || createdGoalID != nil)
         .task(id: saving) {
@@ -44,8 +64,16 @@ struct ReviewPlanView: View {
         }
         .accessibilityHidden(createdGoalID != nil)
         .overlay {
-            if let createdGoalID {
+            if let createdGoalID, plan.rhythm != .flexible {
                 confirmation(goalID: createdGoalID)
+            }
+        }
+        .fullScreenCover(isPresented: Binding(
+            get: { createdGoalID != nil && plan.rhythm == .flexible },
+            set: { _ in }
+        )) {
+            if let goalID = createdGoalID {
+                flexiblePlanReady(goalID: goalID)
             }
         }
         .onAppear(perform: syncEntitlements)
@@ -69,6 +97,156 @@ struct ReviewPlanView: View {
     }
     private func money(_ value: Double) -> String {
         PipoGoalCurrency.display(value, code: plan.currencyCode)
+    }
+
+    // Approved FLEX V2/02: goal date is aspirational; flexible rhythm has
+    // no required deposit days, no scheduled contributions and no streak.
+    private var flexibleReview: some View {
+        VStack(alignment: .leading, spacing: 18) {
+            VStack(alignment: .leading, spacing: 6) {
+                Text("Review your plan")
+                    .font(.system(size: 30, weight: .bold, design: .rounded))
+                    .accessibilityAddTraits(.isHeader)
+                Text("Make sure this plan feels doable.")
+                    .font(.subheadline)
+                    .foregroundStyle(PersonalPlanStyle.muted)
+                Text("STEP 5 OF 5  /  PERSONAL GOAL")
+                    .font(.caption2.bold())
+                    .foregroundStyle(PersonalPlanStyle.berry)
+                    .padding(.top, 10)
+            }
+            Divider()
+            VStack(alignment: .leading, spacing: 5) {
+                Text(plan.title.uppercased())
+                    .font(.caption.bold())
+                    .foregroundStyle(PersonalPlanStyle.muted)
+                Text(money(plan.targetAmount))
+                    .font(.system(size: 32, weight: .bold, design: .rounded))
+                    .minimumScaleFactor(0.75)
+                    .lineLimit(1)
+                    .accessibilityIdentifier("pipo.flex.v2.reviewTarget")
+                Text("Your target amount")
+                    .font(.caption)
+                    .foregroundStyle(PersonalPlanStyle.muted)
+            }
+            VStack(spacing: 0) {
+                flexibleReviewRow("Plan type", value: "Personal goal")
+                Divider()
+                flexibleReviewRow("Goal timeline", value: dateLabel(plan.targetDate))
+                Divider()
+                flexibleReviewRow("Saving rhythm", value: "Flexible")
+                Divider()
+                flexibleReviewRow("Saving dates", value: "Not scheduled")
+            }
+            .accessibilityIdentifier("pipo.flex.v2.reviewRows")
+            PersonalPlanNote(
+                title: "Flexible means no required saving day.",
+                message: "The goal timeline above is separate from your saving rhythm."
+            )
+            Text("Pipo tracks money you have saved elsewhere. No money is moved or automatically deposited.")
+                .font(.caption)
+                .foregroundStyle(PersonalPlanStyle.muted)
+                .fixedSize(horizontal: false, vertical: true)
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+    }
+
+    private func flexibleReviewRow(_ label: String, value: String) -> some View {
+        HStack(alignment: .firstTextBaseline, spacing: 8) {
+            Text(label)
+                .foregroundStyle(PersonalPlanStyle.muted)
+            Spacer(minLength: 8)
+            Text(value)
+                .fontWeight(.semibold)
+                .foregroundStyle(PersonalPlanStyle.ink)
+                .multilineTextAlignment(.trailing)
+                .fixedSize(horizontal: false, vertical: true)
+        }
+        .font(.subheadline)
+        .padding(.vertical, 14)
+        .accessibilityElement(children: .combine)
+    }
+
+    // Approved FLEX V2/03: create succeeds first; the first manual
+    // contribution is optional and cannot be mistaken for an auto-deposit.
+    private func flexiblePlanReady(goalID: UUID) -> some View {
+        ScrollView {
+            VStack(alignment: .leading, spacing: 24) {
+                Text("YOUR PERSONAL GOAL")
+                    .font(.caption2.bold())
+                    .foregroundStyle(PersonalPlanStyle.berry)
+                VStack(alignment: .leading, spacing: 7) {
+                    Text("\(plan.title) is ready.")
+                        .font(.system(size: 30, weight: .bold, design: .rounded))
+                        .fixedSize(horizontal: false, vertical: true)
+                        .accessibilityAddTraits(.isHeader)
+                    Text("Save at your own pace.")
+                        .font(.subheadline)
+                        .foregroundStyle(PersonalPlanStyle.muted)
+                }
+                Image("PipoV4Joy")
+                    .resizable()
+                    .scaledToFit()
+                    .frame(maxWidth: .infinity)
+                    .frame(height: 156)
+                    .accessibilityHidden(true)
+                VStack(alignment: .leading, spacing: 9) {
+                    Text("YOUR NEW GOAL")
+                        .font(.caption2.bold())
+                        .foregroundStyle(PersonalPlanStyle.berry)
+                    Text(plan.title)
+                        .font(.title3.bold())
+                    Text("\(money(0)) recorded / \(money(plan.targetAmount))")
+                        .font(.subheadline)
+                        .fixedSize(horizontal: false, vertical: true)
+                    Text("Flexible · no saving days to miss")
+                        .font(.caption)
+                        .foregroundStyle(PersonalPlanStyle.muted)
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .padding(18)
+                .background(PersonalPlanStyle.blush, in: RoundedRectangle(cornerRadius: 18))
+                .accessibilityIdentifier("pipo.flex.v2.readySummary")
+                VStack(alignment: .leading, spacing: 8) {
+                    Text("Have you already set money aside?")
+                        .font(.headline)
+                    Text("You can record it now, or come back whenever you want.")
+                        .font(.subheadline)
+                        .foregroundStyle(PersonalPlanStyle.muted)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+                Text("Pipo only tracks what you record. No money moves.")
+                    .font(.footnote)
+                    .foregroundStyle(PersonalPlanStyle.muted)
+            }
+            .padding(.horizontal, 24)
+            .padding(.top, 28)
+            .padding(.bottom, 24)
+            .frame(maxWidth: 520)
+            .frame(maxWidth: .infinity)
+        }
+        .safeAreaInset(edge: .bottom, spacing: 0) {
+            VStack(spacing: 8) {
+                Button("Record first saving") { onRecordFirst(goalID) }
+                    .buttonStyle(PersonalPlanPrimaryStyle())
+                    .accessibilityIdentifier("pipo.flex.v2.recordFirst")
+                Button("Not now, view my goal") { onCreated(goalID) }
+                    .font(.subheadline.weight(.semibold))
+                    .foregroundStyle(PersonalPlanStyle.berry)
+                    .frame(maxWidth: .infinity, minHeight: 44)
+                    .accessibilityIdentifier("pipo.flex.v2.notNow")
+            }
+            .padding(.horizontal, 24)
+            .padding(.top, 12)
+            .padding(.bottom, 8)
+            .frame(maxWidth: 520)
+            .frame(maxWidth: .infinity)
+            .background(.white)
+        }
+        .foregroundStyle(PersonalPlanStyle.ink)
+        .background(.white)
+        .preferredColorScheme(.light)
+        .interactiveDismissDisabled()
     }
 
     private var goalCard: some View {
