@@ -39,6 +39,7 @@ struct DashboardView: View {
     @State private var selectedPage = DashboardPage.home
     @State private var selectedGroupGoal: PersonalGoal?
     @State private var showingAchievements = false
+    @State private var selectedJourneyRecord: SavingTransaction?
     @State private var showingPrivacyOverview = false
     @State private var mascotReply: String?
     @State private var goalToRecord: PersonalGoal?
@@ -140,7 +141,6 @@ struct DashboardView: View {
                             pageHeading("Saving goals", subtitle: "Every goal has its own pace.")
                             goalsPage
                         case .journey:
-                            pageHeading("Your journey", subtitle: "The progress you've recorded.")
                             journeyPage
                         case .profile:
                             pageHeading("Your space", subtitle: "A little overview of your Pipo account.")
@@ -189,6 +189,7 @@ struct DashboardView: View {
             isSubmittingSaving = false
             selectedGroupGoal = nil
             showingAchievements = false
+            selectedJourneyRecord = nil
             showingPrivacyOverview = false
             completedSavingReward = nil
             mascotReply = nil
@@ -214,6 +215,15 @@ struct DashboardView: View {
         }
         .sheet(isPresented: $showingAchievements) {
             achievementsSheet
+        }
+        .sheet(item: $selectedJourneyRecord) { record in
+            if AccountScope.visibleTransactions(
+                [record], goals: ownedGoals, userID: authStateManager.userID
+            ).contains(where: { $0.id == record.id }) {
+                journeyRecordDetail(record)
+            } else {
+                ContentUnavailableView("Entry unavailable", systemImage: "lock.shield")
+            }
         }
         .sheet(isPresented: $showingPrivacyOverview) {
             privacyOverviewSheet
@@ -883,23 +893,59 @@ struct DashboardView: View {
     }
 
     private var journeyPage: some View {
-        VStack(alignment: .leading, spacing: 16) {
-            PipoMilestonesDCard(
-                earnedIDs: Set(currentProfile?.unlockedBadgeIds ?? []),
-                onOpenCollection: { showingAchievements = true }
-            )
-            Text("RECENT ACTIVITY")
-                .font(.caption.bold())
-                .foregroundStyle(PipoTheme.muted)
-            PipoActivityHistoryDCard(
-                transactions: ownedTransactions,
-                titleForGoal: { goalID in
-                    ownedGoals.first(where: { $0.id == goalID })?.title ?? "Saving entry"
-                },
-                currencyForGoal: { goalID in
-                    ownedGoals.first(where: { $0.id == goalID })?.effectiveCurrencyCode ?? "IDR"
+        PipoJourneyWaveAView(
+            goals: ownedGoals, transactions: ownedTransactions,
+            ownerID: authStateManager.userID,
+            earnedBadgeIDs: Set(currentProfile?.unlockedBadgeIds ?? []),
+            onCreateGoal: onCreateGoal,
+            onOpenGoal: { openGoal($0) },
+            onOpenBadges: { showingAchievements = true },
+            onOpenRecord: { selectedJourneyRecord = $0 }
+        )
+    }
+
+    private func journeyRecordDetail(_ transaction: SavingTransaction) -> some View {
+        NavigationStack {
+            if let goal = ownedGoals.first(where: { $0.id == transaction.goalId }),
+               AccountScope.visibleTransactions(
+                   [transaction], goals: ownedGoals, userID: authStateManager.userID
+               ).contains(where: { $0.id == transaction.id }) {
+                let code = transaction.currencyCode ?? goal.effectiveCurrencyCode
+                ScrollView {
+                    VStack(alignment: .leading, spacing: 17) {
+                        Text("Saved manually")
+                            .font(.caption.bold())
+                            .foregroundStyle(PipoTheme.deepPink)
+                        Text(PipoGoalCurrency.display(
+                            transaction.amount, code: code,
+                            exactMinor: transaction.amountMinorUnits
+                        ))
+                        .font(.largeTitle.bold())
+                        .foregroundStyle(PipoTheme.ink)
+                        .accessibilityIdentifier("pipo.journey.recordDetail.amount")
+                        LabeledContent("Goal", value: goal.title)
+                        LabeledContent("Date", value: transaction.date.formatted(
+                            date: .long, time: .shortened
+                        ))
+                        LabeledContent("Recorded XP", value: "\(transaction.xpEarned)")
+                        Text("This is a saving you recorded yourself. Pipo doesn't verify or move money.")
+                            .font(.footnote)
+                            .foregroundStyle(PipoTheme.muted)
+                    }
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .padding(22)
                 }
-            )
+                .navigationTitle("Saving detail")
+                .navigationBarTitleDisplayMode(.inline)
+                .toolbar {
+                    ToolbarItem(placement: .confirmationAction) {
+                        Button("Done") { selectedJourneyRecord = nil }
+                            .accessibilityIdentifier("pipo.journey.recordDetail.done")
+                    }
+                }
+            } else {
+                ContentUnavailableView("Entry unavailable", systemImage: "lock.shield")
+            }
         }
     }
 
