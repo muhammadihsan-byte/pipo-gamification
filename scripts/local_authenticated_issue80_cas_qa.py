@@ -52,6 +52,27 @@ def read_goal(base: str, anon: str, token: str, goal: str):
     require(status == 200 and isinstance(rows, list), "Signed goal SELECT failed")
     return rows
 
+def legacy_goal_upsert(base: str, anon: str, token: str, owner: str,
+                       goal: str, amount: int, date: str):
+    """The EXACT old client write shape: ON CONFLICT id DO UPDATE.
+
+    This intentionally demonstrates both old-version compatibility before
+    cutover and fail-closed denial after cutover. LOCAL SIGNED AUTH ONLY.
+    """
+    return api(
+        base, anon, "/rest/v1/saving_goals?on_conflict=id",
+        method="POST", bearer=token,
+        prefer="resolution=merge-duplicates,return=representation",
+        body=[{
+            "id": goal, "user_id": owner, "title": "Legacy device goal",
+            "category": "trip", "target_amount": amount,
+            "currency_code": "IDR", "target_date": date,
+            "rhythm": "weekly", "preferred_saving_day": 2,
+            "planned_contribution_override": 25,
+        }],
+    )
+
+
 def main() -> None:
     cfg = local_stack_config()  # Refuses any non-loopback API/DB before I/O.
     base, db, anon, service = (
@@ -59,23 +80,91 @@ def main() -> None:
     )
     loopback_only(base, "API_URL")
     loopback_only(db, "DB_URL")
-    # This project runs strictly in a disposable Supabase CLI stack.
-    for path in (
-        "supabase/proposals/issue_29_immutable_contribution_acl_REVIEW_ONLY.sql",
-        "supabase/proposals/issue_80_plan_revision_cas_REVIEW_ONLY.sql",
-    ):
-        run_sql(db, path, file=True)
-    run_sql(db, "NOTIFY pgrst, 'reload schema'")
-    time.sleep(1.0)
-
     alice, a_jwt = make_user(
         base, service, anon, "charlie+casqa@local.test"
     )
     bob, b_jwt = make_user(
         base, service, anon, "dana+casqa@local.test"
     )
-    goal = str(uuid.uuid4())
     deadline = "2030-01-01T00:00:00+00:00"
+
+    # PHASE 0: real signed old-version write contract against the deployed
+    # SCHEMA SHAPE (before the review-only #29 and #81 ACL migrations).
+    # The legacy client silently overwrites the same account's stale plan.
+    # Observe it explicitly rather than calling a green CAS test proof that
+    # old installed apps will keep syncing after their UPDATE is revoked.
+    legacy_goal = str(uuid.uuid4())
+    code, initial = legacy_goal_upsert(
+        base, anon, a_jwt, alice, legacy_goal, 300, deadline
+    )
+    require(code in (200, 201) and len(initial) == 1
+            and initial[0]["user_id"] == alice,
+            f"Legacy old-client create not compatible before ACL: {code} {initial}")
+    code, modified = legacy_goal_upsert(
+        base, anon, a_jwt, alice, legacy_goal, 320, deadline
+    )
+    require(code in (200, 201) and len(modified) == 1
+            and Decimal(str(modified[0]["target_amount"])) == Decimal("320"),
+            "Could not demonstrate legacy same-owner UPSERT overwrite before cutover")
+    code, foreign = legacy_goal_upsert(
+        base, anon, b_jwt, bob, legacy_goal, 990, deadline
+    )
+    require(code >= 400,
+            "Legacy RLS allowed a foreign account to overwrite a goal")
+    print("PHASE 0 PASS: real signed legacy UPSERT creates and updates own goal "
+          "(unsafe last-writer-wins), but never a foreign account")
+
+    # PHASE 1: immutable ledger ACL #29 MUST NOT break legacy GOAL upserts.
+    # This is a local-only compatibility window, not a production permission.
+    run_sql(
+        db, "supabase/proposals/issue_29_immutable_contribution_acl_REVIEW_ONLY.sql",
+        file=True
+    )
+    run_sql(db, "NOTIFY pgrst, 'reload schema'")
+    time.sleep(1.0)
+    code, compatible = legacy_goal_upsert(
+        base, anon, a_jwt, alice, legacy_goal, 340, deadline
+    )
+    require(code in (200, 201) and len(compatible) == 1
+            and Decimal(str(compatible[0]["target_amount"])) == Decimal("340"),
+            f"Legacy goal cloud backup broke too early after #29 ACL: {code} {compatible}")
+    print("PHASE 1 PASS: #29 ACL preserves legacy goal UPSERT pending "
+          "an approved signed bridge")
+
+    # PHASE 2: #81 CAS migration atomically REVOKES direct goal UPDATE.
+    # Old installed binaries WILL stop cloud goal UPSERT. No automatic
+    # production cutover is allowed until supported-version/adoption policy.
+    run_sql(
+        db, "supabase/proposals/issue_80_plan_revision_cas_REVIEW_ONLY.sql",
+        file=True
+    )
+    run_sql(db, "NOTIFY pgrst, 'reload schema'")
+    time.sleep(1.0)
+    legacy_rows = read_goal(base, anon, a_jwt, legacy_goal)
+    require(len(legacy_rows) == 1
+            and legacy_rows[0]["plan_revision"] == 0
+            and Decimal(str(legacy_rows[0]["target_amount"])) == Decimal("340"),
+            "Legacy existing goal was not backfilled at rev 0")
+    code, denied_old = legacy_goal_upsert(
+        base, anon, a_jwt, alice, legacy_goal, 999, deadline
+    )
+    require(code >= 400 and isinstance(denied_old, dict)
+            and denied_old.get("code") == "42501",
+            f"Legacy goal UPSERT was not denied after CAS: {code} {denied_old}")
+    after_denial = read_goal(base, anon, a_jwt, legacy_goal)
+    require(after_denial == legacy_rows,
+            "Rejected legacy write mutated the existing goal or revision")
+    code, updated_legacy = rpc(
+        base, anon, a_jwt, legacy_goal, str(uuid.uuid4()), 0, 350, deadline
+    )
+    require(code == 200 and isinstance(updated_legacy, dict)
+            and updated_legacy.get("status") == "applied"
+            and updated_legacy.get("accepted_revision") == 1,
+            f"Existing legacy goal could not transition via CAS: {code} {updated_legacy}")
+    print("PHASE 2 PASS: existing legacy goal starts at rev 0; old UPSERT "
+          "is denied without partial data loss; owner CAS advances revision")
+
+    goal = str(uuid.uuid4())
     status, created = api(
         base, anon, "/rest/v1/saving_goals", method="POST",
         bearer=a_jwt, prefer="return=representation",
@@ -176,7 +265,8 @@ def main() -> None:
             {Decimal("450"), Decimal("470")},
             "Parallel winner amount was not preserved")
     require(read_goal(base, anon, b_jwt, goal) == [], "Bob can see Alice's goal")
-    print("PASS: signed local Auth A/B REST + RLS, CAS replay, stale rejection, "
+    print("PASS: signed local Auth A/B REST + RLS, legacy pre/post cutover "
+          "compatibility, migration of old goal to CAS, replay, stale rejection, "
           "direct-update denial, immutable contribution XP and parallel CAS")
 
 if __name__ == "__main__":
