@@ -962,7 +962,7 @@ final class PipoJourneyWaveAProjectionTests: XCTestCase {
         let sameDate = date(2026, 11, 20)
         var rows = (0..<14).map { i in
             entry(goal: g, owner: owner,
-                  on: sameDate.addingTimeInterval(Double(i)))
+                  on: sameDate.addingTimeInterval(Double(i + 1)))
         }
         let lower = UUID(uuidString: "00000000-0000-0000-0000-000000000001")!
         let higher = UUID(uuidString: "ffffffff-ffff-ffff-ffff-ffffffffffff")!
