@@ -10,7 +10,6 @@ on:
       - ready_for_review
       - reopened
       - synchronize
-      - labeled
   workflow_dispatch:
     inputs:
       validation_mode:
@@ -47,13 +46,7 @@ jobs:
     if: >-
       github.event_name == 'workflow_dispatch' ||
       github.event_name == 'push' ||
-      (github.event_name == 'pull_request' && github.event.pull_request.draft == false) ||
-      (github.event_name == 'pull_request' &&
-       github.event.action == 'labeled' &&
-       github.event.label.name == 'bug' &&
-       github.event.pull_request.number == 101 &&
-       github.event.pull_request.draft == true &&
-       github.head_ref == 'fix/pipo-offline-visual-layout-20261123')
+      (github.event_name == 'pull_request' && github.event.pull_request.draft == false)
     runs-on: macos-15
     timeout-minutes: 45
     steps:
@@ -63,20 +56,6 @@ jobs:
           # Pin one authorized QA run to this exact candidate, never the
           # synthetic PR merge SHA or mutable upstream main.
           ref: ${{ github.event.pull_request.head.sha || github.sha }}
-
-      - name: Verify PR #101 exact-head native QA target
-        if: >-
-          github.event_name == 'pull_request' &&
-          github.event.action == 'labeled' &&
-          github.event.label.name == 'bug' &&
-          github.event.pull_request.number == 101
-        env:
-          EXPECTED_SHA: ${{ github.event.pull_request.head.sha }}
-        shell: bash
-        run: |
-          set -euo pipefail
-          test "$(git rev-parse HEAD)" = "$EXPECTED_SHA"
-          echo "EXACT_NATIVE_QA_HEAD=$EXPECTED_SHA"
 
       - name: Detect Xcode
         run: |
