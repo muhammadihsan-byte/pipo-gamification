@@ -64,15 +64,14 @@ struct AuthView: View {
             brandHeader
             Spacer(minLength: 22)
             PipoMascotView(companion: .idle)
+                .accessibilityHidden(true)
                 .frame(height: geometrySafeHeroHeight)
                 .frame(maxWidth: .infinity)
                 .overlay(alignment: .topTrailing) {
                     authSpeechBubble("Ready for a little win?")
                         .padding(.top, 8)
                 }
-                .accessibilityElement(children: .ignore)
-                .accessibilityLabel("Pipo is cheering you on")
-            Text("SMALL STEPS. BIG DREAMS.")
+             Text("SMALL STEPS. BIG DREAMS.")
                 .font(.caption2.weight(.heavy))
                 .foregroundStyle(PipoTheme.cardAccentReadable)
                 .padding(.top, 18)
@@ -141,15 +140,13 @@ struct AuthView: View {
                 brandName
             }
             PipoMascotView(companion: .reassurance)
+                .accessibilityHidden(true)
                 .frame(height: dynamicTypeSize.isAccessibilitySize ? 136 : 160)
                 .frame(maxWidth: .infinity)
                 .overlay(alignment: .topTrailing) {
                     authSpeechBubble(page == .signUp ? "I've got your back!" : "Missed you!")
                 }
-                .accessibilityElement(children: .ignore)
-                .accessibilityLabel(page == .signUp
-                    ? "Pipo is here to help you join" : "Pipo welcomes you back")
-                .padding(.top, 8)
+                 .padding(.top, 8)
             Text(page == .signUp ? "Let's get started!" : "You're back!")
                 .font(.system(.title, design: .rounded, weight: .heavy))
                 .foregroundStyle(PipoTheme.cardInk)
@@ -264,6 +261,7 @@ struct AuthView: View {
                         }
                         .font(.caption.weight(.medium))
                         .foregroundStyle(PipoTheme.cardAccentReadable)
+                        .frame(minHeight: 44)
                         .accessibilityIdentifier("pipo.auth.forgotPassword")
                     }
                 }
