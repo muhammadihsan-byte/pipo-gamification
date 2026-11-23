@@ -21,15 +21,17 @@ IOS_CI = source(".github/workflows/ios-build.yml")
 
 
 class OfflineLayoutCollisionContract(unittest.TestCase):
-    def test_manage_plan_footer_participates_in_scroll_safe_area(self):
+    def test_manage_plan_footer_is_bounded_by_compact_viewport(self):
         part = MANAGE.split("struct PipoManagePlanV2Sheet: View {", 1)[1]
         body = part.split("    private var topBar:", 1)[0]
         self.assertIn("GeometryReader { geometry in", body)
         self.assertIn("ScrollView {", body)
-        self.assertIn(".safeAreaInset(edge: .bottom, spacing: 0) {", body)
         self.assertIn("footer(horizontal: horizontal)", body)
+        self.assertIn(".frame(width: geometry.size.width,", body)
+        self.assertIn("height: geometry.size.height, alignment: .top)", body)
+        self.assertIn("footer(horizontal: horizontal)\n                        .padding(.bottom, 12)", body)
         self.assertNotIn("compactBottomReserve", body)
-        self.assertNotIn(".frame(width: geometry.size.width", body)
+        self.assertNotIn(".safeAreaInset(edge: .bottom, spacing: 0)", body)
         self.assertNotIn(".padding(.bottom, compactBottomReserve)", body)
         self.assertNotIn(".layoutPriority(1)", body)
         self.assertIn(".scrollDismissesKeyboard(.interactively)", body)
@@ -37,7 +39,7 @@ class OfflineLayoutCollisionContract(unittest.TestCase):
     def test_manage_plan_disclosures_scroll_not_cover_footer(self):
         body = MANAGE.split("struct PipoManagePlanV2Sheet: View {", 1)[1]
         self.assertEqual(body.count('Preview only · Changes are not saved'), 1)
-        scroll_content = body.split("ScrollView {", 1)[1].split(".safeAreaInset(edge: .bottom", 1)[0]
+        scroll_content = body.split("ScrollView {", 1)[1].split(".scrollDismissesKeyboard(.interactively)", 1)[0]
         self.assertIn("Preview only · Changes are not saved", scroll_content)
         footer = body.split("private func footer(horizontal: CGFloat)", 1)[1]
         self.assertNotIn("Preview only · Changes are not saved", footer)
