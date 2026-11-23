@@ -427,3 +427,44 @@ enum AchievementEngine {
         return unlocked
     }
 }
+
+/// #72: Presentation gate only. Called after SwiftData has successfully committed
+/// the original saving and *before* requesting a one-shot milestone sheet.
+/// A first saving for this goal in a scheduled period is not equivalent to the
+/// first-ever saving badge on the whole account.
+@MainActor
+enum PipoFirstSparkEligibility {
+    static func forCommittedFirstPeriod(
+        _ transaction: SavingTransaction,
+        goal: PersonalGoal,
+        ownerID: UUID?,
+        priorTransactions: [SavingTransaction],
+        asOf now: Date = .now,
+        calendar: Calendar = .current
+    ) -> Bool {
+        guard let ownerID,
+              goal.ownerUserID == ownerID,
+              transaction.userID == ownerID,
+              transaction.goalId == goal.id,
+              !goal.isGroupGoal, goal.rhythm != .flexible,
+              transaction.amount.isFinite, transaction.amount > 0,
+              transaction.xpEarned > 0,
+              transaction.date <= now,
+              SavingConsistency.periodIndex(
+                  for: transaction.date, rhythm: goal.rhythm,
+                  startDate: goal.startDate, calendar: calendar
+              ) != nil
+        else { return false }
+
+        // An imported or retried UUID is not a fresh event. A second saving
+        // on an existing goal must never replay First Spark, even if it is in
+        // another month or a different account owns an unrelated goal.
+        guard Set(priorTransactions.map(\.id)).count == priorTransactions.count,
+              !priorTransactions.contains(where: { $0.id == transaction.id })
+        else { return false }
+
+        return !priorTransactions.contains {
+            $0.goalId == goal.id && $0.userID == ownerID && $0.amount > 0
+        }
+    }
+}

@@ -22,6 +22,57 @@ enum PipoMascotState: Equatable, Sendable {
     }
 }
 
+// #71: Canonical Figma Performance Kit V1.3 pose identifiers. A source pose
+// is NOT a runtime image until a verified export is included in the bundle.
+// Never substitute archived side/rear studies for these approved front poses.
+enum PipoV4ApprovedPose: String, CaseIterable, Sendable {
+    case idle = "1527:7055"
+    case sparkNoticed = "1527:7189"
+    case curiousLean = "1527:7323"
+    case reachSpark = "1527:7457"
+    case hugSpark = "1527:7591"
+    case presentSpark = "1527:7725"
+    case miniJump = "1527:7859"
+    case handsUp = "1527:7993"
+    case proudBest = "1527:8127"
+    case gentleRecovery = "1527:8261"
+    case calmRest = "1527:8395"
+    case hopefulLookUp = "1527:8529"
+
+    // Only images confirmed in the existing native bundle may be referenced.
+    // Remaining source poses require independent, licensed Figma exports and
+    // native size/visual QA before being mapped to asset names.
+    var bundledStillName: String? {
+        switch self {
+        case .idle: "PipoV4Neutral"
+        case .handsUp: "PipoV4Joy" // contextual celebration still; not an exact pose export
+        default: nil
+        }
+    }
+}
+
+/// Presentation only. Caller must supply an authenticated, persisted event;
+/// this mapping never infers a reward or awards XP from a visual state.
+enum PipoV4Reaction: Sendable {
+    case resting
+    case noticedFirstEligiblePeriod
+    case earnedMilestone
+    case supportiveRecovery
+
+    var approvedPose: PipoV4ApprovedPose {
+        switch self {
+        case .resting: .idle
+        case .noticedFirstEligiblePeriod: .sparkNoticed
+        case .earnedMilestone: .handsUp
+        case .supportiveRecovery: .gentleRecovery
+        }
+    }
+
+    var safeBundledStillName: String {
+        approvedPose.bundledStillName ?? "PipoV4Neutral"
+    }
+}
+
 @MainActor
 struct PipoMascotView: View {
     enum CompanionState {
@@ -81,7 +132,7 @@ struct PipoMascotView: View {
                     .accessibilityLabel("Greet Pipo")
                     .accessibilityIdentifier("pipo.greet")
                 } else if companion == .celebration {
-                    Image("PipoV4Joy")
+                    Image(PipoV4Reaction.earnedMilestone.safeBundledStillName)
                         .resizable()
                         .scaledToFit()
                         .scaleEffect(reduceMotion ? 1 : (didPresentJoy ? 1 : 0.94))
@@ -112,7 +163,7 @@ struct PipoMascotView: View {
     }
 
     private var neutralStill: some View {
-        Image("PipoV4Neutral").resizable().scaledToFit()
+        Image(PipoV4Reaction.resting.safeBundledStillName).resizable().scaledToFit()
     }
 
     // A tap is a one-shot event layered over the current idle pose.
