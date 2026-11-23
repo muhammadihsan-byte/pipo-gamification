@@ -862,3 +862,167 @@ final class GamificationManagerTests: XCTestCase {
         return components.date!
     }
 }
+
+
+// #93 / Wave A: pure, read-only Journey projection regressions. These tests
+// deliberately do not unlock badges, write SwiftData, or invent event dates.
+@MainActor
+final class PipoJourneyWaveAProjectionTests: XCTestCase {
+    private var utc: Calendar {
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = TimeZone(secondsFromGMT: 0)!
+        return calendar
+    }
+
+    private func date(_ year: Int = 2026, _ month: Int, _ day: Int,
+                      hour: Int = 12) -> Date {
+        var components = DateComponents()
+        components.calendar = utc
+        components.timeZone = utc.timeZone
+        components.year = year
+        components.month = month
+        components.day = day
+        components.hour = hour
+        return components.date!
+    }
+
+    private func goal(owner: UUID?, code: String = "IDR") -> PersonalGoal {
+        PersonalGoal(
+            title: "Actual saving plan", category: .other,
+            targetAmount: 1_000, currencyCode: code,
+            startDate: date(2026, 10, 1),
+            targetDate: date(2030, 1, 1),
+            ownerUserID: owner
+        )
+    }
+
+    private func entry(
+        goal: PersonalGoal, owner: UUID?, on date: Date,
+        code: String? = nil, minor: Int64? = nil, amount: Double = 100,
+        id: UUID = UUID()
+    ) -> SavingTransaction {
+        SavingTransaction(
+            id: id, goalId: goal.id, amount: amount,
+            amountMinorUnits: minor, currencyCode: code,
+            xpEarned: 300, date: date, userID: owner
+        )
+    }
+
+    func testOwnerIsolationQuarantinesOwnerlessAndForeignGoalEntries() {
+        let alice = UUID()
+        let bob = UUID()
+        let a = goal(owner: alice)
+        let b = goal(owner: bob)
+        let ownerless = goal(owner: nil)
+        let real = entry(goal: a, owner: alice, on: date(2026, 11, 7))
+        let forged = entry(goal: b, owner: alice, on: date(2026, 11, 6))
+        let foreign = entry(goal: b, owner: bob, on: date(2026, 11, 5))
+        let unowned = entry(goal: ownerless, owner: alice, on: date(2026, 11, 4))
+        let missingOwner = entry(goal: a, owner: nil, on: date(2026, 11, 3))
+        let records = PipoJourneyProjection.entries(
+            goals: [a, b, ownerless],
+            transactions: [real, real, forged, foreign, unowned, missingOwner],
+            ownerID: alice, calendar: utc
+        )
+        XCTAssertEqual(records.map(\.id), [real.id],
+                       "Repeated UUID, cross-account and ownerless history must never appear")
+        XCTAssertEqual(PipoJourneyProjection.entries(
+            goals: [a, b], transactions: [real], ownerID: nil,
+            calendar: utc
+        ).count, 0)
+    }
+
+    func testMonthlyFilterUsesLocalCalendarMonthNotThirtyDays() {
+        let owner = UUID()
+        let g = goal(owner: owner)
+        let oct = entry(goal: g, owner: owner, on: date(2026, 10, 31, hour: 23))
+        let nov = entry(goal: g, owner: owner, on: date(2026, 11, 1, hour: 0))
+        let now = date(2026, 11, 23)
+        let rows = [oct, nov]
+        XCTAssertEqual(PipoJourneyProjection.entries(
+            goals: [g], transactions: rows, ownerID: owner,
+            period: .month, now: now, calendar: utc
+        ).map(\.id), [nov.id])
+        XCTAssertEqual(PipoJourneyProjection.entries(
+            goals: [g], transactions: rows, ownerID: owner,
+            period: .allTime, now: now, calendar: utc
+        ).count, 2)
+        var la = Calendar(identifier: .gregorian)
+        la.timeZone = TimeZone(identifier: "America/Los_Angeles")!
+        XCTAssertFalse(PipoJourneyPeriod.month.contains(
+            date(2026, 11, 1, hour: 6), now: now, calendar: la
+        ), "October local event must not count as November in LA")
+        XCTAssertTrue(PipoJourneyPeriod.month.contains(
+            date(2026, 11, 1, hour: 9), now: now, calendar: la
+        ))
+    }
+
+    func testAllTimeIncludesMoreThanTwelveEventsAndStableTieOrder() {
+        let owner = UUID(), g = goal(owner: owner)
+        let sameDate = date(2026, 11, 20)
+        var rows = (0..<14).map { i in
+            entry(goal: g, owner: owner,
+                  on: sameDate.addingTimeInterval(Double(i + 1)))
+        }
+        let lower = UUID(uuidString: "00000000-0000-0000-0000-000000000001")!
+        let higher = UUID(uuidString: "ffffffff-ffff-ffff-ffff-ffffffffffff")!
+        rows.append(entry(goal: g, owner: owner, on: sameDate, id: higher))
+        rows.append(entry(goal: g, owner: owner, on: sameDate, id: lower))
+        let result = PipoJourneyProjection.entries(
+            goals: [g], transactions: rows, ownerID: owner,
+            period: .allTime, calendar: utc
+        )
+        XCTAssertEqual(result.count, 16, "All Time must not reuse prefix(12)")
+        XCTAssertEqual(result.suffix(2).map(\.id), [lower, higher])
+        let groups = PipoJourneyProjection.months(result, calendar: utc)
+        XCTAssertEqual(groups.count, 1)
+        XCTAssertEqual(groups[0].entries.count, 16)
+    }
+
+    func testMultiCurrencyNeverCreatesSyntheticCombinedBalance() {
+        let owner = UUID()
+        let usd = goal(owner: owner, code: "USD")
+        let idr = goal(owner: owner, code: "IDR")
+        let records = PipoJourneyProjection.entries(
+            goals: [usd, idr],
+            transactions: [
+                entry(goal: usd, owner: owner, on: date(2026, 11, 10),
+                      code: "USD", minor: 1250, amount: 12.5),
+                entry(goal: usd, owner: owner, on: date(2026, 11, 11),
+                      code: "USD", minor: 250, amount: 2.5),
+                entry(goal: idr, owner: owner, on: date(2026, 11, 12),
+                      code: "IDR", minor: 900, amount: 900),
+            ],
+            ownerID: owner, calendar: utc
+        )
+        let totals = PipoJourneyProjection.exactTotals(records)
+        XCTAssertEqual(totals.count, 2)
+        XCTAssertEqual(totals.first(where: { $0.code == "USD" })?.minor, 1500)
+        XCTAssertEqual(totals.first(where: { $0.code == "IDR" })?.minor, 900)
+        XCTAssertEqual(PipoJourneyProjection.totalEarnedXP(records), 900)
+        let broken = entry(goal: usd, owner: owner, on: date(2026, 11, 13),
+                           code: "USD", minor: nil, amount: .nan)
+        let invalid = PipoJourneyProjection.entries(
+            goals: [usd, idr], transactions: [broken] + records.map(\.transaction),
+            ownerID: owner, calendar: utc
+        )
+        XCTAssertTrue(PipoJourneyProjection.exactTotals(invalid).isEmpty,
+                      "Never display a partial or invented total with corrupt rows")
+    }
+
+    func testOwnerFilterAndTimelineNeverAlterActualXPOrBadgeState() {
+        let owner = UUID()
+        let g = goal(owner: owner)
+        let profile = UserProfile(userID: owner, totalXP: 1_500)
+        let savedBadgeIDs = profile.unlockedBadgeIds
+        let transaction = entry(goal: g, owner: owner, on: date(2026, 11, 10))
+        let originalAmount = g.currentAmount
+        _ = PipoJourneyProjection.entries(
+            goals: [g], transactions: [transaction], ownerID: owner,
+            calendar: utc
+        )
+        XCTAssertEqual(g.currentAmount, originalAmount)
+        XCTAssertEqual(profile.totalXP, 1_500)
+        XCTAssertEqual(profile.unlockedBadgeIds, savedBadgeIDs)
+    }
+}
