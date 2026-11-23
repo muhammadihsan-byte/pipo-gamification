@@ -83,6 +83,9 @@ jobs:
           find Pipo PipoTests PipoUITests -type f -name '*.swift' -print0 | xargs -0 swiftc -frontend -parse
           echo "Swift grammar parsed successfully (not native compilation or type checking)"
 
+      - name: Protect safe-area layout against footer and milestone clipping (Linux)
+        run: python3 -m unittest -v scripts/test_offline_layout_collision_guard.py
+
       - name: Compile isolated QA scripts (syntax only)
         run: |
           python3 -m py_compile \
