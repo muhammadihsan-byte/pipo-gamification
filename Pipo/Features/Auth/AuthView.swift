@@ -9,7 +9,11 @@ struct AuthCredentials: Sendable {
 
 @MainActor
 struct AuthView: View {
-    @State private var isSignUp = false
+    private enum Page {
+        case welcome, signIn, signUp
+    }
+
+    @State private var page: Page = .welcome
     @State private var email: String
     @State private var password = ""
     @State private var isPasswordVisible = false
@@ -35,92 +39,159 @@ struct AuthView: View {
     }
 
     var body: some View {
-        ScrollView {
-            VStack(spacing: 20) {
-                brandHeader
-                heroArtwork
-                signInModePicker
-                credentialsForm
-                submitButton
-                if AuthProviderAvailability.socialSignInEnabled {
-                    providerDivider
-                    providerButtons
+        GeometryReader { geometry in
+            ScrollView {
+                VStack(spacing: 0) {
+                    if page == .welcome {
+                        welcomeContent
+                            .frame(minHeight: geometry.size.height)
+                    } else {
+                        credentialsContent
+                    }
                 }
+                .frame(maxWidth: 420)
+                .frame(maxWidth: .infinity)
             }
-            .padding(.horizontal, 24)
-            .padding(.top, 12)
-            .padding(.bottom, 28)
+            .scrollDismissesKeyboard(.interactively)
         }
         .background(.white)
         .preferredColorScheme(.light)
     }
 
+    private var welcomeContent: some View {
+        VStack(spacing: 0) {
+            brandHeader
+            Spacer(minLength: 22)
+            PipoMascotView(companion: .idle)
+                .frame(height: 290)
+                .frame(maxWidth: .infinity)
+            Text("SMALL STEPS. BIG DREAMS.")
+                .font(.caption2.weight(.heavy))
+                .foregroundStyle(PipoTheme.cardAccentReadable)
+                .padding(.top, 18)
+            Text("Saving can be\nfun, actually.")
+                .font(.system(size: 36, weight: .heavy, design: .rounded))
+                .multilineTextAlignment(.center)
+                .foregroundStyle(PipoTheme.cardInk)
+                .fixedSize(horizontal: false, vertical: true)
+                .padding(.top, 10)
+            Text("Meet Pipo. Your tiny cheerleader\nfor the goals that matter.")
+                .font(.subheadline)
+                .multilineTextAlignment(.center)
+                .foregroundStyle(PipoTheme.cardMuted)
+                .fixedSize(horizontal: false, vertical: true)
+                .padding(.top, 10)
+            Spacer(minLength: 28)
+            Button("Get started") { open(.signUp) }
+                .buttonStyle(PrimaryActionButtonStyle())
+                .accessibilityIdentifier("pipo.auth.getStarted")
+            Button("I already have an account") { open(.signIn) }
+                .buttonStyle(AuthOutlineButtonStyle())
+                .padding(.top, 11)
+                .accessibilityIdentifier("pipo.auth.existingAccount")
+            Text("No bank connection needed. Track what you save.")
+                .font(.caption2)
+                .foregroundStyle(PipoTheme.cardMuted)
+                .multilineTextAlignment(.center)
+                .padding(.top, 12)
+        }
+        .padding(.horizontal, 24)
+        .padding(.top, 12)
+        .padding(.bottom, 20)
+    }
+
     private var brandHeader: some View {
         HStack {
-            HStack(spacing: 0) {
-                Text("Pipo")
-                    .font(.system(size: 20, weight: .bold, design: .rounded))
-                    .foregroundStyle(PipoTheme.ink)
-                Text(".")
-                    .font(.system(size: 20, weight: .bold, design: .rounded))
-                    .foregroundStyle(PipoTheme.pink)
-            }
+            brandName
             Spacer()
-            HStack(spacing: 6) {
-                Text("🇺🇸")
-                Text("EN")
-                Image(systemName: "chevron.down")
-                    .font(.caption2.weight(.bold))
-            }
-            .font(.caption.weight(.semibold))
-            .foregroundStyle(PipoTheme.muted)
-            .padding(.horizontal, 12)
-            .padding(.vertical, 8)
-            .background(PipoTheme.cream, in: Capsule())
+            Text("YOUR SAVING BUDDY")
+                .font(.caption2.weight(.heavy))
+                .foregroundStyle(PipoTheme.cardAccentReadable)
         }
-        .frame(height: 42)
+        .frame(minHeight: 44)
     }
 
-    private var heroArtwork: some View {
-        PipoMascotView(state: .idle)
-            .frame(height: 220)
-            .frame(maxWidth: .infinity)
-            .clipShape(RoundedRectangle(cornerRadius: 24))
+    private var brandName: some View {
+        Text("pipo.")
+            .font(.system(size: 25, weight: .heavy, design: .rounded))
+            .foregroundStyle(PipoTheme.cardInk)
     }
 
-    private var signInModePicker: some View {
-        HStack(spacing: 4) {
-            modeButton(title: "Sign In", selected: !isSignUp) {
-                isSignUp = false
-            }
-            modeButton(title: "Sign Up", selected: isSignUp) {
-                isSignUp = true
-            }
-        }
-        .padding(4)
-        .background(PipoTheme.cream, in: RoundedRectangle(cornerRadius: 16))
-    }
-
-    private func modeButton(
-        title: String,
-        selected: Bool,
-        action: @escaping () -> Void
-    ) -> some View {
-        Button(action: action) {
-            Text(title)
-                .font(.subheadline.weight(.semibold))
-                .foregroundStyle(selected ? PipoTheme.ink : PipoTheme.muted)
-                .frame(maxWidth: .infinity)
-                .frame(height: 40)
-                .background {
-                    if selected {
-                        RoundedRectangle(cornerRadius: 12)
-                            .fill(.white)
-                            .shadow(color: PipoTheme.ink.opacity(0.06), radius: 3, y: 1)
-                    }
+    private var credentialsContent: some View {
+        VStack(alignment: .leading, spacing: 0) {
+            HStack {
+                Button {
+                    open(.welcome)
+                } label: {
+                    Label("Back", systemImage: "chevron.left")
+                        .font(.subheadline)
                 }
+                .foregroundStyle(PipoTheme.cardMuted)
+                .frame(minHeight: 44)
+                .accessibilityIdentifier("pipo.auth.back")
+                Spacer()
+                brandName
+            }
+            PipoMascotView(companion: .reassurance)
+                .frame(height: 180)
+                .frame(maxWidth: .infinity)
+                .padding(.top, 8)
+            Text(page == .signUp ? "Let's get started!" : "You're back!")
+                .font(.system(size: 30, weight: .heavy, design: .rounded))
+                .foregroundStyle(PipoTheme.cardInk)
+                .padding(.top, 16)
+            Text(page == .signUp
+                 ? "Big dreams start with little steps."
+                 : "Your saving journey is right here.")
+                .font(.subheadline)
+                .foregroundStyle(PipoTheme.cardMuted)
+                .padding(.top, 4)
+            Text(page == .signUp
+                 ? "Create an account with your email. Pipo tracks what you save; it does not hold or move your money."
+                 : "Welcome back. Continue with the email account you used before.")
+                .font(.subheadline)
+                .foregroundStyle(PipoTheme.cardMuted)
+                .fixedSize(horizontal: false, vertical: true)
+                .padding(.top, 20)
+            credentialsForm
+                .padding(.top, 24)
+            submitButton
+                .padding(.top, 22)
+            if AuthProviderAvailability.socialSignInEnabled {
+                providerDivider.padding(.top, 22)
+                providerButtons.padding(.top, 18)
+            }
+            HStack(spacing: 5) {
+                Text(page == .signUp ? "Already have an account?" : "New around here?")
+                    .foregroundStyle(PipoTheme.cardMuted)
+                Button(page == .signUp ? "Log in" : "Create account") {
+                    open(page == .signUp ? .signIn : .signUp)
+                }
+                .foregroundStyle(PipoTheme.cardAccentReadable)
+                .fontWeight(.bold)
+                .accessibilityIdentifier("pipo.auth.switchMode")
+            }
+            .font(.footnote)
+            .frame(maxWidth: .infinity)
+            .padding(.top, 30)
+            Text(page == .signUp
+                 ? "You may need to confirm your email before signing in."
+                 : "Need account access? Use Forgot Password above.")
+                .font(.caption)
+                .foregroundStyle(PipoTheme.cardMuted)
+                .frame(maxWidth: .infinity)
+                .padding(.top, 25)
         }
-        .buttonStyle(.plain)
+        .padding(.horizontal, 24)
+        .padding(.top, 12)
+        .padding(.bottom, 28)
+    }
+
+    private func open(_ destination: Page) {
+        page = destination
+        password = ""
+        isPasswordVisible = false
+        validationMessage = nil
     }
 
     private var credentialsForm: some View {
@@ -147,18 +218,20 @@ struct AuthView: View {
                         .font(.caption.weight(.semibold))
                         .foregroundStyle(PipoTheme.ink)
                     Spacer()
-                    Button("Forgot Password?") {
-                        let address = email.trimmingCharacters(in: .whitespacesAndNewlines)
-                        guard address.contains("@"), !address.contains(" ") else {
-                            validationMessage = "Enter your email address to receive a reset link."
-                            return
+                    if page == .signIn {
+                        Button("Forgot Password?") {
+                            let address = email.trimmingCharacters(in: .whitespacesAndNewlines)
+                            guard address.contains("@"), !address.contains(" ") else {
+                                validationMessage = "Enter your email address to receive a reset link."
+                                return
+                            }
+                            validationMessage = nil
+                            onForgotPassword(address)
                         }
-                        validationMessage = nil
-                        onForgotPassword(address)
+                        .font(.caption.weight(.medium))
+                        .foregroundStyle(PipoTheme.cardAccentReadable)
+                        .accessibilityIdentifier("pipo.auth.forgotPassword")
                     }
-                    .font(.caption.weight(.medium))
-                    .foregroundStyle(PipoTheme.pink)
-                    .accessibilityIdentifier("pipo.auth.forgotPassword")
                 }
 
                 HStack(spacing: 10) {
@@ -171,7 +244,7 @@ struct AuthView: View {
                             SecureField("Password", text: $password)
                         }
                     }
-                    .textContentType(isSignUp ? .newPassword : .password)
+                    .textContentType(page == .signUp ? .newPassword : .password)
                     Button {
                         isPasswordVisible.toggle()
                     } label: {
@@ -205,11 +278,11 @@ struct AuthView: View {
                 AuthCredentials(
                     email: trimmedEmail,
                     password: password,
-                    isSignUp: isSignUp
+                    isSignUp: page == .signUp
                 )
             )
         } label: {
-            Text(isSignUp ? "CREATE ACCOUNT" : "SIGN IN NOW")
+            Text(page == .signUp ? "Create account" : "Sign in")
         }
         .buttonStyle(PrimaryActionButtonStyle())
     }
@@ -249,6 +322,25 @@ struct AuthView: View {
             }
             .buttonStyle(ProviderButtonStyle())
         }
+    }
+}
+
+@MainActor
+private struct AuthOutlineButtonStyle: ButtonStyle {
+    func makeBody(configuration: Configuration) -> some View {
+        configuration.label
+            .font(.subheadline.weight(.bold))
+            .foregroundStyle(PipoTheme.cardInk)
+            .frame(maxWidth: .infinity)
+            .frame(minHeight: 52)
+            .background(
+                configuration.isPressed ? PipoTheme.cream : .white,
+                in: RoundedRectangle(cornerRadius: 17)
+            )
+            .overlay {
+                RoundedRectangle(cornerRadius: 17)
+                    .strokeBorder(PipoTheme.cardBorder, lineWidth: 1)
+            }
     }
 }
 

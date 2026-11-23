@@ -908,6 +908,18 @@ final class PipoUIRecordingTests: XCTestCase {
         app.launchArguments = ["-pipo-auth-qa"]
         app.launch()
 
+        let getStarted = app.buttons["pipo.auth.getStarted"].firstMatch
+        XCTAssertTrue(getStarted.waitForExistence(timeout: 25))
+        getStarted.tap()
+        XCTAssertTrue(app.buttons["pipo.auth.switchMode"].waitForExistence(timeout: 10),
+                      "Get started must open email account creation")
+        XCTAssertFalse(app.buttons["pipo.auth.forgotPassword"].exists,
+                       "Password recovery belongs to sign-in")
+        app.buttons["pipo.auth.back"].tap()
+        let existingAccount = app.buttons["pipo.auth.existingAccount"].firstMatch
+        XCTAssertTrue(existingAccount.waitForExistence(timeout: 25),
+                      "Welcome must lead to the existing email account")
+        existingAccount.tap()
         let forgot = app.buttons["pipo.auth.forgotPassword"].firstMatch
         XCTAssertTrue(forgot.waitForExistence(timeout: 25),
                       "Email recovery must be available on the sign-in screen")
