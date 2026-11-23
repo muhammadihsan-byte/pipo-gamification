@@ -361,6 +361,9 @@ jobs:
             -derivedDataPath "$RUNNER_TEMP/PipoDerivedData" \
             -resultBundlePath "$RUNNER_TEMP/PipoJourneyWaveAQA.xcresult" \
             -only-testing:PipoUITests/PipoUIRecordingTests/testJourneyWaveAEmptyStatesAndRealHistory \
+            -only-testing:PipoUITests/PipoUIRecordingTests/testReturningDashboardB \
+            -only-testing:PipoUITests/PipoUIRecordingTests/testAllElevenApprovedCardFamilies \
+            -only-testing:PipoUITests/PipoUIRecordingTests/testGlobalV1AccessibilityLabelsAndTargetsAtLargeText \
             CODE_SIGNING_ALLOWED=NO \
             CODE_SIGNING_REQUIRED=NO \
             test 2>&1 | tee validation/pipo-journey-wave-a-qa.log
