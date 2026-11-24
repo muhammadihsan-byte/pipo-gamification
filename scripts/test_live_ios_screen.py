@@ -1,3 +1,4 @@
+import base64
 import http.client
 from http.server import ThreadingHTTPServer
 import threading
@@ -6,10 +7,13 @@ import unittest
 from scripts.live_ios_screen import handler_for
 
 
+FRAME = b"\x89PNG\r\n\x1a\nfixture"
+
+
 class LiveScreenTest(unittest.TestCase):
     def setUp(self):
         self.server = ThreadingHTTPServer(
-            ("127.0.0.1", 0), handler_for(lambda: b"\x89PNG\r\n\x1a\nfixture")
+            ("127.0.0.1", 0), handler_for(lambda: FRAME)
         )
         self.thread = threading.Thread(target=self.server.serve_forever, daemon=True)
         self.thread.start()
@@ -30,9 +34,22 @@ class LiveScreenTest(unittest.TestCase):
         return result
 
     def test_preview_is_read_only(self):
-        status, cache, page = self.request("GET", "/")
-        self.assertEqual((status, cache), (200, "no-store"))
-        self.assertIn(b"read-only live preview", page)
+        connection = http.client.HTTPConnection(
+            "127.0.0.1", self.server.server_address[1], timeout=3
+        )
+        connection.request("GET", "/")
+        response = connection.getresponse()
+        self.assertEqual(response.status, 200)
+        self.assertEqual(response.getheader("Cache-Control"), "no-store")
+        self.assertEqual(response.getheader("Content-Type"), "text/html; charset=utf-8")
+        frames = 0
+        while frames < 2:
+            line = response.fp.readline()
+            self.assertTrue(line)
+            if b"data:image/png;base64," in line:
+                self.assertIn(base64.b64encode(FRAME), line)
+                frames += 1
+        connection.close()
         self.assertTrue(self.request("GET", "/frame.png?t=1")[2].startswith(b"\x89PNG"))
         self.assertEqual(self.request("GET", "/health")[0], 200)
         for method in ("POST", "PUT", "PATCH", "DELETE"):
