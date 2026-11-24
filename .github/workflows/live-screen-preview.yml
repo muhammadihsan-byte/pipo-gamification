@@ -1,0 +1,219 @@
+name: Pipo Live Screen Preview
+
+on:
+  workflow_dispatch:
+    inputs:
+      tour:
+        description: "Which synthetic simulator routes to show"
+        required: true
+        type: choice
+        default: all
+        options:
+          - all
+          - saving
+          - overview
+          - auth
+
+permissions:
+  contents: read
+
+concurrency:
+  group: pipo-live-screen-preview
+  cancel-in-progress: false
+
+jobs:
+  preview:
+    # Workflow dispatch can select a ref. Never run preview on unreviewed code.
+    if: github.ref == 'refs/heads/main'
+    runs-on: macos-15
+    timeout-minutes: 35
+    steps:
+      - name: Check out approved main
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false
+
+      - name: Validate single viewer email
+        env:
+          VIEWER_EMAIL: ${{ secrets.PIPO_PREVIEW_EMAIL }}
+        run: |
+          python3 - <<'PY'
+          import os
+          import re
+          address = os.environ["VIEWER_EMAIL"]
+          if not address:
+              raise SystemExit("Set the PIPO_PREVIEW_EMAIL repository secret first.")
+          if not re.fullmatch(r"[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}", address):
+              raise SystemExit("PIPO_PREVIEW_EMAIL must be one address, without wildcards or commas.")
+          PY
+
+      - name: Select an installed iPhone simulator
+        shell: bash
+        run: |
+          set -euo pipefail
+          if test -d /Applications/Xcode.app/Contents/Developer; then
+            sudo xcode-select -s /Applications/Xcode.app/Contents/Developer
+          fi
+          xcodebuild -version
+          xcrun simctl list runtimes available -j > "$RUNNER_TEMP/runtimes.json"
+          xcrun simctl list devices available -j > "$RUNNER_TEMP/devices.json"
+          python3 - <<'PY'
+          import json, os
+          root = os.environ["RUNNER_TEMP"]
+          with open(f"{root}/runtimes.json") as file:
+              runtimes = json.load(file)["runtimes"]
+          with open(f"{root}/devices.json") as file:
+              devices = json.load(file)["devices"]
+          installed = {
+              item["identifier"] for item in runtimes
+              if item.get("isAvailable") and item.get("name", "").startswith("iOS ")
+          }
+          candidates = [
+              (name != "iPhone 16", name, item["udid"])
+              for runtime, entries in devices.items() if runtime in installed
+              for item in entries
+              if item.get("isAvailable") and not item.get("availabilityError")
+              for name in [item.get("name", "")]
+              if name.startswith("iPhone")
+          ]
+          if not candidates:
+              raise SystemExit("No installed compatible iPhone simulator; no download attempted.")
+          _, name, udid = sorted(candidates)[0]
+          with open(os.environ["GITHUB_ENV"], "a") as file:
+              file.write(f"SIMULATOR_UDID={udid}\n")
+          print(f"Using installed simulator: {name} ({udid})")
+          PY
+
+      - name: Build UI test bundle once
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p validation/live-preview
+          xcodebuild -project Pipo.xcodeproj -scheme Pipo -configuration Debug \
+            -destination "id=$SIMULATOR_UDID" \
+            -derivedDataPath "$RUNNER_TEMP/PipoLivePreviewDerivedData" \
+            -parallel-testing-enabled NO \
+            CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO \
+            build-for-testing 2>&1 | tee validation/live-preview/build.log
+          runfile="$(find "$RUNNER_TEMP/PipoLivePreviewDerivedData/Build/Products" \
+            -maxdepth 1 -name '*.xctestrun' -print -quit)"
+          test -n "$runfile"
+          echo "XCTESTRUN=$runfile" >> "$GITHUB_ENV"
+          xcrun simctl boot "$SIMULATOR_UDID" 2>/dev/null || true
+          xcrun simctl bootstatus "$SIMULATOR_UDID" -b
+
+      - name: Start email-protected read-only stream
+        id: live
+        shell: bash
+        env:
+          VIEWER_EMAIL: ${{ secrets.PIPO_PREVIEW_EMAIL }}
+        run: |
+          set -euo pipefail
+          mkdir -p validation/live-preview
+          python3 scripts/live_ios_screen.py --udid "$SIMULATOR_UDID" \
+            > validation/live-preview/screen-server.log 2>&1 &
+          echo $! > "$RUNNER_TEMP/pipo-screen-server.pid"
+          for attempt in {1..20}; do
+            if curl --silent --fail http://127.0.0.1:8765/health >/dev/null; then break; fi
+            sleep 1
+          done
+          curl --silent --fail http://127.0.0.1:8765/frame.png \
+            -o "$RUNNER_TEMP/pipo-preview-first-frame.png"
+          test -s "$RUNNER_TEMP/pipo-preview-first-frame.png"
+
+          case "$(uname -m)" in
+            x86_64) arch=amd64; digest=6153d9ec629174882a3adbff2f7dc5a24b4f3bdd7ccc38eaa84fba26eb890311 ;;
+            arm64) arch=arm64; digest=f6d58eeec91ad1ec5fd1f7e4a587303772929b2625be5d24068033851c36ff55 ;;
+            *) echo "Unsupported macOS architecture" >&2; exit 1 ;;
+          esac
+          archive="$RUNNER_TEMP/cloudflared.tgz"
+          curl --fail --location --silent --show-error \
+            "https://github.com/cloudflare/cloudflared/releases/download/2026.11.2/cloudflared-darwin-${arch}.tgz" \
+            -o "$archive"
+          echo "$digest  $archive" | shasum -a 256 -c -
+          tar -xzf "$archive" -C "$RUNNER_TEMP"
+          chmod +x "$RUNNER_TEMP/cloudflared"
+          "$RUNNER_TEMP/cloudflared" tunnel --url http://127.0.0.1:8765 \
+            --allowed-mail "$VIEWER_EMAIL" \
+            > validation/live-preview/tunnel.log 2>&1 &
+          echo $! > "$RUNNER_TEMP/pipo-tunnel.pid"
+          url=""
+          for attempt in {1..45}; do
+            url="$(grep -Eo 'https://[a-z0-9-]+\.trycloudflare\.com' \
+              validation/live-preview/tunnel.log | head -1 || true)"
+            test -n "$url" && break
+            kill -0 "$(cat "$RUNNER_TEMP/pipo-tunnel.pid")" || exit 1
+            sleep 2
+          done
+          test -n "$url" || { echo "No private viewer URL was issued." >&2; exit 1; }
+          echo "::notice title=Pipo live viewer::Open $url and request the PIN for your email. The tour begins in 90 seconds."
+          {
+            echo "### Read-only live Pipo screen"
+            echo "Open $url while the next step is running. Cloudflare sends a one-time PIN to the selected email."
+            echo "The tour starts after 90 seconds. No remote tap or keyboard controls are provided."
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Show selected simulator tour
+        shell: bash
+        env:
+          TOUR: ${{ inputs.tour }}
+        run: |
+          set -euo pipefail
+          sleep 90
+          tests=()
+          case "$TOUR" in
+            all|saving)
+              tests+=(testPersonalSavingJourney testGroupSavingJourney)
+              ;;
+          esac
+          case "$TOUR" in
+            all|overview)
+              tests+=(testJourneyWaveAEmptyStatesAndRealHistory)
+              tests+=(testManagePlanV2TargetAndDateEditorsAreFocusedAndNonMutating)
+              tests+=(testAllElevenApprovedCardFamilies)
+              ;;
+          esac
+          case "$TOUR" in
+            all|auth)
+              tests+=(testP0AuthAndDeletionReviewGuards)
+              ;;
+          esac
+          test "${#tests[@]}" -gt 0
+          xcrun simctl io "$SIMULATOR_UDID" recordVideo --codec=h264 --force \
+            validation/live-preview/session.mp4 \
+            > validation/live-preview/recorder.log 2>&1 &
+          echo $! > "$RUNNER_TEMP/pipo-recorder.pid"
+          args=()
+          for test_name in "${tests[@]}"; do
+            args+=("-only-testing:PipoUITests/PipoUIRecordingTests/$test_name")
+          done
+          xcodebuild -xctestrun "$XCTESTRUN" -destination "id=$SIMULATOR_UDID" \
+            -parallel-testing-enabled NO "${args[@]}" \
+            CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO \
+            test-without-building 2>&1 | tee validation/live-preview/tour.log
+
+      - name: Stop stream and finalize recording
+        if: always()
+        shell: bash
+        run: |
+          for name in recorder tunnel screen-server; do
+            pidfile="$RUNNER_TEMP/pipo-${name}.pid"
+            if test -s "$pidfile"; then
+              if test "$name" = recorder; then signal=INT; else signal=TERM; fi
+              kill -"$signal" "$(cat "$pidfile")" 2>/dev/null || true
+              wait "$(cat "$pidfile")" 2>/dev/null || true
+            fi
+          done
+
+      - name: Retain review diagnostics
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: pipo-live-screen-${{ github.run_id }}
+          path: |
+            validation/live-preview/build.log
+            validation/live-preview/tour.log
+            validation/live-preview/recorder.log
+            validation/live-preview/session.mp4
+          if-no-files-found: warn
+          retention-days: 7
