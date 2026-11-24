@@ -101,6 +101,12 @@ jobs:
           echo "XCTESTRUN=$runfile" >> "$GITHUB_ENV"
           xcrun simctl boot "$SIMULATOR_UDID" 2>/dev/null || true
           xcrun simctl bootstatus "$SIMULATOR_UDID" -b
+          open -a Simulator --args -CurrentDeviceUDID "$SIMULATOR_UDID" || true
+          app="$(find "$RUNNER_TEMP/PipoLivePreviewDerivedData/Build/Products" \
+            -maxdepth 2 -name Pipo.app -type d -print -quit)"
+          test -n "$app"
+          xcrun simctl install "$SIMULATOR_UDID" "$app"
+          xcrun simctl launch "$SIMULATOR_UDID" com.pipo.app -pipo-visual-qa
 
       - name: Start email-protected read-only stream
         id: live
@@ -113,13 +119,34 @@ jobs:
           python3 scripts/live_ios_screen.py --udid "$SIMULATOR_UDID" \
             > validation/live-preview/screen-server.log 2>&1 &
           echo $! > "$RUNNER_TEMP/pipo-screen-server.pid"
+          healthy=false
           for attempt in {1..20}; do
-            if curl --silent --fail http://127.0.0.1:8765/health >/dev/null; then break; fi
+            if curl --silent --fail http://127.0.0.1:8765/health >/dev/null; then
+              healthy=true
+              break
+            fi
             sleep 1
           done
-          curl --silent --fail http://127.0.0.1:8765/frame.png \
-            -o "$RUNNER_TEMP/pipo-preview-first-frame.png"
-          test -s "$RUNNER_TEMP/pipo-preview-first-frame.png"
+          if test "$healthy" != true; then
+            cat validation/live-preview/screen-server.log
+            echo "Local preview server did not start." >&2
+            exit 1
+          fi
+          frame_ready=false
+          for attempt in {1..4}; do
+            if curl --silent --fail http://127.0.0.1:8765/frame.png \
+              -o "$RUNNER_TEMP/pipo-preview-first-frame.png" &&
+              test -s "$RUNNER_TEMP/pipo-preview-first-frame.png"; then
+              frame_ready=true
+              break
+            fi
+            sleep 2
+          done
+          if test "$frame_ready" != true; then
+            cat validation/live-preview/screen-server.log
+            echo "Simulator did not provide a preview frame." >&2
+            exit 1
+          fi
 
           case "$(uname -m)" in
             x86_64) arch=amd64; digest=6153d9ec629174882a3adbff2f7dc5a24b4f3bdd7ccc38eaa84fba26eb890311 ;;
@@ -212,6 +239,7 @@ jobs:
           name: pipo-live-screen-${{ github.run_id }}
           path: |
             validation/live-preview/build.log
+            validation/live-preview/screen-server.log
             validation/live-preview/tour.log
             validation/live-preview/recorder.log
             validation/live-preview/session.mp4

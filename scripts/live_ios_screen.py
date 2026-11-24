@@ -5,6 +5,7 @@ import argparse
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 import subprocess
+import sys
 import tempfile
 from urllib.parse import urlsplit
 
@@ -46,13 +47,24 @@ PAGE = """<!doctype html>
 def simulator_frame(udid: str) -> bytes:
     with tempfile.TemporaryDirectory(prefix="pipo-preview-") as directory:
         path = Path(directory) / "screen.png"
-        subprocess.run(
-            ["xcrun", "simctl", "io", udid, "screenshot", str(path)],
-            stdout=subprocess.DEVNULL,
-            stderr=subprocess.DEVNULL,
-            check=True,
-            timeout=10,
-        )
+        try:
+            subprocess.run(
+                ["xcrun", "simctl", "io", udid, "screenshot", str(path)],
+                capture_output=True,
+                check=True,
+                timeout=15,
+            )
+        except subprocess.CalledProcessError as error:
+            print(
+                "Simulator screenshot failed:",
+                error.stderr.decode("utf-8", "replace")[:1000],
+                file=sys.stderr,
+                flush=True,
+            )
+            raise
+        except subprocess.TimeoutExpired:
+            print("Simulator screenshot timed out.", file=sys.stderr, flush=True)
+            raise
         return path.read_bytes()
 
 
