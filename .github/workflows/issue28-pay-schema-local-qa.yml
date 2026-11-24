@@ -1,0 +1,135 @@
+name: Issue 28 Pay Schema V2 - Disposable PostgreSQL QA
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - "supabase/proposals/issue28_pay_schema_v2_REVIEW_ONLY.sql"
+      - "supabase/local_qa/test_issue28_pay_schema_v2.sql"
+      - "scripts/test_issue28_pay_schema_foundation.py"
+      - "scripts/local_authenticated_pay_v2_qa.py"
+      - ".github/workflows/issue28-pay-schema-local-qa.yml"
+      - "supabase/local_qa/bootstrap.sql"
+      - "supabase/local_qa/20261120052238_verified_schema_snapshot.sql"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: issue28-pay-schema-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  disposable-postgres:
+    name: "Pay V2 - local Postgres 17 ledger / RLS"
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    services:
+      postgres:
+        image: postgres:17
+        env:
+          POSTGRES_DB: pipo_pay_schema_qa
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: disposable-test-only
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres -d pipo_pay_schema_qa"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 12
+    env:
+      PGHOST: 127.0.0.1
+      PGPORT: "5432"
+      PGDATABASE: pipo_pay_schema_qa
+      PGUSER: postgres
+      PGPASSWORD: disposable-test-only
+    steps:
+      - name: Checkout exact reviewed code
+        uses: actions/checkout@v4
+      - name: Ensure disposable Postgres 17 and psql exist
+        shell: bash
+        run: |
+          set -euo pipefail
+          if ! command -v psql >/dev/null 2>&1; then
+            sudo apt-get update -qq
+            sudo apt-get install -y postgresql-client
+          fi
+          psql -X -Atqc "select case when current_setting('server_version_num')::integer >= 170000 then 'PASS' else 'FAIL' end" | grep -Fx PASS
+      - name: Validate pay schema static contract and disabled checkout
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 -m unittest -v scripts/test_issue28_pay_schema_foundation.py
+      - name: Load verified deployed Pipo baseline in disposable DB
+        shell: bash
+        run: |
+          set -euo pipefail
+          psql -X -v ON_ERROR_STOP=1 -f supabase/local_qa/bootstrap.sql
+      - name: Install pay V2 REVIEW ONLY schema in disposable DB
+        shell: bash
+        run: |
+          set -euo pipefail
+          psql -X -v ON_ERROR_STOP=1 -f supabase/proposals/issue28_pay_schema_v2_REVIEW_ONLY.sql
+      - name: Test A/B RLS, SKU isolation, replay, revocation and erasure
+        shell: bash
+        run: |
+          set -euo pipefail
+          psql -X -v ON_ERROR_STOP=1 -f supabase/local_qa/test_issue28_pay_schema_v2.sql
+      - name: Report exact evidence and limits
+        if: always()
+        shell: bash
+        run: |
+          {
+            echo '## Issue #28 Pay Schema Foundation'
+            echo "Commit: \`${{ github.event.pull_request.head.sha || github.sha }}\`"
+            echo '- Ephemeral Postgres 17 + synthetic Auth-role RLS, no customer/production database.'
+            echo '- Synthetic receipt hashes are NOT Apple signature verification.'
+            echo '- Real signed Apple JWS, notifications, webhook authenticity, live Auth A/B and StoreKit sandbox require future dedicated QA.'
+            echo '- Catalog is empty by default. No purchase is enabled or processed.'
+            echo '- No SQL was applied to connected production Supabase.'
+          } >> "$GITHUB_STEP_SUMMARY"
+
+  local-signed-auth-postgrest:
+    name: "Pay V2 - disposable signed Auth A/B + PostgREST"
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install pinned local Supabase CLI
+        uses: supabase/setup-cli@v3.2.0
+        with:
+          version: 3.2.0
+      - name: Validate local-only runner and test script
+        shell: bash
+        run: |
+          set -euo pipefail
+          supabase --version
+          supabase start --help >/dev/null
+          python3 -m py_compile scripts/local_authenticated_pay_v2_qa.py
+      - name: Start disposable signed Auth / PostgREST stack on loopback
+        shell: bash
+        run: |
+          set -euo pipefail
+          supabase start --exclude studio,imgproxy,realtime,storage-api,edge-runtime,logflare,vector,supavisor,postgres-meta,mailpit
+      - name: Verify real two-user JWT, owner RLS and service-only RPC
+        shell: bash
+        run: |
+          set -euo pipefail
+          if ! command -v psql >/dev/null 2>&1; then
+            sudo apt-get update -qq
+            sudo apt-get install -y postgresql-client
+          fi
+          python3 scripts/local_authenticated_pay_v2_qa.py
+      - name: Report signed-local-only boundary
+        if: always()
+        shell: bash
+        run: |
+          {
+            echo '## Issue #28 Pay Schema Local Auth'
+            echo '- Disposable local GoTrue-signed JWT + PostgREST: **NOT production**.'
+            echo '- Service-only Apple events use synthetic receipts and proof hashes.'
+            echo '- Apple JWS, Apple Server API and Notifications v2 remain completely unverified.'
+            echo '- No customer, Apple purchase, production database, feature activation or checkout.'
+          } >> "$GITHUB_STEP_SUMMARY"
