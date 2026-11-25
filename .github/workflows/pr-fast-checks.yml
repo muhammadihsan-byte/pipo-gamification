@@ -86,6 +86,9 @@ jobs:
       - name: Protect safe-area layout against footer and milestone clipping (Linux)
         run: python3 -m unittest -v scripts/test_offline_layout_collision_guard.py
 
+      - name: Verify read-only live preview streams changing frames (Linux)
+        run: python3 -m unittest -v scripts/test_live_ios_screen.py
+
       - name: Compile isolated QA scripts (syntax only)
         run: |
           python3 -m py_compile \

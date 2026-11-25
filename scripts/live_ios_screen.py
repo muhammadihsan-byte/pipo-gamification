@@ -81,12 +81,26 @@ def handler_for(capture):
             self.send_header("X-Content-Type-Options", "nosniff")
             self.send_header("X-Frame-Options", "DENY")
             self.send_header("Referrer-Policy", "no-referrer")
-            self.end_headers()
-            self.wfile.write(PAGE_START)
-            self.wfile.flush()
-            while True:
-                try:
-                    frame = capture()
+            self.send_header("Connection", "close")
+            self.connection.settimeout(20)
+            try:
+                self.end_headers()
+                self.wfile.write(PAGE_START)
+                self.wfile.flush()
+                while True:
+                    try:
+                        frame = capture()
+                    except (OSError, subprocess.SubprocessError) as error:
+                        print("Live frame failed:", error, file=sys.stderr, flush=True)
+                        self.wfile.write(
+                            b'<script>document.getElementById("status").textContent='
+                            b'"Frame temporarily unavailable; retrying...";'
+                            b'document.getElementById("status").hidden=false;'
+                            b'document.currentScript.remove()</script>\n'
+                        )
+                        self.wfile.flush()
+                        time.sleep(1)
+                        continue
                     self.wfile.write(
                         b'<script>document.getElementById("screen").src="data:image/png;base64,'
                         + base64.b64encode(frame)
@@ -95,11 +109,9 @@ def handler_for(capture):
                     )
                     self.wfile.flush()
                     time.sleep(0.9)
-                except (BrokenPipeError, ConnectionResetError, ConnectionAbortedError):
-                    return
-                except (OSError, subprocess.SubprocessError) as error:
-                    print("Live frame failed:", error, file=sys.stderr, flush=True)
-                    time.sleep(1)
+            except OSError:
+                # A closed or stalled viewer must not leave a screenshot loop running.
+                return
 
         def do_POST(self):
             self.respond(405, "text/plain; charset=utf-8", b"Read only\n")
