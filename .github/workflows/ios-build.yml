@@ -29,6 +29,7 @@ on:
           - first-save-qa
           - spark-goal-qa
           - visual-layout-qa
+          - auth-v1-qa
   push:
     tags:
       - "v*-rc*"
@@ -427,14 +428,12 @@ jobs:
           }
           exit "$QA_STATUS"
 
-      # Temporary auth-only proof on the owner-approved PR #104 review branch.
-      # Draft stays free of paid macOS runs; never activate in other PRs.
+      # Focused auth proof is manual so PR commits do not repeat simulator QA.
       - name: Authentication V1 — three approved core routes, AX UI and MP4
         id: auth_v1_core
         if: >-
-          github.event_name == 'pull_request' &&
-          github.event.pull_request.draft == false &&
-          github.head_ref == 'feat/auth-v1-core-email-86'
+          github.event_name == 'workflow_dispatch' &&
+          inputs.validation_mode == 'auth-v1-qa'
         shell: bash
         run: |
           set -euo pipefail

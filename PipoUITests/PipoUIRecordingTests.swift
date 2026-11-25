@@ -931,8 +931,11 @@ final class PipoUIRecordingTests: XCTestCase {
         attachOnboardingScreen("Auth V1 02 — Sign In email flow")
 
         tapButton("pipo.auth.forgotPassword")
-        XCTAssertTrue(app.staticTexts["Enter your email address to receive a reset link."]
-            .waitForExistence(timeout: 10))
+        let validation = app.descendants(matching: .any)
+            .matching(identifier: "pipo.auth.validation").firstMatch
+        XCTAssertTrue(validation.waitForExistence(timeout: 10),
+                      "Invalid recovery email must expose a visible accessibility message")
+        XCTAssertEqual(validation.label, "Enter your email address to receive a reset link.")
         attachOnboardingScreen("Auth V1 — Local recovery validation")
         tapButton("pipo.auth.back")
         XCTAssertTrue(app.buttons["pipo.auth.getStarted"].waitForExistence(timeout: 15))
@@ -968,6 +971,11 @@ final class PipoUIRecordingTests: XCTestCase {
         XCTAssertGreaterThanOrEqual(forgot.frame.height, 44,
             "Forgot Password must be a full accessibility hit target")
         XCTAssertTrue(forgot.isHittable)
+        let back = app.buttons["pipo.auth.back"]
+        let visibility = app.buttons["pipo.auth.passwordVisibility"]
+        XCTAssertGreaterThanOrEqual(back.frame.height, 44)
+        XCTAssertGreaterThanOrEqual(visibility.frame.height, 44)
+        XCTAssertGreaterThanOrEqual(visibility.frame.width, 44)
         attachOnboardingScreen("Auth V1 AX — Sign In recovery reachable")
     }
 

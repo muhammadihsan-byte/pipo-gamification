@@ -27,6 +27,7 @@ IDENTIFIER = re.compile(r"\.accessibilityIdentifier\(\s*\"([^\"\n]+)")
 GROUP = re.compile(
     r"\.accessibilityElement\(\s*children:\s*\.(ignore|combine|contain)\s*\)"
 )
+LEAF_VIEW = re.compile(r"(?:^|\n)\s*(?:Text|Image|Label|TextField|SecureField)\s*\(")
 
 
 def strip_comments(text: str) -> str:
@@ -71,6 +72,10 @@ def unsafe_container_identifiers(path: Path) -> list[tuple[int, str]]:
         if candidate is None:
             continue
         prefix, body, modifiers = candidate
+        # A new sibling leaf after a container closure owns its own ID.
+        # The nearest-brace heuristic otherwise mistakes it for the container.
+        if LEAF_VIEW.search(modifiers):
+            continue
         if not CONTAINER.search(prefix):
             continue
         if not BUTTON.search(body):
@@ -160,6 +165,19 @@ class AccessibilityActionTargetGuardTests(unittest.TestCase):
                 }
             """, encoding="utf-8")
             self.assertFalse(unsafe_grouped_actions(example))
+            self.assertFalse(unsafe_container_identifiers(example))
+
+            example.write_text("""
+                struct Example: View {
+                    var body: some View {
+                        VStack {
+                            HStack { Button("Retry") { retry() } }
+                            Text("Enter an email")
+                                .accessibilityIdentifier("auth.validation")
+                        }
+                    }
+                }
+            """, encoding="utf-8")
             self.assertFalse(unsafe_container_identifiers(example))
 
     def test_journey_record_is_a_real_accessible_button(self):
