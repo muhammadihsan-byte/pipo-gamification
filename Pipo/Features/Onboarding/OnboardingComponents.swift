@@ -226,11 +226,11 @@ struct TactileButtonStyle: ButtonStyle {
     func makeBody(configuration: Configuration) -> some View {
         configuration.label
             .font(.headline.weight(.bold))
-            .foregroundStyle(.white)
+            .foregroundStyle(PipoTheme.primaryActionText)
             .frame(maxWidth: .infinity)
             .frame(minHeight: 56)
             .background(
-                configuration.isPressed ? PipoTheme.deepPink : PipoTheme.pink,
+                configuration.isPressed ? PipoTheme.deepPink : PipoTheme.approvedActionPink,
                 in: RoundedRectangle(cornerRadius: 16)
             )
             .overlay {

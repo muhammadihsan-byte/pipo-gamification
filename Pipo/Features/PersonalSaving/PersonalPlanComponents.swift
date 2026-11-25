@@ -235,10 +235,7 @@ struct PersonalPlanPrimaryStyle: ButtonStyle {
         configuration.label
             .font(.subheadline.bold())
             .multilineTextAlignment(.center)
-            // Approved Pipo pink (#FF6584) has ~2.8:1 contrast with
-            // white text. Use ink (~5.2:1) rather than darkening the
-            // brand surface into an unrelated red.
-            .foregroundStyle(dimmed ? PersonalPlanStyle.muted : PersonalPlanStyle.ink)
+            .foregroundStyle(PipoTheme.primaryActionText)
             .padding(.horizontal, 12)
             .frame(maxWidth: .infinity, minHeight: 48)
             .background {
@@ -248,9 +245,10 @@ struct PersonalPlanPrimaryStyle: ButtonStyle {
                     shape.fill(PersonalPlanStyle.berry)
                         .offset(y: 4)
                         .opacity(dimmed ? 0 : 1)
-                    shape.fill(PersonalPlanStyle.pink.opacity(
-                        dimmed ? 0.45 : configuration.isPressed ? 0.85 : 1
-                    ))
+                    shape.fill(
+                        dimmed ? PersonalPlanStyle.muted
+                            : configuration.isPressed ? PipoTheme.deepPink : PersonalPlanStyle.pink
+                    )
                 }
             }
             .padding(.bottom, 4)

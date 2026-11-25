@@ -370,17 +370,17 @@ struct AuthView: View {
     }
 }
 
-/// Match the approved pink CTA while preserving legible text at AA contrast.
+/// Match the approved Pipo primary CTA across auth and saving flows.
 @MainActor
 private struct AuthPrimaryButtonStyle: ButtonStyle {
     func makeBody(configuration: Configuration) -> some View {
         configuration.label
             .font(.headline.weight(.bold))
-            .foregroundStyle(PipoTheme.cardInk)
+            .foregroundStyle(PipoTheme.primaryActionText)
             .frame(maxWidth: .infinity, minHeight: 54)
             .padding(.horizontal, 12)
             .background(
-                configuration.isPressed ? PipoTheme.palePink : PipoTheme.approvedActionPink,
+                configuration.isPressed ? PipoTheme.deepPink : PipoTheme.approvedActionPink,
                 in: RoundedRectangle(cornerRadius: 17)
             )
     }
