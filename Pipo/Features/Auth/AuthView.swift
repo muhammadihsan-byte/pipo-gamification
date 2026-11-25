@@ -132,9 +132,10 @@ struct AuthView: View {
                 } label: {
                     Label("Back", systemImage: "chevron.left")
                         .font(.subheadline)
+                        .frame(minHeight: 44)
+                        .contentShape(Rectangle())
                 }
                 .foregroundStyle(PipoTheme.cardMuted)
-                .frame(minHeight: 44)
                 .accessibilityIdentifier("pipo.auth.back")
                 Spacer()
                 brandName
@@ -289,9 +290,10 @@ struct AuthView: View {
                     } label: {
                         Image(systemName: isPasswordVisible ? "eye.slash" : "eye")
                             .foregroundStyle(PipoTheme.muted)
+                            .frame(minWidth: 44, minHeight: 44)
+                            .contentShape(Rectangle())
                     }
                     .buttonStyle(.plain)
-                    .frame(minWidth: 44, minHeight: 44)
                     .accessibilityLabel(isPasswordVisible ? "Hide password" : "Show password")
                     .accessibilityIdentifier("pipo.auth.passwordVisibility")
                 }
@@ -302,7 +304,8 @@ struct AuthView: View {
                 Text(validationMessage)
                     .font(.caption)
                     .foregroundStyle(PipoTheme.deepPink)
-                    .accessibilityAddTraits(.isStaticText)
+                    .accessibilityLabel(validationMessage)
+                    .accessibilityIdentifier("pipo.auth.validation")
             }
         }
     }
