@@ -24,7 +24,12 @@ final class PipoUIRecordingTests: XCTestCase {
         interactWithCalendar()
         tapButton("Continue")
 
-        XCTAssertTrue(app.staticTexts["What’s your saving rhythm?"].waitForExistence(timeout: 15))
+        XCTAssertTrue(app.staticTexts["Your saving rhythm"].waitForExistence(timeout: 15),
+                      "The approved saving-rhythm screen did not appear: \(app.debugDescription)")
+        // Explicitly exercise the scheduled (monthly) review, not the Flexible variant.
+        let monthly = app.buttons["pipo.flex.v2.rhythm.monthly"].firstMatch
+        tapButton("pipo.flex.v2.rhythm.monthly")
+        XCTAssertTrue(monthly.isSelected, "Monthly saving rhythm must be selected")
         tapButton("Continue")
 
         XCTAssertTrue(app.staticTexts["Review your saving plan"].waitForExistence(timeout: 20))

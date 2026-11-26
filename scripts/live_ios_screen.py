@@ -2,15 +2,17 @@
 """Read-only, low-latency simulator preview for a manual GitHub Actions run."""
 
 import argparse
+import base64
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 import subprocess
 import sys
 import tempfile
+import time
 from urllib.parse import urlsplit
 
 
-PAGE = """<!doctype html>
+PAGE_START = b"""<!doctype html>
 <html lang="en">
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
@@ -22,26 +24,10 @@ PAGE = """<!doctype html>
   img { display: block; max-width: 100vw; max-height: calc(100vh - 65px);
         margin: auto; object-fit: contain; }
 </style>
-<header>Pipo simulator — read-only live preview</header>
+<header>Pipo simulator - read-only live preview</header>
+<p id="status">Connecting to simulator...</p>
 <img id="screen" alt="Current Pipo simulator screen">
-<script>
-  const screen = document.getElementById("screen");
-  async function refresh() {
-    try {
-      const response = await fetch("/frame.png?t=" + Date.now(), {cache: "no-store"});
-      if (response.ok) {
-        const next = URL.createObjectURL(await response.blob());
-        const previous = screen.src;
-        screen.onload = () => { if (previous.startsWith("blob:")) URL.revokeObjectURL(previous); };
-        screen.src = next;
-      }
-    } catch (_) {}
-    setTimeout(refresh, 900);
-  }
-  refresh();
-</script>
-</html>
-""".encode("utf-8")
+"""
 
 
 def simulator_frame(udid: str) -> bytes:
@@ -73,7 +59,7 @@ def handler_for(capture):
         def do_GET(self):
             path = urlsplit(self.path).path
             if path == "/":
-                self.respond(200, "text/html; charset=utf-8", PAGE)
+                self.stream_frames()
             elif path == "/health":
                 self.respond(200, "text/plain; charset=utf-8", b"ok\n")
             elif path == "/frame.png":
@@ -85,6 +71,47 @@ def handler_for(capture):
                 self.respond(200, "image/png", frame)
             else:
                 self.respond(404, "text/plain; charset=utf-8", b"Not found\n")
+
+        def stream_frames(self):
+            # One authorized request stays open; protected Quick Tunnel sessions can
+            # expire before a browser's next polling request reaches the origin.
+            self.send_response(200)
+            self.send_header("Content-Type", "text/html; charset=utf-8")
+            self.send_header("Cache-Control", "no-store")
+            self.send_header("X-Content-Type-Options", "nosniff")
+            self.send_header("X-Frame-Options", "DENY")
+            self.send_header("Referrer-Policy", "no-referrer")
+            self.send_header("Connection", "close")
+            self.connection.settimeout(20)
+            try:
+                self.end_headers()
+                self.wfile.write(PAGE_START)
+                self.wfile.flush()
+                while True:
+                    try:
+                        frame = capture()
+                    except (OSError, subprocess.SubprocessError) as error:
+                        print("Live frame failed:", error, file=sys.stderr, flush=True)
+                        self.wfile.write(
+                            b'<script>document.getElementById("status").textContent='
+                            b'"Frame temporarily unavailable; retrying...";'
+                            b'document.getElementById("status").hidden=false;'
+                            b'document.currentScript.remove()</script>\n'
+                        )
+                        self.wfile.flush()
+                        time.sleep(1)
+                        continue
+                    self.wfile.write(
+                        b'<script>document.getElementById("screen").src="data:image/png;base64,'
+                        + base64.b64encode(frame)
+                        + b'";document.getElementById("status").hidden=true;'
+                        + b'document.currentScript.remove()</script>\n'
+                    )
+                    self.wfile.flush()
+                    time.sleep(0.9)
+            except OSError:
+                # A closed or stalled viewer must not leave a screenshot loop running.
+                return
 
         def do_POST(self):
             self.respond(405, "text/plain; charset=utf-8", b"Read only\n")
