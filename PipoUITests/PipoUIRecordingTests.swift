@@ -900,6 +900,85 @@ final class PipoUIRecordingTests: XCTestCase {
         attachOnboardingScreen("Issue 42 — Approved money-out review, no writes")
     }
 
+    /// Owner-approved core authentication UI visual proof (#86).
+    /// This DEBUG-only fixture does not submit credentials or contact Supabase.
+    func testAuthV1WelcomeSignInSignUpVisualParity() {
+        continueAfterFailure = false
+        app.launchArguments = ["-pipo-auth-qa"]
+        app.launch()
+
+        let welcome = app.staticTexts["Saving can be fun, actually."]
+        XCTAssertTrue(welcome.waitForExistence(timeout: 25))
+        XCTAssertTrue(app.staticTexts["Ready for a little win?"].exists)
+        let getStarted = app.buttons["pipo.auth.getStarted"]
+        let existing = app.buttons["pipo.auth.existingAccount"]
+        XCTAssertTrue(getStarted.exists && existing.exists)
+        XCTAssertGreaterThanOrEqual(getStarted.frame.height, 44)
+        XCTAssertGreaterThanOrEqual(existing.frame.height, 44)
+        attachOnboardingScreen("Auth V1 01 — Welcome")
+
+        tapButton("pipo.auth.getStarted")
+        XCTAssertTrue(app.staticTexts["Let's get started!"].waitForExistence(timeout: 15))
+        XCTAssertTrue(app.staticTexts["I've got your back!"].exists)
+        XCTAssertTrue(app.buttons["pipo.auth.submit"].exists)
+        XCTAssertFalse(app.buttons["pipo.auth.forgotPassword"].exists)
+        XCTAssertFalse(app.buttons["Apple"].exists || app.buttons["Google"].exists)
+        attachOnboardingScreen("Auth V1 03 — Join Pipo email flow")
+        tapButton("pipo.auth.switchMode")
+        XCTAssertTrue(app.staticTexts["You're back!"].waitForExistence(timeout: 15))
+        XCTAssertTrue(app.buttons["pipo.auth.forgotPassword"].exists)
+        XCTAssertTrue(app.buttons["pipo.auth.passwordVisibility"].exists)
+        attachOnboardingScreen("Auth V1 02 — Sign In email flow")
+
+        tapButton("pipo.auth.forgotPassword")
+        let validation = app.descendants(matching: .any)
+            .matching(identifier: "pipo.auth.validation").firstMatch
+        XCTAssertTrue(validation.waitForExistence(timeout: 10),
+                      "Invalid recovery email must expose a visible accessibility message")
+        XCTAssertEqual(validation.label, "Enter your email address to receive a reset link.")
+        attachOnboardingScreen("Auth V1 — Local recovery validation")
+        tapButton("pipo.auth.back")
+        XCTAssertTrue(app.buttons["pipo.auth.getStarted"].waitForExistence(timeout: 15))
+    }
+
+    /// Accessibility Dynamic Type on actual iOS Simulator (not just static source).
+    /// Ensure core actions remain reachable and no disabled social provider appears.
+    func testAuthV1LargeTextNavigationAndInputTargets() {
+        continueAfterFailure = false
+        app.launchArguments = [
+            "-pipo-auth-qa",
+            "-UIPreferredContentSizeCategoryName",
+            "UICTContentSizeCategoryAccessibilityM"
+        ]
+        app.launch()
+        XCTAssertTrue(app.staticTexts["Saving can be fun, actually."]
+            .waitForExistence(timeout: 25))
+        let getStarted = app.buttons["pipo.auth.getStarted"]
+        bringIntoView(getStarted)
+        XCTAssertGreaterThanOrEqual(getStarted.frame.height, 44)
+        XCTAssertTrue(getStarted.isHittable, "Welcome CTA unreachable in AX mode")
+        attachOnboardingScreen("Auth V1 AX — Welcome action visible")
+        getStarted.tap()
+
+        let submit = app.buttons["pipo.auth.submit"]
+        bringIntoView(submit)
+        XCTAssertGreaterThanOrEqual(submit.frame.height, 44)
+        XCTAssertTrue(submit.isHittable, "Sign Up CTA unreachable in AX mode")
+        attachOnboardingScreen("Auth V1 AX — Sign Up action visible")
+        tapButton("pipo.auth.switchMode")
+        let forgot = app.buttons["pipo.auth.forgotPassword"]
+        bringIntoView(forgot)
+        XCTAssertGreaterThanOrEqual(forgot.frame.height, 44,
+            "Forgot Password must be a full accessibility hit target")
+        XCTAssertTrue(forgot.isHittable)
+        let back = app.buttons["pipo.auth.back"]
+        let visibility = app.buttons["pipo.auth.passwordVisibility"]
+        XCTAssertGreaterThanOrEqual(back.frame.height, 44)
+        XCTAssertGreaterThanOrEqual(visibility.frame.height, 44)
+        XCTAssertGreaterThanOrEqual(visibility.frame.width, 44)
+        attachOnboardingScreen("Auth V1 AX — Sign In recovery reachable")
+    }
+
     /// Non-destructive P0 simulator acceptance: sign-in availability and
     /// account deletion confirmation. The fixture is DEBUG-only and has no
     /// backend Auth session. NEVER tap the destructive submit action.
@@ -908,6 +987,18 @@ final class PipoUIRecordingTests: XCTestCase {
         app.launchArguments = ["-pipo-auth-qa"]
         app.launch()
 
+        let getStarted = app.buttons["pipo.auth.getStarted"].firstMatch
+        XCTAssertTrue(getStarted.waitForExistence(timeout: 25))
+        getStarted.tap()
+        XCTAssertTrue(app.buttons["pipo.auth.switchMode"].waitForExistence(timeout: 10),
+                      "Get started must open email account creation")
+        XCTAssertFalse(app.buttons["pipo.auth.forgotPassword"].exists,
+                       "Password recovery belongs to sign-in")
+        app.buttons["pipo.auth.back"].tap()
+        let existingAccount = app.buttons["pipo.auth.existingAccount"].firstMatch
+        XCTAssertTrue(existingAccount.waitForExistence(timeout: 25),
+                      "Welcome must lead to the existing email account")
+        existingAccount.tap()
         let forgot = app.buttons["pipo.auth.forgotPassword"].firstMatch
         XCTAssertTrue(forgot.waitForExistence(timeout: 25),
                       "Email recovery must be available on the sign-in screen")

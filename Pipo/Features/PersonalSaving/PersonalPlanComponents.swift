@@ -36,7 +36,7 @@ enum PersonalPlanStyle {
     static let muted = Color(red: 100 / 255, green: 116 / 255, blue: 139 / 255)
     static let surface = Color(red: 245 / 255, green: 247 / 255, blue: 249 / 255)
     static let border = Color(red: 226 / 255, green: 232 / 255, blue: 240 / 255)
-    static let pink = Color(red: 1, green: 101 / 255, blue: 132 / 255)
+    static let pink = PipoTheme.approvedActionPink
     static let blush = Color(red: 1, green: 241 / 255, blue: 244 / 255)
     static let berry = Color(red: 176 / 255, green: 40 / 255, blue: 75 / 255)
     static let buttonEdge = Color(red: 205 / 255, green: 56 / 255, blue: 72 / 255)
@@ -235,10 +235,7 @@ struct PersonalPlanPrimaryStyle: ButtonStyle {
         configuration.label
             .font(.subheadline.bold())
             .multilineTextAlignment(.center)
-            // Approved Pipo pink (#FF6584) has ~2.8:1 contrast with
-            // white text. Use ink (~5.2:1) rather than darkening the
-            // brand surface into an unrelated red.
-            .foregroundStyle(dimmed ? PersonalPlanStyle.muted : PersonalPlanStyle.ink)
+            .foregroundStyle(PipoTheme.primaryActionText)
             .padding(.horizontal, 12)
             .frame(maxWidth: .infinity, minHeight: 48)
             .background {
@@ -248,9 +245,10 @@ struct PersonalPlanPrimaryStyle: ButtonStyle {
                     shape.fill(PersonalPlanStyle.berry)
                         .offset(y: 4)
                         .opacity(dimmed ? 0 : 1)
-                    shape.fill(PersonalPlanStyle.pink.opacity(
-                        dimmed ? 0.45 : configuration.isPressed ? 0.85 : 1
-                    ))
+                    shape.fill(
+                        dimmed ? PersonalPlanStyle.muted
+                            : configuration.isPressed ? PipoTheme.deepPink : PersonalPlanStyle.pink
+                    )
                 }
             }
             .padding(.bottom, 4)
