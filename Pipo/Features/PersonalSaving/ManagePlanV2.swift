@@ -1099,7 +1099,7 @@ struct PipoManagePlanV2Sheet: View {
                     .lineLimit(step == .overview ? 1 : nil)
                     .minimumScaleFactor(step == .overview ? 0.9 : 1)
                     .frame(maxWidth: .infinity, minHeight: 48)
-                    .foregroundStyle(actionAllowed ? .white : PipoTheme.cardMuted)
+                    .foregroundStyle(actionAllowed ? PipoTheme.primaryActionText : PipoTheme.cardMuted)
                     // Accessible pink: white action text reaches >= 4.5:1 contrast.
                     .background(actionAllowed ? PipoTheme.cardAccentReadable : PipoTheme.cream,
                                 in: RoundedRectangle(cornerRadius: 14))

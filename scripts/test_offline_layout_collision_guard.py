@@ -50,14 +50,12 @@ class OfflineLayoutCollisionContract(unittest.TestCase):
         self.assertIn(".accessibilityLabel(actionLabel)", MANAGE)
         self.assertIn(".lineLimit(step == .overview ? 1 : nil)", MANAGE)
 
-    def test_group_and_personal_primary_ctas_share_approved_pink(self):
-        # Approved GROUP/03 Figma CTA uses bright #FF6584 plus raised edge.
-        # White text on that surface would be below 4.5:1, so use ink.
-        self.assertIn("shape.fill(PersonalPlanStyle.pink.opacity(", PLAN)
-        self.assertIn(
-            ".foregroundStyle(dimmed ? PersonalPlanStyle.muted : PersonalPlanStyle.ink)",
-            PLAN
-        )
+    def test_group_and_personal_primary_ctas_share_approved_pink_and_white_text(self):
+        # The product guide keeps the approved #FF6584 fill and raised edge,
+        # while the primary label now uses the shared white text token.
+        self.assertIn("static let pink = PipoTheme.approvedActionPink", PLAN)
+        self.assertIn(".foregroundStyle(PipoTheme.primaryActionText)", PLAN)
+        self.assertIn("configuration.isPressed ? PipoTheme.deepPink : PersonalPlanStyle.pink", PLAN)
         self.assertIn("shape.fill(PersonalPlanStyle.berry)", PLAN)
         self.assertNotIn("PersonalPlanStyle.buttonEdge.opacity(", PLAN)
 

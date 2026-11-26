@@ -14,6 +14,7 @@ enum PipoTheme {
     // Approved Pipo primary CTA #FF6584 (Auth V1 / Welcome and saving plan).
     // Keep legacy pink unchanged: it serves other existing visual roles.
     static let approvedActionPink = Color(red: 1, green: 101 / 255, blue: 132 / 255)
+    static let primaryActionText = Color.white
 
     // Approved card roles, sourced from Pipo Figma DS / 02. Keeping them in
     // the existing theme avoids another competing card color system.
@@ -193,11 +194,11 @@ struct PrimaryActionButtonStyle: ButtonStyle {
     func makeBody(configuration: Configuration) -> some View {
         configuration.label
             .font(.headline.weight(.bold))
-            .foregroundStyle(.white)
+            .foregroundStyle(PipoTheme.primaryActionText)
             .frame(maxWidth: .infinity)
             .frame(minHeight: 54)
             .background(
-                configuration.isPressed ? PipoTheme.deepPink : PipoTheme.pink,
+                configuration.isPressed ? PipoTheme.deepPink : PipoTheme.approvedActionPink,
                 in: RoundedRectangle(cornerRadius: 14)
             )
             .overlay {
