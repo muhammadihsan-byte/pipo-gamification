@@ -9,7 +9,7 @@ struct AuthCredentials: Sendable {
 
 @MainActor
 struct AuthView: View {
-    private enum Page {
+    private enum Page: Hashable {
         case welcome, signIn, signUp
     }
 
@@ -18,6 +18,7 @@ struct AuthView: View {
     @State private var password = ""
     @State private var isPasswordVisible = false
     @State private var validationMessage: String?
+    @State private var mascotReactionID = 0
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
 
     private let onSubmit: (AuthCredentials) -> Void
@@ -50,6 +51,7 @@ struct AuthView: View {
                         credentialsContent
                     }
                 }
+                .pipoPageTransition(value: page)
                 .frame(maxWidth: 420)
                 .frame(maxWidth: .infinity)
             }
@@ -57,6 +59,9 @@ struct AuthView: View {
         }
         .background(.white)
         .preferredColorScheme(.light)
+        .onChange(of: validationMessage) { _, message in
+            if message != nil { mascotReactionID += 1 }
+        }
     }
 
     private var welcomeContent: some View {
@@ -64,7 +69,6 @@ struct AuthView: View {
             brandHeader
             Spacer(minLength: 22)
             PipoMascotView(companion: .idle)
-                .accessibilityHidden(true)
                 .frame(height: geometrySafeHeroHeight)
                 .frame(maxWidth: .infinity)
                 .overlay(alignment: .topTrailing) {
@@ -140,7 +144,7 @@ struct AuthView: View {
                 Spacer()
                 brandName
             }
-            PipoMascotView(companion: .reassurance)
+            PipoMascotView(companion: .reassurance, reaction: .reassure, reactionID: mascotReactionID)
                 .accessibilityHidden(true)
                 .frame(height: dynamicTypeSize.isAccessibilitySize ? 136 : 160)
                 .frame(maxWidth: .infinity)
@@ -306,8 +310,10 @@ struct AuthView: View {
                     .foregroundStyle(PipoTheme.deepPink)
                     .accessibilityLabel(validationMessage)
                     .accessibilityIdentifier("pipo.auth.validation")
+                    .transition(.opacity)
             }
         }
+        .pipoAnimate(validationMessage != nil)
     }
 
     private var submitButton: some View {
@@ -383,6 +389,7 @@ private struct AuthPrimaryButtonStyle: ButtonStyle {
                 configuration.isPressed ? PipoTheme.deepPink : PipoTheme.approvedActionPink,
                 in: RoundedRectangle(cornerRadius: 17)
             )
+            .pipoPressFeedback(configuration.isPressed)
     }
 }
 
@@ -402,6 +409,7 @@ private struct AuthOutlineButtonStyle: ButtonStyle {
                 RoundedRectangle(cornerRadius: 17)
                     .strokeBorder(PipoTheme.cardBorder, lineWidth: 1)
             }
+            .pipoPressFeedback(configuration.isPressed)
     }
 }
 
@@ -419,6 +427,7 @@ private struct ProviderButtonStyle: ButtonStyle {
                 RoundedRectangle(cornerRadius: 14)
                     .strokeBorder(PipoTheme.border, lineWidth: 1)
             }
+            .pipoPressFeedback(configuration.isPressed)
     }
 }
 

@@ -205,7 +205,7 @@ struct PrimaryActionButtonStyle: ButtonStyle {
                 RoundedRectangle(cornerRadius: 14)
                     .strokeBorder(PipoTheme.deepPink.opacity(0.8), lineWidth: 1)
             }
-            .scaleEffect(configuration.isPressed ? 0.99 : 1)
+            .pipoPressFeedback(configuration.isPressed)
     }
 }
 
@@ -225,5 +225,6 @@ struct SecondaryActionButtonStyle: ButtonStyle {
                 RoundedRectangle(cornerRadius: 14)
                     .strokeBorder(PipoTheme.border, lineWidth: 1)
             }
+            .pipoPressFeedback(configuration.isPressed)
     }
 }

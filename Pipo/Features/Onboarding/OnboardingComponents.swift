@@ -1,62 +1,21 @@
 import SwiftUI
 
-enum OnboardingPipoReaction {
-    case acknowledge
-    case reassure
-    case celebrate
+typealias OnboardingPipoReaction = PipoCompanionReaction
 
-    var lift: CGFloat {
-        switch self {
-        case .acknowledge: -5
-        case .reassure: -3
-        case .celebrate: -11
-        }
-    }
-
-    var rotation: Double {
-        switch self {
-        case .acknowledge: -4
-        case .reassure: 3
-        case .celebrate: -7
-        }
-    }
-
-    var scale: CGFloat {
-        switch self {
-        case .acknowledge: 1.025
-        case .reassure: 1.015
-        case .celebrate: 1.07
-        }
-    }
-}
-
-/// Onboarding-only reactions. The canonical V4 SVG and tap gesture remain unmodified.
+/// Choice feedback uses the same articulated V4 performance as Home taps.
 @MainActor
 struct OnboardingPipoView: View {
     let height: CGFloat
     var reaction: OnboardingPipoReaction = .acknowledge
     var reactionID = 0
 
-    @Environment(\.accessibilityReduceMotion) private var reduceMotion
-
     var body: some View {
-        PipoMascotView(companion: .idle)
+        PipoMascotView(companion: .idle, reaction: reaction, reactionID: reactionID)
             .frame(width: height * 460 / 500, height: height)
-            .phaseAnimator([false, true, false], trigger: reactionID) { content, active in
-                content
-                    .offset(y: active && !reduceMotion ? reaction.lift : 0)
-                    .rotationEffect(.degrees(active && !reduceMotion ? reaction.rotation : 0))
-                    .scaleEffect(active && !reduceMotion ? reaction.scale : 1)
-            } animation: { active in
-                active
-                    ? .spring(response: 0.23, dampingFraction: 0.67)
-                    : .spring(response: 0.43, dampingFraction: 0.79)
-            }
             .frame(maxWidth: .infinity)
     }
 }
 
-/// Duolingo-inspired progress structure, styled exclusively with Pipo tokens.
 @MainActor
 struct OnboardingProgressHeader: View {
     let step: OnboardingStep
@@ -85,6 +44,7 @@ struct OnboardingProgressHeader: View {
                 }
             }
             .frame(height: 8)
+            .pipoAnimate(step)
 
             Text("\(step.number) / 4")
                 .font(.caption.weight(.semibold))
@@ -106,7 +66,7 @@ struct OnboardingHeaderView: View {
     var body: some View {
         HStack(spacing: 12) {
             // A small static V4 companion avoids running two animated web views.
-            PipoMascotView(companion: .reassurance)
+            PipoMascotView(companion: .reassurance, isPresented: false)
                 .frame(width: 58, height: 62)
             VStack(alignment: .leading, spacing: 8) {
                 HStack {
@@ -134,6 +94,7 @@ struct OnboardingHeaderView: View {
                     }
                 }
                 .frame(height: 10)
+                .pipoAnimate(progress)
             }
         }
         .padding(.horizontal, 22)
@@ -218,6 +179,7 @@ struct SpeechBubbleView: View {
                 .stroke(PipoTheme.border, lineWidth: 1)
         }
         .fixedSize(horizontal: false, vertical: true)
+        .pipoAnimate(response != nil)
     }
 }
 
@@ -242,8 +204,7 @@ struct TactileButtonStyle: ButtonStyle {
                 radius: configuration.isPressed ? 1 : 0,
                 y: configuration.isPressed ? 1 : 4
             )
-            .offset(y: configuration.isPressed ? 3 : 0)
-            .animation(.spring(response: 0.22, dampingFraction: 0.72), value: configuration.isPressed)
+            .pipoPressFeedback(configuration.isPressed, depth: 3, scale: 1)
     }
 }
 
@@ -320,6 +281,7 @@ struct SelectableOptionCard: View {
             radius: 5,
             y: 3
         )
+        .pipoAnimate(selected)
         .accessibilityElement(children: .combine)
         .accessibilityAddTraits(selected ? .isSelected : [])
     }

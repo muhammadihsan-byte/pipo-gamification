@@ -114,13 +114,16 @@ struct CreateGoalView: View {
     }
 
     var body: some View {
-        if step == .review, let plan {
-            ReviewPlanView(plan: plan, onBack: goBack, onEdit: edit,
-                           onCreated: onCreated, onLater: onLater,
-                           onRecordFirst: onRecordFirst)
-        } else {
-            editPage
+        Group {
+            if step == .review, let plan {
+                ReviewPlanView(plan: plan, onBack: goBack, onEdit: edit,
+                               onCreated: onCreated, onLater: onLater,
+                               onRecordFirst: onRecordFirst)
+            } else {
+                editPage
+            }
         }
+        .pipoPageTransition(value: step.rawValue)
     }
 
     private var editPage: some View {
@@ -144,7 +147,6 @@ struct CreateGoalView: View {
         } footer: {
             footerActions
         }
-        .id(step)
         .accessibilityHidden(showBreakdownDialog)
         .onChange(of: focusedGoalField) { previous, current in
             if previous == .name && current != .name { wasEditingName = true }

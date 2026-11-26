@@ -14,28 +14,28 @@ struct CreateGroupPlanView: View {
     @State private var memberInput = ""
     @State private var memberError: String?
     @State private var photoLoading = false
-    @State private var didCelebrate = false
-    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @FocusState private var nameFocused: Bool
     @State private var touchedName = false
     @Environment(AuthStateManager.self) private var auth
 
     var body: some View {
-        if navigation.step == .review, let review = draft.review(creatorID: auth.userID) {
-            ReviewGroupSavingView(review: review, onBack: back, onEdit: edit, onCreate: { navigation.didSave() })
-        } else {
-            SavingPlanPage(flowTitle: "Group saving plan", stepNumber: navigation.step.rawValue,
-                           count: 7, stepTitle: navigation.step.title, ready: navigation.step == .success,
-                           onBack: back) {
-                fields
-            } footer: {
-                actions
-            }
-            .id(navigation.step)
-            .onChange(of: nameFocused) { was, focused in
-                if was && !focused { touchedName = true }
+        Group {
+            if navigation.step == .review, let review = draft.review(creatorID: auth.userID) {
+                ReviewGroupSavingView(review: review, onBack: back, onEdit: edit, onCreate: { navigation.didSave() })
+            } else {
+                SavingPlanPage(flowTitle: "Group saving plan", stepNumber: navigation.step.rawValue,
+                               count: 7, stepTitle: navigation.step.title, ready: navigation.step == .success,
+                               onBack: back) {
+                    fields
+                } footer: {
+                    actions
+                }
+                .onChange(of: nameFocused) { was, focused in
+                    if was && !focused { touchedName = true }
+                }
             }
         }
+        .pipoPageTransition(value: navigation.step.rawValue)
     }
 
     @ViewBuilder private var fields: some View {
@@ -349,10 +349,10 @@ struct CreateGroupPlanView: View {
             Label {
                 Text("\(draft.groupName.trimmed) saved on this device")
             } icon: {
-                Image(systemName: "checkmark.circle").symbolEffect(.bounce, value: didCelebrate)
+                Image(systemName: "checkmark.circle")
             }
             .font(.headline).foregroundStyle(PersonalPlanStyle.green)
-            .onAppear { if !reduceMotion { didCelebrate = true } }
+            .pipoEntrance()
             VStack(alignment: .leading, spacing: 12) {
                 Text(draft.title.trimmed).font(.headline)
                 if let target = draft.target { LabeledContent("Shared target", value: money(target)) }

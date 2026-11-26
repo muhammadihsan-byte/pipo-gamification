@@ -89,6 +89,7 @@ struct PipoGoalFocusBCard: View {
                         .foregroundStyle(Card44.accent)
                 }
                 ProgressView(value: goal.progress)
+                    .pipoAnimate(goal.progress)
                     .tint(Card44.pink)
                     .accessibilityLabel("Goal progress")
                     .accessibilityValue("\(Int(goal.progress * 100)) percent")
@@ -261,6 +262,7 @@ struct PipoPlanOverviewBCard: View {
                     stat(label: "RECORDED", value: money(goal.currentAmount, goal: goal))
                 }
                 ProgressView(value: goal.progress)
+                    .pipoAnimate(goal.progress)
                     .tint(Card44.pink)
                     .accessibilityLabel("Recorded progress")
                     .accessibilityValue("\(Int(goal.progress * 100)) percent")
@@ -357,7 +359,7 @@ struct PipoSavingDecisionsDCard: View {
             }
             .frame(maxWidth: .infinity, minHeight: 55, alignment: .leading)
         }
-        .buttonStyle(.plain)
+        .buttonStyle(PipoQuietButtonStyle())
         .accessibilityAddTraits(selection == route ? .isSelected : [])
         .accessibilityIdentifier(route == .keepDate
                                  ? "pipo.card.decision.keepDate"
@@ -1070,7 +1072,7 @@ struct PipoJourneyWaveAView: View {
                                 in: RoundedRectangle(cornerRadius: 14)
                             )
                     }
-                    .buttonStyle(.plain)
+                    .buttonStyle(PipoQuietButtonStyle())
                     .accessibilityAddTraits(selectedPeriod == period ? .isSelected : [])
                     .accessibilityIdentifier(
                         period == .month ? "pipo.journey.filter.month" :
@@ -1169,7 +1171,7 @@ struct PipoJourneyWaveAView: View {
             .padding(.vertical, 10)
             .contentShape(Rectangle())
         }
-        .buttonStyle(.plain)
+        .buttonStyle(PipoQuietButtonStyle())
         // Keep accessibility modifiers on the actual Button. Applying
         // .accessibilityElement(children: .ignore) here exposes an Other
         // wrapper instead and hides its identifier from XCUI Button queries.
@@ -1208,7 +1210,7 @@ struct PipoJourneyWaveAView: View {
             .frame(minHeight: 68)
             .contentShape(Rectangle())
         }
-        .buttonStyle(.plain)
+        .buttonStyle(PipoQuietButtonStyle())
         .accessibilityIdentifier("pipo.journey.openAchievements")
     }
 
@@ -1265,6 +1267,7 @@ struct PipoJourneyWaveAView: View {
                     .foregroundStyle(PipoTheme.muted)
                     .fixedSize(horizontal: false, vertical: true)
                     ProgressView(value: goal.progress)
+                        .pipoAnimate(goal.progress)
                         .tint(PipoTheme.deepPink)
                     Text("\(Int(goal.progress * 100))% complete · No saving entries recorded")
                         .font(.caption)

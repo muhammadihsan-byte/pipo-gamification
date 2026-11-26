@@ -42,7 +42,7 @@ struct ConsistencyMilestoneView: View {
                     .foregroundStyle(PipoTheme.muted)
 
                 if isFirstSave {
-                    firstSaveReward.padding(.top, 4)
+                    firstSaveReward.padding(.top, 4).pipoEntrance()
                     Text("That counts!")
                         .font(.subheadline.bold())
                         .foregroundStyle(PipoTheme.deepPink)
@@ -51,7 +51,7 @@ struct ConsistencyMilestoneView: View {
                         .background(PipoTheme.palePink, in: Capsule())
                         .accessibilityIdentifier("pipo.firstSave.bubble")
                 } else {
-                    rewardSummary.padding(.top, 4)
+                    rewardSummary.padding(.top, 4).pipoEntrance()
                 }
 
                 Group {
@@ -153,7 +153,7 @@ private struct PipoFirstSparkScene: View {
     @State private var phase = 0
     @State private var started = false
 
-    private var visiblePhase: Int { reduceMotion ? 6 : phase }
+    private var visiblePhase: Int { reduceMotion || scenePhase != .active ? 6 : phase }
 
     var body: some View {
         VStack(spacing: 7) {
@@ -197,7 +197,11 @@ private struct PipoFirstSparkScene: View {
             "This is a saving recorded manually, not a verified bank transaction."
         )
         .accessibilityIdentifier("pipo.firstSpark.scene")
-        .task { await playOnce() }
+        .task(id: reduceMotion || scenePhase != .active) { await playOnce() }
+        .onDisappear {
+            started = true
+            phase = 6
+        }
         .onChange(of: scenePhase) { _, phase in
             if phase != .active {
                 started = true
@@ -243,7 +247,7 @@ private struct PipoFirstSparkScene: View {
                 phase = 6
                 return
             }
-            withAnimation(.easeInOut(duration: keyframe.easing)) {
+            withAnimation(.timingCurve(0.22, 0, 0.28, 1, duration: keyframe.easing)) {
                 phase = keyframe.phase
             }
         }

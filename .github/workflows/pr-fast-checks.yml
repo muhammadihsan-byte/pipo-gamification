@@ -69,6 +69,9 @@ jobs:
       - name: Check First Spark one-shot source and Reduce Motion contract (Linux only)
         run: python3 -m unittest -v scripts/test_issue72_first_spark_contract.py
 
+      - name: Verify V4 reaction timing, coalescing and lifecycle (offline)
+        run: node --test scripts/pipo_motion.test.cjs
+
       - name: Assert approved Flexible Saving V2 UI routing and source contract (Linux only)
         run: python3 -m unittest -v scripts/test_flexible_v2_ui_contract.py
 
