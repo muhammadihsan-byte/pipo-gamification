@@ -147,6 +147,7 @@ class OfflineLayoutCollisionContract(unittest.TestCase):
         self.assertNotIn("      - labeled", header)
         job_gate = IOS_CI.split("  build-and-test:", 1)[1].split("    runs-on: macos-15", 1)[0]
         self.assertIn("(github.event_name == 'pull_request' && github.event.pull_request.draft == false)", job_gate)
+        self.assertIn("github.event.action != 'synchronize'", job_gate)
         self.assertNotIn("github.event.label", job_gate)
         legacy_gate = IOS_CI.split("  issue80-integrated-qa:", 1)[1].split("    runs-on: macos-15", 1)[0]
         self.assertIn("false # Owner-paused:", legacy_gate)

@@ -9,6 +9,7 @@ on:
       - opened
       - ready_for_review
       - reopened
+      # Cancel an obsolete PR run without starting another macOS build.
       - synchronize
   workflow_dispatch:
     inputs:
@@ -47,7 +48,8 @@ jobs:
     if: >-
       github.event_name == 'workflow_dispatch' ||
       github.event_name == 'push' ||
-      (github.event_name == 'pull_request' && github.event.pull_request.draft == false)
+      ((github.event_name == 'pull_request' && github.event.pull_request.draft == false) &&
+       github.event.action != 'synchronize')
     runs-on: macos-15
     timeout-minutes: 45
     steps:
