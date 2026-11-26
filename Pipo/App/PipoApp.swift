@@ -70,8 +70,10 @@ struct PipoApp: App {
                 || ProcessInfo.processInfo.arguments.contains("-pipo-dashboard-qa")
                 || ProcessInfo.processInfo.arguments.contains("-pipo-global-currency-qa") {
                 RootView(initialAuthState: .authenticated)
+                    .modifier(PipoMotionQAPreferences())
             } else {
                 RootView()
+                    .modifier(PipoMotionQAPreferences())
             }
             #else
             RootView()

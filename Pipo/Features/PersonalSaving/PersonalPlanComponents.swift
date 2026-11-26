@@ -111,7 +111,7 @@ struct SavingPlanPage<Content: View, Footer: View>: View {
                         .frame(minWidth: 44, minHeight: 44)
                         .contentShape(Rectangle())
                 }
-                .buttonStyle(.plain)
+                .buttonStyle(PipoQuietButtonStyle())
                 .accessibilityLabel("Back")
 
                 Text(flowTitle)
@@ -152,6 +152,8 @@ struct PersonalPlanIntro: View {
     let subtitle: String
 
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @Environment(\.scenePhase) private var scenePhase
+    @State private var visible = false
 
     var body: some View {
         if step == .review {
@@ -188,7 +190,7 @@ struct PersonalPlanIntro: View {
             if let animation = LottieAnimation.named(step.artwork, subdirectory: "PersonalPlanMotion") {
                 LottieView(animation: animation)
                     .resizable()
-                    .playbackMode(reduceMotion ? .paused(at: .progress(0)) : .playing(
+                    .playbackMode(reduceMotion || !visible || scenePhase != .active ? .paused(at: .progress(0)) : .playing(
                         .fromProgress(0, toProgress: 1, loopMode: .playOnce)
                     ))
                     .id(step)
@@ -197,6 +199,8 @@ struct PersonalPlanIntro: View {
             }
         }
         .frame(width: size, height: step == .goal ? 92 : size)
+        .onAppear { visible = true }
+        .onDisappear { visible = false }
         .accessibilityHidden(true)
     }
 }
@@ -219,7 +223,7 @@ struct PersonalPlanActions: View {
                     .frame(minHeight: 48)
                     .background(PersonalPlanStyle.surface, in: RoundedRectangle(cornerRadius: 12))
                 }
-                .buttonStyle(.plain)
+                .buttonStyle(PipoQuietButtonStyle())
             }
             Button(title, action: action)
                 .buttonStyle(PersonalPlanPrimaryStyle(dimmed: dimmed))
@@ -238,18 +242,17 @@ struct PersonalPlanPrimaryStyle: ButtonStyle {
             .foregroundStyle(PipoTheme.primaryActionText)
             .padding(.horizontal, 12)
             .frame(maxWidth: .infinity, minHeight: 48)
+            .background(
+                dimmed ? PersonalPlanStyle.muted
+                    : configuration.isPressed ? PipoTheme.deepPink : PersonalPlanStyle.pink,
+                in: RoundedRectangle(cornerRadius: 12)
+            )
+            .pipoPressFeedback(configuration.isPressed, depth: dimmed ? 1 : 3, scale: 1)
             .background {
                 let shape = RoundedRectangle(cornerRadius: 12)
-                ZStack {
-                    // Preserve the approved raised-button silhouette.
-                    shape.fill(PersonalPlanStyle.berry)
-                        .offset(y: 4)
-                        .opacity(dimmed ? 0 : 1)
-                    shape.fill(
-                        dimmed ? PersonalPlanStyle.muted
-                            : configuration.isPressed ? PipoTheme.deepPink : PersonalPlanStyle.pink
-                    )
-                }
+                shape.fill(PersonalPlanStyle.berry)
+                    .offset(y: 4)
+                    .opacity(dimmed ? 0 : 1)
             }
             .padding(.bottom, 4)
     }
@@ -318,7 +321,7 @@ struct PersonalPlanChoice: View {
             .foregroundStyle(selected ? PersonalPlanStyle.berry : PersonalPlanStyle.ink)
             .personalPlanField(height: 44, selected: selected)
         }
-        .buttonStyle(.plain)
+        .buttonStyle(PipoQuietButtonStyle())
         .accessibilityAddTraits(selected ? .isSelected : [])
     }
 }
@@ -341,6 +344,7 @@ extension View {
                     )
             }
             .contentShape(RoundedRectangle(cornerRadius: 12))
+            .pipoAnimate(selected)
     }
 }
 
@@ -406,7 +410,7 @@ struct SavingDayGrid: View {
                                 in: RoundedRectangle(cornerRadius: 9)
                             )
                     }
-                    .buttonStyle(.plain)
+                    .buttonStyle(PipoQuietButtonStyle())
                     .accessibilityAddTraits(selected ? .isSelected : [])
                 }
             }

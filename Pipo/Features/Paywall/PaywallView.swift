@@ -102,7 +102,7 @@ struct PaywallView: View {
 
     private var mascot: some View {
         ZStack {
-            PipoMascotView(state: .struggling)
+            PipoMascotView(companion: .reassurance)
                 .frame(height: 210)
 
             HStack {

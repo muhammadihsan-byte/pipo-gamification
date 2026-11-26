@@ -50,7 +50,7 @@ struct OnboardingContainerView: View {
                 .padding(.bottom, 24)
             }
             .scrollDismissesKeyboard(.interactively)
-            .id(viewModel.step)
+            .pipoPageTransition(value: viewModel.step)
         }
         .background(.white)
         .safeAreaInset(edge: .bottom, spacing: 0) { footer }
@@ -164,7 +164,7 @@ struct OnboardingContainerView: View {
             ForEach(OnboardingMotivation.allCases) { motivation in
                 Button {
                     UISelectionFeedbackGenerator().selectionChanged()
-                    withAnimation(reduceMotion ? nil : .spring(response: 0.3, dampingFraction: 0.8)) {
+                    withAnimation(reduceMotion ? nil : PipoMotion.selection) {
                         viewModel.motivation = motivation
                         mascotReply = motivation.companionReply
                         mascotReaction = motivation == .feelInControl || motivation == .exploring
@@ -178,7 +178,7 @@ struct OnboardingContainerView: View {
                         selected: viewModel.motivation == motivation
                     )
                 }
-                .buttonStyle(.plain)
+                .buttonStyle(PipoQuietButtonStyle())
                 .accessibilityIdentifier("pipo.onboarding.motivation.\(motivation.rawValue)")
                 .accessibilityAddTraits(viewModel.motivation == motivation ? [.isSelected] : [])
             }
@@ -337,7 +337,7 @@ struct OnboardingContainerView: View {
                     showingWidgetGuide = true
                 default:
                     nicknameFocused = false
-                    withAnimation(reduceMotion ? nil : .easeInOut(duration: 0.2)) {
+                    withAnimation(reduceMotion ? nil : PipoMotion.page) {
                         viewModel.advance()
                     }
                 }
@@ -390,7 +390,7 @@ struct OnboardingContainerView: View {
 
     private func back() {
         nicknameFocused = false
-        withAnimation(reduceMotion ? nil : .easeInOut(duration: 0.2)) {
+        withAnimation(reduceMotion ? nil : PipoMotion.page) {
             viewModel.goBack()
         }
     }

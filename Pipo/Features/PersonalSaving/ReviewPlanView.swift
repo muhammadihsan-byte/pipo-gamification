@@ -502,6 +502,7 @@ struct PersonalPlanDialog<Content: View>: View {
                     .padding(24)
                     .frame(maxWidth: 342)
                     .background(.white, in: RoundedRectangle(cornerRadius: 24))
+                    .pipoEntrance()
                     .padding(24)
                     .frame(maxWidth: .infinity, minHeight: geometry.size.height)
             }

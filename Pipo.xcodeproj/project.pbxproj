@@ -67,6 +67,8 @@
 		D10000000000000000000003 /* OnboardingContainerView.swift in Sources */ = {isa = PBXBuildFile; fileRef = D10000000000000000000103 /* OnboardingContainerView.swift */; };
 		A17C00000000000000000001 /* PipoUIRecordingTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = A17C00000000000000000002 /* PipoUIRecordingTests.swift */; };
 		A17C0000000000000000000E /* XCTest.framework in UI Test Frameworks */ = {isa = PBXBuildFile; fileRef = 000000000000000000000118 /* XCTest.framework */; };
+		C02611260000000000000003 /* PipoMotion.swift in Sources */ = {isa = PBXBuildFile; fileRef = C02611260000000000000001 /* PipoMotion.swift */; };
+		C02611260000000000000004 /* PipoV4Motion.js in Resources */ = {isa = PBXBuildFile; fileRef = C02611260000000000000002 /* PipoV4Motion.js */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -156,6 +158,8 @@
 		D10000000000000000000103 /* OnboardingContainerView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OnboardingContainerView.swift; sourceTree = "<group>"; };
 		A17C00000000000000000002 /* PipoUIRecordingTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PipoUIRecordingTests.swift; sourceTree = "<group>"; };
 		A17C00000000000000000003 /* PipoUITests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = PipoUITests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
+		C02611260000000000000001 /* PipoMotion.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PipoMotion.swift; sourceTree = "<group>"; };
+		C02611260000000000000002 /* PipoV4Motion.js */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.javascript; path = PipoV4Motion.js; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -272,6 +276,8 @@
 				A44D20261121000000000001 /* PipoApprovedCards.swift */,
 				B68000000000000000000002 /* PipoSparkV1.swift */,
 				DFCE5267008E3FA2ABC62F71 /* PipoMascotView.swift */,
+				C02611260000000000000001 /* PipoMotion.swift */,
+				C02611260000000000000002 /* PipoV4Motion.js */,
 			);
 			path = DesignSystem;
 			sourceTree = "<group>";
@@ -602,6 +608,7 @@
 			files = (
 				00000000000000000000000E /* Assets.xcassets in Resources */,
 				D20000000000000000000003 /* PersonalPlanMotion in Resources */,
+				C02611260000000000000004 /* PipoV4Motion.js in Resources */,
 				B0AA20261120000000000003 /* App PrivacyInfo.xcprivacy in Resources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
@@ -666,6 +673,7 @@
 				9CA1E0000000000000000011 /* SavingInlineCalendar.swift in Sources */,
 				00000000000000000000001A /* GroupSavingManager.swift in Sources */,
 				7B8C06B79BD2E563C8C18A18 /* PipoMascotView.swift in Sources */,
+				C02611260000000000000003 /* PipoMotion.swift in Sources */,
 				745C700C56FEE76E8F97792D /* SupabaseService.swift in Sources */,
 				A0E9701C8A63461E9AF00102 /* StoreKitManager.swift in Sources */,
 				A71D5C9E6B20433BB8000003 /* WidgetSharedData.swift in Sources */,

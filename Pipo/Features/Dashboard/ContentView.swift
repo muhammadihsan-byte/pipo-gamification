@@ -156,6 +156,7 @@ struct DashboardView: View {
                 .padding(.bottom, 24)
             }
             .scrollBounceBehavior(.basedOnSize)
+            .pipoPageTransition(value: selectedPage.rawValue)
             // Account and privacy controls must remain reachable even for
             // newly onboarded users who have not created a saving goal.
             bottomNavigation
@@ -280,7 +281,11 @@ struct DashboardView: View {
                     companion: .idle,
                     isPresented: !isShowingSaveConfirmation
                         && !navigationManager.isMilestonePresented
-                        && saveErrorMessage == nil,
+                        && saveErrorMessage == nil
+                        && selectedGroupGoal == nil
+                        && !showingAchievements
+                        && selectedJourneyRecord == nil
+                        && !showingPrivacyOverview,
                     onTap: {
                         mascotReply = mascotReply == nil ? "Small steps count, too." : nil
                     }
@@ -301,8 +306,10 @@ struct DashboardView: View {
                 .background(PipoTheme.palePink, in: RoundedRectangle(cornerRadius: 12))
                 .accessibilityElement(children: .contain)
                 .accessibilityIdentifier("pipo.dashboard.mascotReply")
+                .transition(.opacity)
             }
         }
+        .pipoAnimate(mascotReply != nil)
     }
 
     private func pageHeading(_ title: String, subtitle: String) -> some View {
@@ -592,7 +599,7 @@ struct DashboardView: View {
                         : "Recorded saving periods"
                 )
             }
-            .buttonStyle(.plain)
+            .buttonStyle(PipoQuietButtonStyle())
             .accessibilityIdentifier("pipo.dashboard.rhythm")
 
             Button {
@@ -604,7 +611,7 @@ struct DashboardView: View {
                     hint: "See your collection"
                 )
             }
-            .buttonStyle(.plain)
+            .buttonStyle(PipoQuietButtonStyle())
             .accessibilityIdentifier("pipo.dashboard.achievements")
         }
         .frame(maxWidth: .infinity)
@@ -679,7 +686,7 @@ struct DashboardView: View {
             } label: {
                 focusGoalNavigationLabel(for: goal)
             }
-            .buttonStyle(.plain)
+            .buttonStyle(PipoQuietButtonStyle())
             .accessibilityIdentifier("pipo.dashboard.focusGoal")
             .accessibilityLabel(focusGoalAccessibilitySummary(for: goal))
             .accessibilityHint("Opens goal details")
@@ -687,7 +694,7 @@ struct DashboardView: View {
             NavigationLink(value: Route.personalGoal(goal.id)) {
                 focusGoalNavigationLabel(for: goal)
             }
-            .buttonStyle(.plain)
+            .buttonStyle(PipoQuietButtonStyle())
             .accessibilityIdentifier("pipo.dashboard.focusGoal")
             .accessibilityLabel(focusGoalAccessibilitySummary(for: goal))
             .accessibilityHint("Opens goal details")
@@ -725,7 +732,7 @@ struct DashboardView: View {
         } label: {
             compactGoalRowLabel(goal)
         }
-        .buttonStyle(.plain)
+        .buttonStyle(PipoQuietButtonStyle())
         .contextMenu {
             goalLifecycleMenu(goal)
         }
@@ -1344,12 +1351,14 @@ struct DashboardView: View {
         HStack(spacing: 0) {
             ForEach(DashboardPage.allCases) { page in
                 Button {
+                    guard selectedPage != page else { return }
                     selectedPage = page
                     mascotReply = nil
                 } label: {
                     VStack(spacing: 5) {
                         Image(systemName: page.symbol)
                             .font(.system(size: 18, weight: .medium))
+                            .pipoTabSelection(selectedPage == page)
                         Text(page.rawValue)
                             .font(.caption2.weight(selectedPage == page ? .bold : .medium))
                     }
@@ -1357,7 +1366,7 @@ struct DashboardView: View {
                     .frame(maxWidth: .infinity, minHeight: 52)
                     .contentShape(Rectangle())
                 }
-                .buttonStyle(.plain)
+                .buttonStyle(PipoQuietButtonStyle())
                 .accessibilityAddTraits(selectedPage == page ? .isSelected : [])
                 .accessibilityIdentifier("pipo.dashboard.tab.\(page.rawValue.lowercased())")
             }

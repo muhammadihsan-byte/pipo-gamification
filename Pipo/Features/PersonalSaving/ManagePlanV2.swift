@@ -374,7 +374,7 @@ struct PipoManagePlanV2Sheet: View {
         self.init(original: PipoPlanV2Original(goal: goal), onClose: onClose)
     }
 
-    private enum Step: Equatable {
+    private enum Step: Hashable {
         case overview, target, breakdown, date, rhythm, impact, review
     }
 
@@ -469,6 +469,7 @@ struct PipoManagePlanV2Sheet: View {
                             }
                             .padding(.top, dynamicTypeSize.isAccessibilitySize ? 10 : 15)
                             content
+                                .pipoPageTransition(value: step)
                             Text(step == .review
                                  ? "Prototype only · No changes saved"
                                  : "Preview only · Changes are not saved")

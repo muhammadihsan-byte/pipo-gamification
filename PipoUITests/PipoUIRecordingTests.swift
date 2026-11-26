@@ -900,6 +900,48 @@ final class PipoUIRecordingTests: XCTestCase {
         attachOnboardingScreen("Issue 42 — Approved money-out review, no writes")
     }
 
+    /// Synthetic, in-memory fixture. No saving writes, Auth or cloud calls.
+    func testMotionGreetingTabsAndForegroundRecovery() {
+        continueAfterFailure = false
+        app.launchArguments = ["-pipo-dashboard-qa"]
+        app.launch()
+
+        let mascot = app.buttons["pipo.dashboard.mascot"]
+        XCTAssertTrue(mascot.waitForExistence(timeout: 25))
+        XCTAssertEqual(mascot.value as? String, "Ready to wave")
+        mascot.tap()
+        XCTAssertTrue(app.staticTexts["Small steps count, too."].waitForExistence(timeout: 5))
+        attachOnboardingScreen("Motion — V4 greeting and contextual reply")
+
+        for page in ["goals", "journey", "profile", "home"] {
+            tapButton("pipo.dashboard.tab.\(page)")
+            XCTAssertTrue(app.buttons["pipo.dashboard.tab.\(page)"].isSelected)
+        }
+        XCTAssertTrue(mascot.waitForExistence(timeout: 10))
+        XCUIDevice.shared.press(.home)
+        app.activate()
+        XCTAssertTrue(mascot.waitForExistence(timeout: 10))
+        mascot.tap()
+        XCTAssertTrue(app.staticTexts["Small steps count, too."].waitForExistence(timeout: 5))
+        attachOnboardingScreen("Motion — V4 resumed after background")
+    }
+
+    func testMotionReducedPreservesGreetingAndNavigation() {
+        continueAfterFailure = false
+        app.launchArguments = ["-pipo-dashboard-qa", "-pipo-reduce-motion-qa"]
+        app.launch()
+        let mascot = app.buttons["pipo.dashboard.mascot"]
+        XCTAssertTrue(mascot.waitForExistence(timeout: 25))
+        XCTAssertEqual(mascot.value as? String, "Motion reduced")
+        mascot.tap()
+        XCTAssertTrue(app.staticTexts["Small steps count, too."].waitForExistence(timeout: 5))
+        attachOnboardingScreen("Motion reduced — still V4, working greeting")
+        tapButton("pipo.dashboard.tab.goals")
+        tapButton("pipo.dashboard.tab.home")
+        XCTAssertTrue(mascot.waitForExistence(timeout: 10))
+        XCTAssertEqual(mascot.value as? String, "Motion reduced")
+    }
+
     /// Owner-approved core authentication UI visual proof (#86).
     /// This DEBUG-only fixture does not submit credentials or contact Supabase.
     func testAuthV1WelcomeSignInSignUpVisualParity() {

@@ -1,26 +1,5 @@
-import RiveRuntime
 import SwiftUI
 import WebKit
-
-enum PipoMascotState: Equatable, Sendable {
-    case idle
-    case happy
-    case celebrating
-    case struggling
-
-    var animationValue: Float {
-        switch self {
-        case .idle: 0
-        case .happy: 1
-        case .celebrating: 2
-        case .struggling: 3
-        }
-    }
-
-    var fallbackImageName: String {
-        self == .idle ? "PipoAuthHero" : "PipoCelebrating"
-    }
-}
 
 // #71: Canonical Figma Performance Kit V1.3 pose identifiers. A source pose
 // is NOT a runtime image until a verified export is included in the bundle.
@@ -75,167 +54,140 @@ enum PipoV4Reaction: Sendable {
 
 @MainActor
 struct PipoMascotView: View {
-    enum CompanionState {
-        case idle, reassurance, celebration
-    }
+    enum CompanionState { case idle, reassurance, celebration }
 
-    private let state: PipoMascotState
-    private let companion: CompanionState?
-    private let isPresented: Bool
-    private let onTap: (() -> Void)?
-
-    init(state: PipoMascotState) {
-        self.state = state
-        companion = nil
-        isPresented = true
-        onTap = nil
-    }
-
-    init(companion: CompanionState, isPresented: Bool = true, onTap: (() -> Void)? = nil) {
-        self.companion = companion
-        self.isPresented = isPresented
-        self.onTap = onTap
-        state = .idle
-    }
+    let companion: CompanionState
+    var isPresented = true
+    var reaction: PipoCompanionReaction = .acknowledge
+    var reactionID = 0
+    var onTap: (() -> Void)? = nil
 
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @Environment(\.scenePhase) private var scenePhase
     @State private var inViewport = false
     @State private var appeared = false
-    @State private var tapID = 0
-    @State private var didPresentJoy = false
+    @State private var eventID = 0
+    @State private var event: PipoCompanionReaction = .acknowledge
+    @State private var celebrationID = 0
+    @State private var hasEntered = false
     @State private var lastTap: ContinuousClock.Instant?
 
     private var canPlay: Bool {
         isPresented && appeared && inViewport && scenePhase == .active
     }
 
-    @State private var riveViewModel: RiveViewModel?
-
     var body: some View {
-        if let companion {
-            Group {
-                if companion == .idle {
-                    Button(action: greetPipo) {
-                        Group {
-                            if reduceMotion {
-                                neutralStill
-                            } else {
-                                IdleArtwork(playing: canPlay, tapID: tapID)
-                            }
-                        }
-                        .aspectRatio(460.0 / 500.0, contentMode: .fit)
-                        .contentShape(Rectangle())
-                    }
-                    .buttonStyle(.plain)
-                    .disabled(!canPlay)
-                    .accessibilityLabel("Greet Pipo")
-                    .accessibilityIdentifier("pipo.greet")
-                } else if companion == .celebration {
-                    Image(PipoV4Reaction.earnedMilestone.safeBundledStillName)
-                        .resizable()
-                        .scaledToFit()
-                        .scaleEffect(reduceMotion ? 1 : (didPresentJoy ? 1 : 0.94))
-                        .onAppear {
-                            guard !reduceMotion else { return }
-                            didPresentJoy = false
-                            withAnimation(.spring(response: 0.5, dampingFraction: 0.75)) {
-                                didPresentJoy = true
-                            }
-                        }
-                        .accessibilityLabel("Pipo celebrating a recorded saving")
-                } else {
-                    neutralStill.accessibilityLabel("Pipo")
-                }
-            }
-            .aspectRatio(460.0 / 500.0, contentMode: .fit)
-            .onGeometryChange(for: Bool.self) { geometry in
-                guard let viewport = geometry.bounds(of: .scrollView) else { return true }
-                return viewport.intersects(CGRect(origin: .zero, size: geometry.size))
-            } action: { visible in
-                inViewport = visible
-            }
-            .onAppear { appeared = true }
-            .onDisappear { appeared = false }
-        } else {
-            existingArtwork
-        }
-    }
-
-    private var neutralStill: some View {
-        Image(PipoV4Reaction.resting.safeBundledStillName).resizable().scaledToFit()
-    }
-
-    // A tap is a one-shot event layered over the current idle pose.
-    private func greetPipo() {
-        let now = ContinuousClock.now
-        guard canPlay, lastTap.map({ $0.duration(to: now) >= .milliseconds(900) }) ?? true else { return }
-        lastTap = now
-        onTap?()
-        if reduceMotion {
-            UIImpactFeedbackGenerator(style: .light).impactOccurred()
-        } else {
-            tapID += 1
-        }
-    }
-
-    private var existingArtwork: some View {
         Group {
-            if let riveViewModel {
-                riveViewModel.view()
-            } else {
-                Image(state.fallbackImageName)
+            if companion == .idle {
+                Button(action: greetPipo) {
+                    livingArtwork.contentShape(Rectangle())
+                }
+                .buttonStyle(.plain) // The articulated wave is the press response.
+                .disabled(!canPlay)
+                .accessibilityLabel("Greet Pipo")
+                .accessibilityHint(reduceMotion ? "Greet Pipo with gentle feedback." : "Pipo waves hello.")
+                .accessibilityValue(reduceMotion ? "Motion reduced" : "Ready to wave")
+                .accessibilityIdentifier("pipo.greet")
+            } else if companion == .celebration {
+                Image(PipoV4Reaction.earnedMilestone.safeBundledStillName)
                     .resizable()
                     .scaledToFit()
+                    .phaseAnimator([0, 1, 2, 3, 0], trigger: celebrationID) { content, phase in
+                        let moving = canPlay && !reduceMotion
+                        content
+                            .scaleEffect(moving ? [1.0, 0.98, 1.025, 1.0][phase] : 1)
+                            .offset(y: moving ? [0.0, 2.0, -7.0, 1.0][phase] : 0)
+                    } animation: { phase in
+                        guard canPlay, !reduceMotion else { return nil }
+                        switch phase {
+                        case 1: return .easeInOut(duration: 0.12)
+                        case 2: return .spring(response: 0.28, dampingFraction: 0.78)
+                        default: return .spring(response: 0.26, dampingFraction: 0.88)
+                        }
+                    }
+                    .accessibilityLabel("Pipo cheering you on")
+            } else {
+                livingArtwork.accessibilityLabel("Pipo is here with you")
             }
         }
-        .onAppear(perform: loadRiveViewModel)
-        .onChange(of: state) { _, newState in
-            riveViewModel?.setInput("animState", value: newState.animationValue)
+        .aspectRatio(460.0 / 500.0, contentMode: .fit)
+        .onGeometryChange(for: Bool.self) { geometry in
+            guard let viewport = geometry.bounds(of: .scrollView) else { return true }
+            return viewport.intersects(CGRect(origin: .zero, size: geometry.size))
+        } action: { inViewport = $0 }
+        .onAppear { appeared = true }
+        .onDisappear { appeared = false }
+        .onChange(of: canPlay) { _, playing in
+            guard playing, !hasEntered else { return }
+            hasEntered = true
+            guard !reduceMotion else { return }
+            if companion == .celebration { celebrationID += 1 }
+            if companion == .reassurance { respond(.reassure) }
         }
-        .accessibilityLabel("Pipo mascot")
+        .onChange(of: reactionID) { _, _ in respond(reaction) }
     }
 
-    private func loadRiveViewModel() {
-        guard riveViewModel == nil else {
-            riveViewModel?.setInput("animState", value: state.animationValue)
-            return
+    private var livingArtwork: some View {
+        Group {
+            if reduceMotion {
+                Image(PipoV4Reaction.resting.safeBundledStillName).resizable().scaledToFit()
+            } else {
+                IdleArtwork(playing: canPlay, event: event, eventID: eventID)
+            }
         }
-        guard Bundle.main.url(forResource: "pipo_mascot", withExtension: "riv") != nil else {
-            return
-        }
+        .aspectRatio(460.0 / 500.0, contentMode: .fit)
+    }
 
-        let viewModel = RiveViewModel(
-            fileName: "pipo_mascot",
-            stateMachineName: "PipoState"
-        )
-        viewModel.setInput("animState", value: state.animationValue)
-        riveViewModel = viewModel
+    private func respond(_ reaction: PipoCompanionReaction) {
+        guard canPlay, !reduceMotion else { return }
+        event = reaction
+        eventID += 1
+    }
+
+    private func greetPipo() {
+        let now = ContinuousClock.now
+        guard canPlay,
+              lastTap.map({ $0.duration(to: now) >= .milliseconds(1100) }) ?? true else { return }
+        lastTap = now
+        UIImpactFeedbackGenerator(style: .light).impactOccurred(intensity: 0.6)
+        onTap?()
+        respond(.acknowledge)
     }
 }
 
-// WebKit plays the approved transparent SVG on its own timeline.
+// One shared V4 renderer for Home, authentication, onboarding and reassurance.
 private struct IdleArtwork: UIViewRepresentable {
     let playing: Bool
-
-    let tapID: Int
+    let event: PipoCompanionReaction
+    let eventID: Int
 
     func makeUIView(context: Context) -> IdleSurface {
         let surface = IdleSurface()
-        surface.lastTapID = tapID
+        surface.lastEventID = eventID
         return surface
     }
 
     func updateUIView(_ view: IdleSurface, context: Context) {
         view.setPlaying(playing)
-        if view.lastTapID != tapID {
-            view.lastTapID = tapID
-            view.requestTap()
+        if view.lastEventID != eventID {
+            view.lastEventID = eventID
+            view.request(event)
         }
     }
 
     static func dismantleUIView(_ view: IdleSurface, coordinator: ()) {
-        view.setPlaying(false)
+        view.tearDown()
+    }
+}
+
+@MainActor
+private final class PipoPaintHandler: NSObject, WKScriptMessageHandler {
+    weak var surface: IdleSurface?
+    init(_ surface: IdleSurface) { self.surface = surface }
+
+    func userContentController(_ userContentController: WKUserContentController, didReceive message: WKScriptMessage) {
+        guard message.frameInfo.isMainFrame else { return }
+        surface?.didPaint(message.webView)
     }
 }
 
@@ -243,64 +195,30 @@ private final class IdleSurface: UIView, WKNavigationDelegate {
     private static let document: String? = {
         guard let data = NSDataAsset(name: "PipoV4Idle")?.data,
               let source = String(data: data, encoding: .utf8),
-              let start = source.range(of: "<svg") else { return nil }
+              let start = source.range(of: "<svg"),
+              let scriptURL = Bundle.main.url(forResource: "PipoV4Motion", withExtension: "js"),
+              let script = try? String(contentsOf: scriptURL, encoding: .utf8) else { return nil }
         return """
         <meta name="viewport" content="width=device-width, initial-scale=1">
         <style>html,body,svg{width:100%;height:100%;margin:0;overflow:hidden;display:block}</style>
         \(source[start.lowerBound...])
-        <script>
-        const mascot = document.querySelector('svg');
-        mascot.pauseAnimations();
-        mascot.setCurrentTime(0);
-
-        // Independent outer groups compose with the approved idle transforms.
-        function tapTrack(selector, values) {
-            const part = mascot.querySelector(selector);
-            const group = document.createElementNS(mascot.namespaceURI, 'g');
-            part.parentNode.insertBefore(group, part);
-            group.appendChild(part);
-            const track = document.createElementNS(mascot.namespaceURI, 'animateTransform');
-            Object.entries({
-                attributeName: 'transform', type: 'rotate', begin: 'indefinite', dur: '0.9s',
-                keyTimes: '0;0.16;0.42;0.62;1', values: values, calcMode: 'spline',
-                keySplines: '0.3 0 0.6 1;0.2 0 0.3 1;0.35 0 0.65 1;0.4 0 0.6 1'
-            }).forEach(([key, value]) => track.setAttribute(key, value));
-            group.appendChild(track);
-            return track;
-        }
-        const tapTracks = [
-            tapTrack('#UpperBody', '0 162 248;-0.8 162 248;2.0 162 248;1.8 162 248;0 162 248'),
-            tapTrack('[aria-label="Arm_L"]', '0 99 191;-3 99 191;22 99 191;17 99 191;0 99 191'),
-            tapTrack('[aria-label="Ear_L"]', '0 145 89;0 145 89;-4 145 89;-2 145 89;0 145 89'),
-            tapTrack('[aria-label="FlowerRoot"]', '0 192 84;0 192 84;-1.5 192 84;-3 192 84;0 192 84')
-        ];
-        let tapEnd = 0;
-        function acknowledgeTap() {
-            const now = mascot.getCurrentTime();
-            if (mascot.animationsPaused() || now < tapEnd) return;
-            tapEnd = now + 0.9;
-            tapTracks.forEach(track => track.beginElement());
-        }
-        function pausePipo() {
-            if (mascot.getCurrentTime() < tapEnd) tapTracks.forEach(track => track.endElement());
-            tapEnd = 0;
-            mascot.pauseAnimations();
-        }
-        </script>
+        <script>\(script)</script>
         """
     }()
 
     private let poster = UIImageView(image: UIImage(named: "PipoV4Neutral"))
     private var artwork: WKWebView?
     private var wantsPlayback = false
-    var lastTapID = 0
-    private var pendingTap = false
+    var lastEventID = 0
+    private var pending: PipoCompanionReaction?
     private var ready = false
     private var running = false
+    private var failed = false
 
     override init(frame: CGRect) {
         super.init(frame: frame)
         isUserInteractionEnabled = false
+        isAccessibilityElement = false
         poster.contentMode = .scaleAspectFit
         poster.frame = bounds
         poster.autoresizingMask = [.flexibleWidth, .flexibleHeight]
@@ -316,25 +234,27 @@ private final class IdleSurface: UIView, WKNavigationDelegate {
 
     func setPlaying(_ value: Bool) {
         guard wantsPlayback != value else { return }
+        if value { failed = false }
         wantsPlayback = value
         syncPlayback()
     }
 
-    func requestTap() {
+    func request(_ reaction: PipoCompanionReaction) {
         guard wantsPlayback, window != nil else { return }
         if ready {
-            artwork?.evaluateJavaScript("acknowledgeTap()")
+            artwork?.evaluateJavaScript("pipoMotion.react('\(reaction.rawValue)')")
         } else {
-            pendingTap = true
+            pending = reaction
         }
     }
 
     private func syncPlayback() {
         let shouldPlay = wantsPlayback && window != nil
-        if !shouldPlay { pendingTap = false }
-        if shouldPlay, artwork == nil, let document = Self.document {
+        if !shouldPlay { pending = nil }
+        if shouldPlay, artwork == nil, !failed, let document = Self.document {
             let configuration = WKWebViewConfiguration()
             configuration.websiteDataStore = .nonPersistent()
+            configuration.userContentController.add(PipoPaintHandler(self), name: "pipoReady")
             let web = WKWebView(frame: bounds, configuration: configuration)
             web.isOpaque = false
             web.backgroundColor = .clear
@@ -342,36 +262,58 @@ private final class IdleSurface: UIView, WKNavigationDelegate {
             web.scrollView.isScrollEnabled = false
             web.autoresizingMask = [.flexibleWidth, .flexibleHeight]
             web.navigationDelegate = self
+            web.accessibilityElementsHidden = true
             insertSubview(web, belowSubview: poster)
             artwork = web
             web.loadHTMLString(document, baseURL: nil)
         }
         guard ready, running != shouldPlay else { return }
         running = shouldPlay
-        artwork?.evaluateJavaScript(shouldPlay ? "mascot.unpauseAnimations()" : "pausePipo()")
+        artwork?.evaluateJavaScript(shouldPlay ? "pipoMotion.resume()" : "pipoMotion.pause()")
     }
 
-    func webView(_ webView: WKWebView, didFinish navigation: WKNavigation!) {
+    func didPaint(_ webView: WKWebView?) {
+        guard let webView, webView === artwork, !ready else { return }
         ready = true
         syncPlayback()
-        if pendingTap {
-            pendingTap = false
-            requestTap()
+        if let pending {
+            self.pending = nil
+            request(pending)
         }
-        poster.isHidden = true
+        // No blank frame while WebKit warms up. The neutral V4 still is always
+        // present underneath the fade and is restored after renderer failure.
+        UIView.animate(withDuration: 0.16) { self.poster.alpha = 0 }
     }
 
-    func webViewWebContentProcessDidTerminate(_ webView: WKWebView) {
-        poster.isHidden = false
-        webView.removeFromSuperview()
+    func tearDown() {
+        wantsPlayback = false
+        discardArtwork()
+    }
+
+    private func discardArtwork() {
+        poster.layer.removeAllAnimations()
+        poster.alpha = 1
+        artwork?.evaluateJavaScript("window.pipoMotion?.pause()")
+        artwork?.stopLoading()
+        artwork?.navigationDelegate = nil
+        artwork?.configuration.userContentController.removeScriptMessageHandler(forName: "pipoReady")
+        artwork?.removeFromSuperview()
         artwork = nil
-        pendingTap = false
+        pending = nil
         running = false
         ready = false
     }
+
+    private func showFallback() {
+        failed = true // Retry on the next visibility cycle, never in a crash loop.
+        discardArtwork()
+    }
+
+    func webViewWebContentProcessDidTerminate(_ webView: WKWebView) { showFallback() }
+    func webView(_ webView: WKWebView, didFail navigation: WKNavigation!, withError error: Error) { showFallback() }
+    func webView(_ webView: WKWebView, didFailProvisionalNavigation navigation: WKNavigation!, withError error: Error) { showFallback() }
 }
 
 #Preview {
-    PipoMascotView(state: .idle)
-        .frame(width: 220, height: 220)
+    PipoMascotView(companion: .idle).frame(width: 220, height: 240)
 }
